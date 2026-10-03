@@ -1,9 +1,8 @@
 package de.findesk.repository
 
-import de.findesk.data.database.DatabaseFactory
+import de.findesk.TestDatabase
 import de.findesk.data.entity.BankAccess
 import de.findesk.data.table.BankAccessTable
-import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
@@ -14,8 +13,7 @@ class BankAccessRepositoryTest {
 
     @BeforeAll
     fun setup() {
-        Database.connect("jdbc:sqlite::memory:", driver = "org.sqlite.JDBC")
-        DatabaseFactory.init()
+        TestDatabase.init()
         repository = BankAccessRepositoryImpl()
     }
 

@@ -1,7 +1,6 @@
 package de.findesk.banking
 
-import de.findesk.data.database.DatabaseFactory
-import org.jetbrains.exposed.sql.Database
+import de.findesk.TestDatabase
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import java.math.BigDecimal
@@ -14,8 +13,7 @@ class FinTSClientTest {
 
     @BeforeAll
     fun setup() {
-        Database.connect("jdbc:sqlite::memory:", driver = "org.sqlite.JDBC")
-        DatabaseFactory.init()
+        TestDatabase.init()
         client = FinTSClient()
         tanManager = TanManager()
     }

@@ -91,6 +91,10 @@ kotlin {
 
 tasks.test {
     useJUnitPlatform()
+    // Keep tests away from the real ~/.findesk data directory
+    val testHome = layout.buildDirectory.dir("test-home").get().asFile
+    doFirst { testHome.mkdirs() }
+    systemProperty("user.home", testHome.absolutePath)
 }
 
 ktlint {

@@ -1,8 +1,7 @@
 package de.findesk.document
 
-import de.findesk.data.database.DatabaseFactory
+import de.findesk.TestDatabase
 import de.findesk.repository.*
-import org.jetbrains.exposed.sql.Database
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import java.math.BigDecimal
@@ -18,8 +17,7 @@ class ReportServiceTest {
 
     @BeforeAll
     fun setup() {
-        Database.connect("jdbc:sqlite::memory:", driver = "org.sqlite.JDBC")
-        DatabaseFactory.init()
+        TestDatabase.init()
         service = ReportService()
         transactionRepo = TransactionRepositoryImpl()
         accountRepo = AccountRepositoryImpl()
