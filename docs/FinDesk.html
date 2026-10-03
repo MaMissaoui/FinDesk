@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FinDesk – Concept, Architecture, Data Model & UI</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 0; background: #f5f7fa; color: #222; }
+    header { background: #1f3b73; color: #fff; padding: 20px 40px; }
+    h1, h2, h3 { margin: 0 0 10px; }
+    main { padding: 30px 40px; max-width: 1100px; margin: 0 auto; }
+    section { margin-bottom: 40px; background: #fff; padding: 24px 28px; border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+    code, pre { font-family: "JetBrains Mono", Menlo, Monaco, Consolas, monospace; background: #f0f2f7; padding: 2px 4px; border-radius: 4px; }
+    pre { padding: 12px; overflow-x: auto; }
+    ul { margin: 8px 0 8px 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #d0d4e0; padding: 6px 8px; text-align: left; font-size: 0.9rem; }
+    th { background: #e4e8f5; }
+    .pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 0.8rem; background: #e4f5f2; color: #16635b; margin-right: 6px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>FinDesk – Modern Moneyplex Successor</h1>
+  <p>A Kotlin JVM + Compose Desktop + HBCI4Java based local banking & document workspace.</p>
+</header>
+
+<main>
+
+  <section id="identity">
+    <h2>1. Product Identity & Positioning</h2>
+    <h3>1.1 Name & Core Idea</h3>
+    <p><strong>Product name:</strong> <strong>FinDesk</strong></p>
+    <p><strong>Concept:</strong> A personal financial workspace that unifies multi-banking, transactions, documents and tax-relevant information in a secure local desktop application.</p>
+
+    <h3>1.2 Brand Attributes</h3>
+    <ul>
+      <li><strong>Target:</strong> Power users, self-employed, small businesses, privacy-conscious users.</li>
+      <li><strong>Tone:</strong> Professional, modern, trustworthy, technical.</li>
+      <li><strong>USP:</strong> Local-only data, multi-bank FinTS/HBCI, document & OCR integration, modern UI.</li>
+    </ul>
+
+    <h3>1.3 Visual Identity</h3>
+    <ul>
+      <li><strong>Logo concept:</strong> Desk-like icon with an upward arrow (finance trend) next to the word “FinDesk”.</li>
+      <li><strong>Colors:</strong> Primary blue (#2D6CDF), teal (#3BC7B0), dark gray (#2F2F2F), light background (#F5F7FA).</li>
+      <li><strong>Typography:</strong> Modern sans-serif (e.g. Inter, Poppins, Source Sans Pro).</li>
+      <li><strong>Slogan examples:</strong> “Your Financial Workspace.” / “Finances. Clear. Local.”</li>
+    </ul>
+  </section>
+
+  <section id="architecture">
+    <h2>2. High-Level Architecture</h2>
+
+    <h3>2.1 Stack</h3>
+    <ul>
+      <li><strong>Language:</strong> Kotlin JVM</li>
+      <li><strong>UI:</strong> Compose Desktop (Compose Multiplatform JVM target)</li>
+      <li><strong>Banking engine:</strong> HBCI4Java (FinTS/HBCI)</li>
+      <li><strong>Database:</strong> SQLite (optionally SQLCipher for encryption)</li>
+      <li><strong>OCR:</strong> Tesseract via JNI or external process</li>
+    </ul>
+
+    <h3>2.2 Layered Architecture</h3>
+    <pre>
+UI Layer (Compose Desktop)
+  - Dashboard
+  - Accounts
+  - Transactions
+  - Payments
+  - Documents
+  - Reports / Tax
+
+Application / Domain Layer
+  - AccountService
+  - TransactionService
+  - PaymentService
+  - CategoryEngine
+  - DocumentService
+  - RuleEngine
+
+Banking Integration Layer (HBCI4Java)
+  - FinTSClient
+  - FinTSJobFactory
+  - TANManager
+  - BPD/UPD Cache
+
+Persistence Layer
+  - SQLite / SQLCipher
+  - Repositories (Exposed/JOOQ)
+  - Local encrypted storage
+
+System Services
+  - OCR Engine (Tesseract)
+  - PDF parsing
+  - File storage
+  - Logging & Audit
+  - Plugin loader
+    </pre>
+
+    <h3>2.3 Data Flow (Example)</h3>
+    <pre>
+User Action (e.g. open account overview)
+  ▼
+Compose UI (AccountsView)
+  ▼
+AccountService
+  ▼
+Repositories (SQLite)
+  ▼
+UI state updated (Compose state)
+    </pre>
+
+    <pre>
+User Action (SEPA payment)
+  ▼
+PaymentView (Compose)
+  ▼
+PaymentService
+  ▼
+FinTSJobFactory + HBCI4Java
+  ▼
+Bank server (FinTS)
+  ▼
+Result → TransactionService → DB → UI
+    </pre>
+  </section>
+
+  <section id="ui">
+    <h2>3. UI Structure & Screens (Compose Desktop)</h2>
+
+    <h3>3.1 Global Navigation</h3>
+    <ul>
+      <li><strong>Sidebar entries:</strong> Dashboard, Accounts, Transactions, Payments, Documents, Reports/Tax, Settings.</li>
+      <li><strong>Top bar:</strong> App logo, active bank profile, sync status, theme toggle.</li>
+    </ul>
+
+    <h3>3.2 Key Screens</h3>
+
+    <h4>Dashboard</h4>
+    <ul>
+      <li><strong>Widgets:</strong> Current balance, incoming, expenses, pending tasks.</li>
+      <li><strong>Recent transactions:</strong> Table with last few entries.</li>
+      <li><strong>Charts:</strong> Expense overview (pie), tax deductions (bar).</li>
+    </ul>
+
+    <h4>Accounts Overview</h4>
+    <ul>
+      <li><strong>List:</strong> Checking, savings, credit card, etc. with balances.</li>
+      <li><strong>Balance history:</strong> Line chart per account.</li>
+      <li><strong>Upcoming payments:</strong> Bills, subscriptions, insurance with “Schedule transfer” button.</li>
+    </ul>
+
+    <h4>Transactions & Receipts</h4>
+    <ul>
+      <li><strong>Filters:</strong> Date range, account, category, amount, text search.</li>
+      <li><strong>Transaction list:</strong> Date, amount, partner, purpose, category.</li>
+      <li><strong>Details panel:</strong> Selected transaction with attached receipts, notes, tax relevance.</li>
+    </ul>
+
+    <h4>Tax Report & Documents</h4>
+    <ul>
+      <li><strong>Tax summary:</strong> Annual income, deductions by category.</li>
+      <li><strong>Document manager:</strong> List of PDFs/images linked to transactions or categories.</li>
+      <li><strong>Actions:</strong> Add document, link/unlink, open, search by OCR text.</li>
+    </ul>
+  </section>
+
+  <section id="data-model">
+    <h2>4. Data Model Overview</h2>
+
+    <h3>4.1 Modules & Tables</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Module</th>
+          <th>Main Tables</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Banking</td>
+          <td>bank_access, accounts, transactions, tan_sessions</td>
+          <td>FinTS/HBCI integration, accounts & transactions</td>
+        </tr>
+        <tr>
+          <td>Documents</td>
+          <td>documents, ocr_texts, document_links (optional)</td>
+          <td>Receipt/document storage, OCR, linking to transactions</td>
+        </tr>
+        <tr>
+          <td>Categorization</td>
+          <td>categories, rules</td>
+          <td>Automatic classification & budgeting</td>
+        </tr>
+        <tr>
+          <td>System</td>
+          <td>settings, plugins, audit_log</td>
+          <td>Configuration, extensibility, security logging</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>4.2 Banking Tables</h3>
+
+    <h4>bank_access</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>bank_name:</strong> TEXT</li>
+      <li><strong>blz:</strong> TEXT</li>
+      <li><strong>bic:</strong> TEXT</li>
+      <li><strong>user_id:</strong> TEXT</li>
+      <li><strong>hbci_version:</strong> TEXT</li>
+      <li><strong>tan_method:</strong> TEXT</li>
+      <li><strong>last_sync:</strong> DATETIME</li>
+    </ul>
+
+    <h4>accounts</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>bank_access_id:</strong> INTEGER FK → bank_access</li>
+      <li><strong>iban:</strong> TEXT</li>
+      <li><strong>account_number:</strong> TEXT</li>
+      <li><strong>balance:</strong> DECIMAL</li>
+      <li><strong>currency:</strong> TEXT</li>
+      <li><strong>account_type:</strong> TEXT (checking, savings, credit card, etc.)</li>
+      <li><strong>last_update:</strong> DATETIME</li>
+    </ul>
+
+    <h4>transactions</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>account_id:</strong> INTEGER FK → accounts</li>
+      <li><strong>date:</strong> DATE</li>
+      <li><strong>amount:</strong> DECIMAL</li>
+      <li><strong>currency:</strong> TEXT</li>
+      <li><strong>partner_name:</strong> TEXT</li>
+      <li><strong>purpose:</strong> TEXT</li>
+      <li><strong>category_id:</strong> INTEGER FK → categories</li>
+      <li><strong>document_id:</strong> INTEGER FK → documents</li>
+      <li><strong>hash:</strong> TEXT (for duplicate detection)</li>
+      <li><strong>created_at:</strong> DATETIME</li>
+    </ul>
+
+    <h3>4.3 Document Tables</h3>
+
+    <h4>documents</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>file_name:</strong> TEXT</li>
+      <li><strong>file_path:</strong> TEXT</li>
+      <li><strong>mime_type:</strong> TEXT</li>
+      <li><strong>upload_date:</strong> DATETIME</li>
+      <li><strong>ocr_text_id:</strong> INTEGER FK → ocr_texts</li>
+      <li><strong>linked_transaction_id:</strong> INTEGER FK → transactions</li>
+    </ul>
+
+    <h4>ocr_texts</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>document_id:</strong> INTEGER FK → documents</li>
+      <li><strong>content:</strong> TEXT</li>
+      <li><strong>language:</strong> TEXT</li>
+      <li><strong>confidence:</strong> DECIMAL</li>
+    </ul>
+
+    <h3>4.4 Categorization Tables</h3>
+
+    <h4>categories</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>name:</strong> TEXT</li>
+      <li><strong>color:</strong> TEXT</li>
+      <li><strong>budget_limit:</strong> DECIMAL</li>
+      <li><strong>is_tax_relevant:</strong> BOOLEAN</li>
+    </ul>
+
+    <h4>rules</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>pattern:</strong> TEXT (regex or simple text match)</li>
+      <li><strong>category_id:</strong> INTEGER FK → categories</li>
+      <li><strong>priority:</strong> INTEGER</li>
+      <li><strong>auto_apply:</strong> BOOLEAN</li>
+    </ul>
+
+    <h3>4.5 System Tables</h3>
+
+    <h4>settings</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>key:</strong> TEXT</li>
+      <li><strong>value:</strong> TEXT</li>
+      <li><strong>updated_at:</strong> DATETIME</li>
+    </ul>
+
+    <h4>plugins</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>name:</strong> TEXT</li>
+      <li><strong>version:</strong> TEXT</li>
+      <li><strong>enabled:</strong> BOOLEAN</li>
+      <li><strong>entry_point:</strong> TEXT (class name or path)</li>
+    </ul>
+
+    <h4>audit_log</h4>
+    <ul>
+      <li><strong>id:</strong> INTEGER PK</li>
+      <li><strong>timestamp:</strong> DATETIME</li>
+      <li><strong>action:</strong> TEXT</li>
+      <li><strong>user:</strong> TEXT</li>
+      <li><strong>details:</strong> TEXT</li>
+    </ul>
+  </section>
+
+  <section id="relationships">
+    <h2>5. Entity Relationships (ER Summary)</h2>
+    <pre>
+BankAccess 1 ── ∞ Accounts
+Accounts   1 ── ∞ Transactions
+Transactions ∞ ── 1 Categories
+Transactions 0..1 ── 0..1 Documents
+Documents   1 ── 1 OCR_Texts
+Categories  1 ── ∞ Rules
+    </pre>
+
+    <p>Central entities are <strong>Accounts</strong> and <strong>Transactions</strong>, with <strong>Documents</strong> and <strong>Categories</strong> enriching them for receipts and classification.</p>
+  </section>
+
+  <section id="next-steps">
+    <h2>6. Next Steps for Implementation</h2>
+    <ul>
+      <li><span class="pill">Kotlin</span><strong>Define Exposed entities</strong> for all tables and set up repositories.</li>
+      <li><span class="pill">Security</span><strong>Integrate SQLCipher or AES</strong> for encrypted local storage.</li>
+      <li><span class="pill">Banking</span><strong>Implement FinTSClient wrapper</strong> around HBCI4Java for clean Kotlin APIs.</li>
+      <li><span class="pill">UI</span><strong>Wire Compose screens</strong> to services using state hoisting and view models.</li>
+      <li><span class="pill">Docs</span><strong>Implement OCR pipeline</strong> and document-to-transaction matching logic.</li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>
