@@ -19,7 +19,7 @@ interface AccountRepository {
         accountNumber: String? = null,
         balance: BigDecimal = BigDecimal.ZERO,
         currency: String = "EUR",
-        accountType: String = "checking"
+        accountType: String = "checking",
     ): Account
     fun updateBalance(id: Int, balance: BigDecimal): Account?
     fun update(id: Int, iban: String? = null, accountType: String? = null): Account?
@@ -54,7 +54,7 @@ class AccountRepositoryImpl : AccountRepository {
         accountNumber: String?,
         balance: BigDecimal,
         currency: String,
-        accountType: String
+        accountType: String,
     ): Account = transaction {
         val bankAccess = BankAccess.findById(bankAccessId)
             ?: throw IllegalArgumentException("BankAccess with id $bankAccessId not found")

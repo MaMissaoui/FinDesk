@@ -17,13 +17,13 @@ data class DashboardState(
     val recentTransactions: List<Transaction> = emptyList(),
     val expensesByCategory: Map<String, BigDecimal> = emptyMap(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
 )
 
 class DashboardViewModel(
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl()
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
 ) {
     private val _state = MutableStateFlow(DashboardState())
     val state: StateFlow<DashboardState> = _state.asStateFlow()
@@ -45,12 +45,12 @@ class DashboardViewModel(
                 pendingTasks = 0,
                 recentTransactions = recentTransactions,
                 expensesByCategory = expensesByCategory,
-                isLoading = false
+                isLoading = false,
             )
         } catch (e: Exception) {
             _state.value = _state.value.copy(
                 isLoading = false,
-                error = e.message ?: "Unknown error"
+                error = e.message ?: "Unknown error",
             )
         }
     }

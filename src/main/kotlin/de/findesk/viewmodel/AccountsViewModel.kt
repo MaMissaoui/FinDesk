@@ -13,13 +13,13 @@ data class AccountsState(
     val bankAccesses: List<BankAccess> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val showAddDialog: Boolean = false
+    val showAddDialog: Boolean = false,
 )
 
 class AccountsViewModel(
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl()
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
 ) {
     private val _state = MutableStateFlow(AccountsState())
     val state: StateFlow<AccountsState> = _state.asStateFlow()
@@ -32,12 +32,12 @@ class AccountsViewModel(
             _state.value = _state.value.copy(
                 accounts = accounts,
                 bankAccesses = bankAccesses,
-                isLoading = false
+                isLoading = false,
             )
         } catch (e: Exception) {
             _state.value = _state.value.copy(
                 isLoading = false,
-                error = e.message ?: "Unknown error"
+                error = e.message ?: "Unknown error",
             )
         }
     }

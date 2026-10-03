@@ -25,7 +25,7 @@ class CategoryRepositoryTest {
             name = "Groceries",
             color = "#FF5722",
             budgetLimit = BigDecimal("500.00"),
-            isTaxRelevant = false
+            isTaxRelevant = false,
         )
 
         assertNotNull(category)
@@ -59,7 +59,7 @@ class CategoryRepositoryTest {
         val updated = repository.update(
             category.id.value,
             budgetLimit = BigDecimal("1000.00"),
-            isTaxRelevant = true
+            isTaxRelevant = true,
         )
 
         assertNotNull(updated)

@@ -1,8 +1,8 @@
 package de.findesk.repository
 
-import de.findesk.data.entity.Transaction
 import de.findesk.data.entity.Account
 import de.findesk.data.entity.Category
+import de.findesk.data.entity.Transaction
 import de.findesk.data.table.TransactionsTable
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.and
@@ -29,7 +29,7 @@ interface TransactionRepository {
         purpose: String? = null,
         categoryId: Int? = null,
         documentId: Int? = null,
-        hash: String
+        hash: String,
     ): Transaction
     fun updateCategory(id: Int, categoryId: Int?): Transaction?
     fun updateDocument(id: Int, documentId: Int?): Transaction?
@@ -95,7 +95,7 @@ class TransactionRepositoryImpl : TransactionRepository {
         purpose: String?,
         categoryId: Int?,
         documentId: Int?,
-        hash: String
+        hash: String,
     ): Transaction = transaction {
         val account = Account.findById(accountId)
             ?: throw IllegalArgumentException("Account with id $accountId not found")

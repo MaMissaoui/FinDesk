@@ -54,13 +54,13 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun FinDeskTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = FinDeskTypography,
-        content = content
+        content = content,
     )
 }

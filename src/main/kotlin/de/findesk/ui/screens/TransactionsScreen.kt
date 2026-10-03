@@ -22,18 +22,18 @@ fun TransactionsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(24.dp),
     ) {
         // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = "Transactions",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
             Button(onClick = { /* TODO: Export */ }) {
                 Icon(Icons.Default.Share, contentDescription = "Export")
@@ -47,7 +47,7 @@ fun TransactionsScreen() {
         // Search and Filters
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // Search
             OutlinedTextField(
@@ -56,7 +56,7 @@ fun TransactionsScreen() {
                 placeholder = { Text("Search transactions...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = true,
             )
 
             // Date Range
@@ -70,17 +70,17 @@ fun TransactionsScreen() {
             FilterChip(
                 selected = selectedFilter == "All",
                 onClick = { selectedFilter = "All" },
-                label = { Text("All") }
+                label = { Text("All") },
             )
             FilterChip(
                 selected = selectedFilter == "Income",
                 onClick = { selectedFilter = "Income" },
-                label = { Text("Income") }
+                label = { Text("Income") },
             )
             FilterChip(
                 selected = selectedFilter == "Expenses",
                 onClick = { selectedFilter = "Expenses" },
-                label = { Text("Expenses") }
+                label = { Text("Expenses") },
             )
         }
 
@@ -89,7 +89,7 @@ fun TransactionsScreen() {
         // Transaction List
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(12.dp),
         ) {
             Column {
                 // Table Header
@@ -97,32 +97,32 @@ fun TransactionsScreen() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
                         text = "Date",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = "Description",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(3f)
+                        modifier = Modifier.weight(3f),
                     )
                     Text(
                         text = "Category",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = "Amount",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
                         modifier = Modifier.weight(1f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
                     )
                 }
                 HorizontalDivider()
@@ -146,28 +146,28 @@ private fun TransactionRow(transaction: SampleTransaction) {
             .fillMaxWidth()
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = transaction.date,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         Column(modifier = Modifier.weight(3f)) {
             Text(
                 text = transaction.description,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
             )
             Text(
                 text = transaction.partner,
                 style = MaterialTheme.typography.bodySmall,
-                color = MediumGray
+                color = MediumGray,
             )
         }
         CategoryBadge(
             category = transaction.category,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = transaction.amount,
@@ -175,7 +175,7 @@ private fun TransactionRow(transaction: SampleTransaction) {
             fontWeight = FontWeight.SemiBold,
             color = if (transaction.isExpense) Error else Success,
             modifier = Modifier.weight(1f),
-            textAlign = androidx.compose.ui.text.style.TextAlign.End
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
         )
     }
 }
@@ -194,13 +194,13 @@ private fun CategoryBadge(category: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(4.dp),
-        color = color.copy(alpha = 0.1f)
+        color = color.copy(alpha = 0.1f),
     ) {
         Text(
             text = category,
             style = MaterialTheme.typography.labelSmall,
             color = color,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
 }
@@ -212,7 +212,7 @@ private data class SampleTransaction(
     val partner: String,
     val category: String,
     val amount: String,
-    val isExpense: Boolean
+    val isExpense: Boolean,
 )
 
 private val sampleTransactions = listOf(

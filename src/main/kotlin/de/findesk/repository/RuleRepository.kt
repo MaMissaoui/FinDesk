@@ -1,7 +1,7 @@
 package de.findesk.repository
 
-import de.findesk.data.entity.Rule
 import de.findesk.data.entity.Category
+import de.findesk.data.entity.Rule
 import de.findesk.data.table.RulesTable
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -47,7 +47,7 @@ class RuleRepositoryImpl : RuleRepository {
         pattern: String,
         categoryId: Int,
         priority: Int,
-        autoApply: Boolean
+        autoApply: Boolean,
     ): Rule = transaction {
         val category = Category.findById(categoryId)
             ?: throw IllegalArgumentException("Category with id $categoryId not found")
@@ -64,7 +64,7 @@ class RuleRepositoryImpl : RuleRepository {
         pattern: String?,
         categoryId: Int?,
         priority: Int?,
-        autoApply: Boolean?
+        autoApply: Boolean?,
     ): Rule? = transaction {
         Rule.findById(id)?.apply {
             pattern?.let { this.pattern = it }

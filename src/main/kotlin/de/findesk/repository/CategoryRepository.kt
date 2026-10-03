@@ -36,7 +36,7 @@ class CategoryRepositoryImpl : CategoryRepository {
         name: String,
         color: String,
         budgetLimit: BigDecimal?,
-        isTaxRelevant: Boolean
+        isTaxRelevant: Boolean,
     ): Category = transaction {
         Category.new {
             this.name = name
@@ -51,7 +51,7 @@ class CategoryRepositoryImpl : CategoryRepository {
         name: String?,
         color: String?,
         budgetLimit: BigDecimal?,
-        isTaxRelevant: Boolean?
+        isTaxRelevant: Boolean?,
     ): Category? = transaction {
         Category.findById(id)?.apply {
             name?.let { this.name = it }

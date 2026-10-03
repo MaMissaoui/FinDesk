@@ -19,7 +19,7 @@ import java.time.YearMonth
 class ReportService(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
-    private val accountRepository: AccountRepository = AccountRepositoryImpl()
+    private val accountRepository: AccountRepository = AccountRepositoryImpl(),
 ) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -63,7 +63,7 @@ class ReportService(
                 MonthlyData(
                     month = month,
                     income = monthTxns.filter { it.amount > BigDecimal.ZERO }.sumOf { it.amount },
-                    expenses = monthTxns.filter { it.amount < BigDecimal.ZERO }.sumOf { it.amount.abs() }
+                    expenses = monthTxns.filter { it.amount < BigDecimal.ZERO }.sumOf { it.amount.abs() },
                 )
             }
 
@@ -77,7 +77,7 @@ class ReportService(
                 expensesByCategory = expensesByCategory,
                 taxRelevantExpenses = taxRelevantExpenses,
                 monthlyBreakdown = monthlyBreakdown,
-                transactionCount = transactions.size
+                transactionCount = transactions.size,
             )
         } catch (e: Exception) {
             _isLoading.value = false
@@ -106,12 +106,14 @@ class ReportService(
             .filter { it.amount < BigDecimal.ZERO }
             .sortedBy { it.amount }
             .take(10)
-            .map { ExpenseItem(
-                description = it.partnerName ?: it.purpose ?: "Unknown",
-                amount = it.amount.abs(),
-                category = it.category?.name ?: "Uncategorized",
-                date = it.date
-            ) }
+            .map {
+                ExpenseItem(
+                    description = it.partnerName ?: it.purpose ?: "Unknown",
+                    amount = it.amount.abs(),
+                    category = it.category?.name ?: "Uncategorized",
+                    date = it.date,
+                )
+            }
 
         MonthlyReport(
             year = year,
@@ -121,7 +123,7 @@ class ReportService(
             netAmount = income - expenses,
             byCategory = byCategory,
             topExpenses = topExpenses,
-            transactionCount = transactions.size
+            transactionCount = transactions.size,
         )
     }
 
@@ -130,7 +132,7 @@ class ReportService(
      */
     suspend fun getCategoryTrends(
         categoryId: Int,
-        months: Int = 12
+        months: Int = 12,
     ): CategoryTrend = withContext(Dispatchers.IO) {
         val category = categoryRepository.findById(categoryId)
         val now = LocalDate.now()
@@ -146,30 +148,36 @@ class ReportService(
 
             val total = transactions.sumOf { it.amount.abs() }
 
-            monthlyData.add(MonthlyAmount(
-                year = month.year,
-                month = month.monthValue,
-                amount = total
-            ))
+            monthlyData.add(
+                MonthlyAmount(
+                    year = month.year,
+                    month = month.monthValue,
+                    amount = total,
+                ),
+            )
         }
 
         // Calculate trend
         val amounts = monthlyData.map { it.amount }
         val average = if (amounts.isNotEmpty()) {
             amounts.reduce { acc, amount -> acc + amount } / BigDecimal(amounts.size)
-        } else BigDecimal.ZERO
+        } else {
+            BigDecimal.ZERO
+        }
 
         val latest = amounts.lastOrNull() ?: BigDecimal.ZERO
         val trend = if (average > BigDecimal.ZERO) {
             ((latest - average) / average * BigDecimal(100)).setScale(1, RoundingMode.HALF_UP)
-        } else BigDecimal.ZERO
+        } else {
+            BigDecimal.ZERO
+        }
 
         CategoryTrend(
             categoryId = categoryId,
             categoryName = category?.name ?: "Unknown",
             monthlyData = monthlyData,
             averageMonthly = average,
-            trend = trend
+            trend = trend,
         )
     }
 
@@ -224,7 +232,7 @@ class ReportService(
         val expensesByCategory: Map<String, BigDecimal>,
         val taxRelevantExpenses: Map<String, BigDecimal>,
         val monthlyBreakdown: List<MonthlyData>,
-        val transactionCount: Int
+        val transactionCount: Int,
     ) {
         companion object {
             fun empty(year: Int) = TaxReport(
@@ -235,7 +243,7 @@ class ReportService(
                 expensesByCategory = emptyMap(),
                 taxRelevantExpenses = emptyMap(),
                 monthlyBreakdown = emptyList(),
-                transactionCount = 0
+                transactionCount = 0,
             )
         }
     }
@@ -248,20 +256,20 @@ class ReportService(
         val netAmount: BigDecimal,
         val byCategory: Map<String, BigDecimal>,
         val topExpenses: List<ExpenseItem>,
-        val transactionCount: Int
+        val transactionCount: Int,
     )
 
     data class MonthlyData(
         val month: Int,
         val income: BigDecimal,
-        val expenses: BigDecimal
+        val expenses: BigDecimal,
     )
 
     data class ExpenseItem(
         val description: String,
         val amount: BigDecimal,
         val category: String,
-        val date: LocalDate
+        val date: LocalDate,
     )
 
     data class CategoryTrend(
@@ -269,12 +277,12 @@ class ReportService(
         val categoryName: String,
         val monthlyData: List<MonthlyAmount>,
         val averageMonthly: BigDecimal,
-        val trend: BigDecimal // Percentage change
+        val trend: BigDecimal, // Percentage change
     )
 
     data class MonthlyAmount(
         val year: Int,
         val month: Int,
-        val amount: BigDecimal
+        val amount: BigDecimal,
     )
 }

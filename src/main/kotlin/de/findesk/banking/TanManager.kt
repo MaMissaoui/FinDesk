@@ -11,7 +11,7 @@ data class TanMethod(
     val id: String,
     val name: String,
     val mediumName: String? = null,
-    val tanFormat: String? = null
+    val tanFormat: String? = null,
 )
 
 /**
@@ -27,7 +27,7 @@ class TanManager {
         val challenge: String?,
         val challengeHhdUc: ByteArray? = null, // For chipTAN optical
         val tanImageUrl: String? = null, // For photoTAN
-        val onResponse: (String?) -> Unit
+        val onResponse: (String?) -> Unit,
     )
 
     /**
@@ -37,7 +37,7 @@ class TanManager {
         _pendingTanRequest.value = TanRequest(
             method = method,
             challenge = challenge,
-            onResponse = callback
+            onResponse = callback,
         )
     }
 
@@ -65,6 +65,6 @@ class TanManager {
         TanMethod(id = "941", name = "chipTAN manuell", mediumName = "TAN-Generator"),
         TanMethod(id = "922", name = "photoTAN", mediumName = "photoTAN-App"),
         TanMethod(id = "901", name = "pushTAN", mediumName = "pushTAN-App"),
-        TanMethod(id = "900", name = "SMS-TAN", mediumName = "Handy")
+        TanMethod(id = "900", name = "SMS-TAN", mediumName = "Handy"),
     )
 }

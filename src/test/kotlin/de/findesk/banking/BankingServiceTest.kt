@@ -28,7 +28,7 @@ class BankingServiceTest {
         val result = BankingService.ImportResult(
             imported = 10,
             duplicates = 2,
-            categorized = 5
+            categorized = 5,
         )
 
         assertEquals(10, result.imported)

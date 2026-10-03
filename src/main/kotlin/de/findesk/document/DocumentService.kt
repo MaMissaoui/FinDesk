@@ -20,7 +20,7 @@ class DocumentService(
     private val documentRepository: DocumentRepository = DocumentRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val ocrService: OcrService = OcrService(),
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl()
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
 ) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -34,7 +34,7 @@ class DocumentService(
             "application/pdf",
             "image/jpeg",
             "image/png",
-            "image/tiff"
+            "image/tiff",
         )
     }
 
@@ -44,7 +44,7 @@ class DocumentService(
     suspend fun uploadDocument(
         sourceFile: File,
         transactionId: Int? = null,
-        performOcr: Boolean = true
+        performOcr: Boolean = true,
     ): Document? = withContext(Dispatchers.IO) {
         _isLoading.value = true
         _error.value = null
@@ -73,7 +73,7 @@ class DocumentService(
                 fileName = sourceFile.name,
                 filePath = destFile.absolutePath,
                 mimeType = mimeType,
-                linkedTransactionId = transactionId
+                linkedTransactionId = transactionId,
             )
 
             // Perform OCR if requested
@@ -99,29 +99,25 @@ class DocumentService(
     /**
      * Link a document to a transaction
      */
-    suspend fun linkToTransaction(documentId: Int, transactionId: Int): Boolean {
-        return try {
-            documentRepository.linkToTransaction(documentId, transactionId)
-            auditLogRepository.log("DOCUMENT_LINKED", "system", "Linked document $documentId to transaction $transactionId")
-            true
-        } catch (e: Exception) {
-            _error.value = e.message
-            false
-        }
+    suspend fun linkToTransaction(documentId: Int, transactionId: Int): Boolean = try {
+        documentRepository.linkToTransaction(documentId, transactionId)
+        auditLogRepository.log("DOCUMENT_LINKED", "system", "Linked document $documentId to transaction $transactionId")
+        true
+    } catch (e: Exception) {
+        _error.value = e.message
+        false
     }
 
     /**
      * Unlink a document from a transaction
      */
-    suspend fun unlinkFromTransaction(documentId: Int): Boolean {
-        return try {
-            documentRepository.unlinkFromTransaction(documentId)
-            auditLogRepository.log("DOCUMENT_UNLINKED", "system", "Unlinked document $documentId")
-            true
-        } catch (e: Exception) {
-            _error.value = e.message
-            false
-        }
+    suspend fun unlinkFromTransaction(documentId: Int): Boolean = try {
+        documentRepository.unlinkFromTransaction(documentId)
+        auditLogRepository.log("DOCUMENT_UNLINKED", "system", "Unlinked document $documentId")
+        true
+    } catch (e: Exception) {
+        _error.value = e.message
+        false
     }
 
     /**
@@ -192,13 +188,11 @@ class DocumentService(
     /**
      * Detect MIME type from file extension
      */
-    private fun detectMimeType(file: File): String {
-        return when (file.extension.lowercase()) {
-            "pdf" -> "application/pdf"
-            "jpg", "jpeg" -> "image/jpeg"
-            "png" -> "image/png"
-            "tiff", "tif" -> "image/tiff"
-            else -> "application/octet-stream"
-        }
+    private fun detectMimeType(file: File): String = when (file.extension.lowercase()) {
+        "pdf" -> "application/pdf"
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "tiff", "tif" -> "image/tiff"
+        else -> "application/octet-stream"
     }
 }

@@ -24,7 +24,7 @@ class OcrServiceTest {
             text = "Sample OCR text",
             language = "de",
             confidence = BigDecimal("85.5"),
-            pageCount = 1
+            pageCount = 1,
         )
 
         assertEquals("Sample OCR text", result.text)
@@ -39,7 +39,7 @@ class OcrServiceTest {
             documentId = 1,
             fileName = "test.pdf",
             matchingText = "matching text",
-            confidence = BigDecimal("90.0")
+            confidence = BigDecimal("90.0"),
         )
 
         assertEquals(1, result.documentId)

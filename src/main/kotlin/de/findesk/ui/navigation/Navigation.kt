@@ -11,7 +11,7 @@ enum class Screen(val title: String, val icon: ImageVector) {
     PAYMENTS("Payments", Icons.Default.ShoppingCart),
     DOCUMENTS("Documents", Icons.Default.Menu),
     REPORTS("Reports/Tax", Icons.Default.Info),
-    SETTINGS("Settings", Icons.Default.Settings)
+    SETTINGS("Settings", Icons.Default.Settings),
 }
 
 class NavigationState {

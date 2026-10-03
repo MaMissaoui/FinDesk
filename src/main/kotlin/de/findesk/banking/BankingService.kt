@@ -20,7 +20,7 @@ class BankingService(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl()
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
 ) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -43,10 +43,12 @@ class BankingService(
                     auditLogRepository.log("ADD_BANK", "system", "Added bank: ${config.bankName}")
                     bankAccess
                 }
+
                 is BankingResult.Error -> {
                     _error.value = result.message
                     null
                 }
+
                 is BankingResult.TanRequired -> {
                     _error.value = "TAN required - not yet implemented"
                     null
@@ -74,10 +76,12 @@ class BankingService(
                     auditLogRepository.log("SYNC_BANK", "system", "Synced bank connection: $bankAccessId")
                     true
                 }
+
                 is BankingResult.Error -> {
                     _error.value = result.message
                     false
                 }
+
                 is BankingResult.TanRequired -> {
                     _error.value = "TAN required - not yet implemented"
                     false
@@ -96,7 +100,7 @@ class BankingService(
      */
     suspend fun importTransactions(
         accountId: Int,
-        finTSTransactions: List<FinTSTransaction>
+        finTSTransactions: List<FinTSTransaction>,
     ): ImportResult {
         var imported = 0
         var duplicates = 0
@@ -107,7 +111,7 @@ class BankingService(
                 date = finTSTransaction.date,
                 amount = finTSTransaction.amount,
                 partnerName = finTSTransaction.partnerName,
-                purpose = finTSTransaction.purpose
+                purpose = finTSTransaction.purpose,
             )
 
             // Check for duplicates
@@ -119,7 +123,7 @@ class BankingService(
             // Try to auto-categorize
             val category = ruleRepository.matchTransaction(
                 purpose = finTSTransaction.purpose,
-                partnerName = finTSTransaction.partnerName
+                partnerName = finTSTransaction.partnerName,
             )
 
             // Create transaction
@@ -131,7 +135,7 @@ class BankingService(
                 partnerName = finTSTransaction.partnerName,
                 purpose = finTSTransaction.purpose,
                 categoryId = category?.id?.value,
-                hash = hash
+                hash = hash,
             )
 
             imported++
@@ -141,7 +145,7 @@ class BankingService(
         return ImportResult(
             imported = imported,
             duplicates = duplicates,
-            categorized = categorized
+            categorized = categorized,
         )
     }
 
@@ -154,7 +158,7 @@ class BankingService(
         toBic: String,
         toName: String,
         amount: BigDecimal,
-        purpose: String
+        purpose: String,
     ): Boolean {
         _isLoading.value = true
         _error.value = null
@@ -166,7 +170,7 @@ class BankingService(
                 toBic = toBic,
                 toName = toName,
                 amount = amount,
-                purpose = purpose
+                purpose = purpose,
             )
 
             when (result) {
@@ -174,10 +178,12 @@ class BankingService(
                     auditLogRepository.log("TRANSFER", "system", "Transfer to $toIban: $amount")
                     true
                 }
+
                 is BankingResult.Error -> {
                     _error.value = result.message
                     false
                 }
+
                 is BankingResult.TanRequired -> {
                     // TAN required - UI should handle this
                     _error.value = "TAN required for this transfer"
@@ -195,6 +201,6 @@ class BankingService(
     data class ImportResult(
         val imported: Int,
         val duplicates: Int,
-        val categorized: Int
+        val categorized: Int,
     )
 }

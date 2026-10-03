@@ -39,7 +39,7 @@ class DatabaseFactoryTest {
                 OcrTextsTable,
                 SettingsTable,
                 PluginsTable,
-                AuditLogTable
+                AuditLogTable,
             )
 
             // Verify tables were created by checking columns exist
@@ -75,7 +75,7 @@ class DatabaseFactoryTest {
                 OcrTextsTable,
                 SettingsTable,
                 PluginsTable,
-                AuditLogTable
+                AuditLogTable,
             )
 
             // Verify BankAccessTable columns

@@ -37,7 +37,7 @@ class TransactionRepositoryTest {
                 OcrTextsTable,
                 SettingsTable,
                 PluginsTable,
-                AuditLogTable
+                AuditLogTable,
             )
         }
 
@@ -68,7 +68,7 @@ class TransactionRepositoryTest {
             partnerName = "REWE",
             purpose = "Grocery shopping",
             categoryId = testCategoryId,
-            hash = "hash123abc"
+            hash = "hash123abc",
         )
 
         assertNotNull(txn)
@@ -79,8 +79,10 @@ class TransactionRepositoryTest {
     @Test
     fun `test find by hash`() {
         transactionRepo.create(
-            testAccountId, LocalDate.now(), BigDecimal("-100.00"),
-            hash = "unique_hash_789"
+            testAccountId,
+            LocalDate.now(),
+            BigDecimal("-100.00"),
+            hash = "unique_hash_789",
         )
         val found = transactionRepo.findByHash("unique_hash_789")
 

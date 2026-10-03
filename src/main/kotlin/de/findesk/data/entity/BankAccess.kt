@@ -1,7 +1,7 @@
 package de.findesk.data.entity
 
-import de.findesk.data.table.BankAccessTable
 import de.findesk.data.table.AccountsTable
+import de.findesk.data.table.BankAccessTable
 import org.jetbrains.exposed.dao.IntEntity
 import org.jetbrains.exposed.dao.IntEntityClass
 import org.jetbrains.exposed.dao.id.EntityID

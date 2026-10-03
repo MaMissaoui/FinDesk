@@ -33,7 +33,7 @@ class RuleRepositoryTest {
                 OcrTextsTable,
                 SettingsTable,
                 PluginsTable,
-                AuditLogTable
+                AuditLogTable,
             )
         }
 
@@ -58,7 +58,7 @@ class RuleRepositoryTest {
             pattern = ".*rewe.*|.*edeka.*",
             categoryId = testCategoryId,
             priority = 10,
-            autoApply = true
+            autoApply = true,
         )
 
         assertNotNull(rule)

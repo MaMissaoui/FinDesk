@@ -15,7 +15,7 @@ data class FinTSConfig(
     val customerId: String = userId,
     val hbciVersion: String = "300",
     val serverUrl: String? = null,
-    val tanMethod: String? = null
+    val tanMethod: String? = null,
 )
 
 /**
@@ -30,7 +30,7 @@ data class FinTSAccount(
     val blz: String,
     val accountType: String,
     val currency: String = "EUR",
-    val productName: String? = null
+    val productName: String? = null,
 )
 
 /**
@@ -41,7 +41,7 @@ data class FinTSBalance(
     val balance: BigDecimal,
     val availableBalance: BigDecimal? = null,
     val currency: String = "EUR",
-    val date: LocalDateTime = LocalDateTime.now()
+    val date: LocalDateTime = LocalDateTime.now(),
 )
 
 /**
@@ -59,7 +59,7 @@ data class FinTSTransaction(
     val purpose: String?,
     val transactionCode: String?,
     val reference: String?,
-    val primaNota: String? = null
+    val primaNota: String? = null,
 )
 
 /**
@@ -79,5 +79,5 @@ enum class ConnectionStatus {
     CONNECTING,
     CONNECTED,
     SYNCING,
-    ERROR
+    ERROR,
 }

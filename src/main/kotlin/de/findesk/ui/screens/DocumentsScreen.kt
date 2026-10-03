@@ -23,18 +23,18 @@ fun DocumentsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(24.dp),
     ) {
         // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = "Documents",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { /* TODO: Scan */ }) {
@@ -59,7 +59,7 @@ fun DocumentsScreen() {
             placeholder = { Text("Search documents by name or OCR text...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -70,19 +70,19 @@ fun DocumentsScreen() {
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
                 text = { Text("All Documents") },
-                icon = { Icon(Icons.Default.List, contentDescription = null) }
+                icon = { Icon(Icons.Default.List, contentDescription = null) },
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
                 text = { Text("Unlinked") },
-                icon = { Icon(Icons.Default.Lock, contentDescription = null) }
+                icon = { Icon(Icons.Default.Lock, contentDescription = null) },
             )
             Tab(
                 selected = selectedTab == 2,
                 onClick = { selectedTab = 2 },
                 text = { Text("Receipts") },
-                icon = { Icon(Icons.Default.Info, contentDescription = null) }
+                icon = { Icon(Icons.Default.Info, contentDescription = null) },
             )
         }
 
@@ -91,7 +91,7 @@ fun DocumentsScreen() {
         // Documents List
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(12.dp),
         ) {
             Column {
                 // Table Header
@@ -99,43 +99,43 @@ fun DocumentsScreen() {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
                         text = "Name",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(3f)
+                        modifier = Modifier.weight(3f),
                     )
                     Text(
                         text = "Type",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = "Date",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = "Linked To",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(2f)
+                        modifier = Modifier.weight(2f),
                     )
                     Text(
                         text = "OCR",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = "Actions",
                         style = MaterialTheme.typography.labelLarge,
                         color = MediumGray,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 HorizontalDivider()
@@ -159,13 +159,13 @@ private fun DocumentRow(document: SampleDocument) {
             .fillMaxWidth()
             .padding(16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // Name with icon
         Row(
             modifier = Modifier.weight(3f),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = when (document.type) {
@@ -179,12 +179,12 @@ private fun DocumentRow(document: SampleDocument) {
                     "Image" -> Color(0xFF43A047)
                     else -> MediumGray
                 },
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(20.dp),
             )
             Text(
                 text = document.name,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
             )
         }
 
@@ -192,14 +192,14 @@ private fun DocumentRow(document: SampleDocument) {
         Text(
             text = document.type,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
 
         // Date
         Text(
             text = document.date,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.weight(1f),
         )
 
         // Linked To
@@ -207,7 +207,7 @@ private fun DocumentRow(document: SampleDocument) {
             text = document.linkedTo ?: "—",
             style = MaterialTheme.typography.bodySmall,
             color = if (document.linkedTo != null) PrimaryBlue else MediumGray,
-            modifier = Modifier.weight(2f)
+            modifier = Modifier.weight(2f),
         )
 
         // OCR Status
@@ -217,14 +217,14 @@ private fun DocumentRow(document: SampleDocument) {
                     imageVector = Icons.Default.CheckCircle,
                     contentDescription = "OCR processed",
                     tint = Success,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
             } else {
                 Icon(
                     imageVector = Icons.Default.Clear,
                     contentDescription = "No OCR",
                     tint = LightGray,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
@@ -232,28 +232,28 @@ private fun DocumentRow(document: SampleDocument) {
         // Actions
         Row(
             modifier = Modifier.weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             IconButton(
                 onClick = { /* TODO: Open */ },
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(32.dp),
             ) {
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = "Open",
                     tint = MediumGray,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
             }
             IconButton(
                 onClick = { /* TODO: More options */ },
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(32.dp),
             ) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
                     contentDescription = "More",
                     tint = MediumGray,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
@@ -266,7 +266,7 @@ private data class SampleDocument(
     val type: String,
     val date: String,
     val linkedTo: String?,
-    val hasOcr: Boolean
+    val hasOcr: Boolean,
 )
 
 private val sampleDocuments = listOf(

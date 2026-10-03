@@ -40,7 +40,7 @@ class RepositoryTest {
                 OcrTextsTable,
                 SettingsTable,
                 PluginsTable,
-                AuditLogTable
+                AuditLogTable,
             )
         }
 
@@ -65,7 +65,7 @@ class RepositoryTest {
             bankName = "Test Bank",
             blz = "12345678",
             bic = "TESTDEFF",
-            userId = "testuser"
+            userId = "testuser",
         )
         assertNotNull(bankAccess)
         assertEquals("Test Bank", bankAccess.bankName)
@@ -90,7 +90,7 @@ class RepositoryTest {
             bankAccessId = bankAccess.id.value,
             iban = "DE89370400440532013000",
             balance = BigDecimal("1000.00"),
-            accountType = "checking"
+            accountType = "checking",
         )
         assertNotNull(account)
         assertEquals("DE89370400440532013000", account.iban)
@@ -113,7 +113,7 @@ class RepositoryTest {
             name = "Groceries",
             color = "#FF5722",
             budgetLimit = BigDecimal("500.00"),
-            isTaxRelevant = false
+            isTaxRelevant = false,
         )
         assertNotNull(category)
         assertEquals("Groceries", category.name)
@@ -123,7 +123,7 @@ class RepositoryTest {
 
         val updated = categoryRepo.update(
             category.id.value,
-            budgetLimit = BigDecimal("600.00")
+            budgetLimit = BigDecimal("600.00"),
         )
         assertNotNull(updated)
         assertEquals(BigDecimal("600.00"), updated!!.budgetLimit)
@@ -142,7 +142,7 @@ class RepositoryTest {
             partnerName = "Amazon",
             purpose = "Purchase #12345",
             categoryId = category.id.value,
-            hash = "abc123hash"
+            hash = "abc123hash",
         )
         assertNotNull(transaction)
         assertEquals("Amazon", transaction.partnerName)

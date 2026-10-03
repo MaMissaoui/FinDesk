@@ -20,7 +20,7 @@ fun TopBar(
     title: String,
     isDarkTheme: Boolean,
     onThemeToggle: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier
@@ -29,20 +29,20 @@ fun TopBar(
             .background(Color.White)
             .padding(horizontal = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         // Left side: Title
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
             color = DarkGray,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
         )
 
         // Right side: Actions
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             // Sync Status
             SyncStatusIndicator(isSyncing = false)
@@ -52,7 +52,7 @@ fun TopBar(
                 Icon(
                     imageVector = if (isDarkTheme) Icons.Default.Star else Icons.Default.FavoriteBorder,
                     contentDescription = "Toggle theme",
-                    tint = MediumGray
+                    tint = MediumGray,
                 )
             }
 
@@ -63,12 +63,12 @@ fun TopBar(
                         Badge {
                             Text("3")
                         }
-                    }
+                    },
                 ) {
                     Icon(
                         imageVector = Icons.Default.Notifications,
                         contentDescription = "Notifications",
-                        tint = MediumGray
+                        tint = MediumGray,
                     )
                 }
             }
@@ -77,14 +77,14 @@ fun TopBar(
             Surface(
                 modifier = Modifier.size(36.dp),
                 shape = MaterialTheme.shapes.small,
-                color = LightGray
+                color = LightGray,
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.Person,
                         contentDescription = "User",
                         tint = MediumGray,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
@@ -96,29 +96,29 @@ fun TopBar(
 private fun SyncStatusIndicator(isSyncing: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (isSyncing) {
             CircularProgressIndicator(
                 modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp
+                strokeWidth = 2.dp,
             )
             Text(
                 text = "Syncing...",
                 style = MaterialTheme.typography.bodySmall,
-                color = MediumGray
+                color = MediumGray,
             )
         } else {
             Icon(
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = "Synced",
                 tint = Color(0xFF10B981),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(16.dp),
             )
             Text(
                 text = "Up to date",
                 style = MaterialTheme.typography.bodySmall,
-                color = MediumGray
+                color = MediumGray,
             )
         }
     }

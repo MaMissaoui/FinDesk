@@ -22,7 +22,7 @@ class FinTSClient(
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
-    private val tanManager: TanManager = TanManager()
+    private val tanManager: TanManager = TanManager(),
 ) {
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
@@ -34,7 +34,7 @@ class FinTSClient(
         val currentStep: String,
         val progress: Float, // 0.0 to 1.0
         val accountsProcessed: Int = 0,
-        val totalAccounts: Int = 0
+        val totalAccounts: Int = 0,
     )
 
     /**
@@ -59,7 +59,7 @@ class FinTSClient(
                 blz = config.blz,
                 bic = config.bic,
                 userId = config.userId,
-                hbciVersion = config.hbciVersion
+                hbciVersion = config.hbciVersion,
             )
 
             BankingResult.Success(emptyList())
@@ -103,7 +103,7 @@ class FinTSClient(
     suspend fun fetchTransactions(
         accountId: Int,
         startDate: LocalDate,
-        endDate: LocalDate = LocalDate.now()
+        endDate: LocalDate = LocalDate.now(),
     ): BankingResult<List<FinTSTransaction>> = withContext(Dispatchers.IO) {
         try {
             // TODO: Implement HBCI4Java transaction fetch
@@ -123,32 +123,32 @@ class FinTSClient(
         _connectionStatus.value = ConnectionStatus.SYNCING
         _syncProgress.value = SyncProgress(
             currentStep = "Connecting to bank...",
-            progress = 0.0f
+            progress = 0.0f,
         )
 
         try {
             // 1. Fetch accounts
             _syncProgress.value = _syncProgress.value?.copy(
                 currentStep = "Fetching accounts...",
-                progress = 0.2f
+                progress = 0.2f,
             )
 
             // 2. Fetch balances
             _syncProgress.value = _syncProgress.value?.copy(
                 currentStep = "Fetching balances...",
-                progress = 0.4f
+                progress = 0.4f,
             )
 
             // 3. Fetch transactions for each account
             _syncProgress.value = _syncProgress.value?.copy(
                 currentStep = "Fetching transactions...",
-                progress = 0.6f
+                progress = 0.6f,
             )
 
             // 4. Store transactions
             _syncProgress.value = _syncProgress.value?.copy(
                 currentStep = "Saving data...",
-                progress = 0.8f
+                progress = 0.8f,
             )
 
             // 5. Update last sync time
@@ -156,15 +156,17 @@ class FinTSClient(
 
             _syncProgress.value = _syncProgress.value?.copy(
                 currentStep = "Sync complete",
-                progress = 1.0f
+                progress = 1.0f,
             )
             _connectionStatus.value = ConnectionStatus.CONNECTED
 
-            BankingResult.Success(SyncResult(
-                accountsSynced = 0,
-                transactionsImported = 0,
-                duplicatesSkipped = 0
-            ))
+            BankingResult.Success(
+                SyncResult(
+                    accountsSynced = 0,
+                    transactionsImported = 0,
+                    duplicatesSkipped = 0,
+                ),
+            )
         } catch (e: Exception) {
             _connectionStatus.value = ConnectionStatus.ERROR
             _syncProgress.value = null
@@ -181,7 +183,7 @@ class FinTSClient(
         toBic: String,
         toName: String,
         amount: BigDecimal,
-        purpose: String
+        purpose: String,
     ): BankingResult<TransferResult> = withContext(Dispatchers.IO) {
         try {
             // TODO: Implement HBCI4Java SEPA transfer
@@ -200,7 +202,7 @@ class FinTSClient(
         date: LocalDate,
         amount: BigDecimal,
         partnerName: String?,
-        purpose: String?
+        purpose: String?,
     ): String {
         val input = "$date|$amount|$partnerName|$purpose"
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
@@ -218,12 +220,12 @@ class FinTSClient(
     data class SyncResult(
         val accountsSynced: Int,
         val transactionsImported: Int,
-        val duplicatesSkipped: Int
+        val duplicatesSkipped: Int,
     )
 
     data class TransferResult(
         val transactionId: String,
         val status: String,
-        val tanRequired: Boolean = false
+        val tanRequired: Boolean = false,
     )
 }

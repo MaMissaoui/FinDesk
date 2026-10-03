@@ -21,14 +21,14 @@ import de.findesk.ui.theme.PrimaryBlueLight
 fun Sidebar(
     currentScreen: Screen,
     onScreenSelected: (Screen) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
             .width(240.dp)
             .fillMaxHeight()
             .background(PrimaryBlue)
-            .padding(16.dp)
+            .padding(16.dp),
     ) {
         // App Logo/Title
         Text(
@@ -36,7 +36,7 @@ fun Sidebar(
             style = MaterialTheme.typography.headlineMedium,
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 32.dp)
+            modifier = Modifier.padding(bottom = 32.dp),
         )
 
         // Navigation Items
@@ -44,7 +44,7 @@ fun Sidebar(
             SidebarItem(
                 screen = screen,
                 isSelected = screen == currentScreen,
-                onClick = { onScreenSelected(screen) }
+                onClick = { onScreenSelected(screen) },
             )
             Spacer(modifier = Modifier.height(4.dp))
         }
@@ -56,7 +56,7 @@ fun Sidebar(
             text = "v0.1.0",
             style = MaterialTheme.typography.bodySmall,
             color = Color.White.copy(alpha = 0.6f),
-            modifier = Modifier.padding(top = 16.dp)
+            modifier = Modifier.padding(top = 16.dp),
         )
     }
 }
@@ -65,7 +65,7 @@ fun Sidebar(
 private fun SidebarItem(
     screen: Screen,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     val backgroundColor = if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent
     val contentColor = Color.White
@@ -78,19 +78,19 @@ private fun SidebarItem(
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(
             imageVector = screen.icon,
             contentDescription = screen.title,
             tint = contentColor,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(24.dp),
         )
         Text(
             text = screen.title,
             style = MaterialTheme.typography.bodyLarge,
             color = contentColor,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
 }

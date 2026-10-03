@@ -49,7 +49,7 @@ class ReportServiceTest {
             expensesByCategory = mapOf("Groceries" to BigDecimal("6240.00")),
             taxRelevantExpenses = mapOf("Transport" to BigDecimal("3600.00")),
             monthlyBreakdown = emptyList(),
-            transactionCount = 100
+            transactionCount = 100,
         )
 
         assertEquals(2026, report.year)
@@ -77,7 +77,7 @@ class ReportServiceTest {
             netAmount = BigDecimal("1100.00"),
             byCategory = mapOf("Groceries" to BigDecimal("500.00")),
             topExpenses = emptyList(),
-            transactionCount = 50
+            transactionCount = 50,
         )
 
         assertEquals(2026, report.year)
@@ -91,10 +91,10 @@ class ReportServiceTest {
             categoryName = "Groceries",
             monthlyData = listOf(
                 ReportService.MonthlyAmount(2026, 1, BigDecimal("500.00")),
-                ReportService.MonthlyAmount(2026, 2, BigDecimal("550.00"))
+                ReportService.MonthlyAmount(2026, 2, BigDecimal("550.00")),
             ),
             averageMonthly = BigDecimal("525.00"),
-            trend = BigDecimal("4.8")
+            trend = BigDecimal("4.8"),
         )
 
         assertEquals("Groceries", trend.categoryName)

@@ -28,7 +28,7 @@ fun App() {
             // Sidebar
             Sidebar(
                 currentScreen = navigationState.currentScreen,
-                onScreenSelected = { navigationState.navigateTo(it) }
+                onScreenSelected = { navigationState.navigateTo(it) },
             )
 
             // Main Content
@@ -37,7 +37,7 @@ fun App() {
                 TopBar(
                     title = navigationState.currentScreen.title,
                     isDarkTheme = isDarkTheme,
-                    onThemeToggle = { isDarkTheme = !isDarkTheme }
+                    onThemeToggle = { isDarkTheme = !isDarkTheme },
                 )
 
                 HorizontalDivider()
@@ -67,7 +67,7 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "FinDesk - Your Financial Workspace",
-        state = windowState
+        state = windowState,
     ) {
         App()
     }

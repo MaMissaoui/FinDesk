@@ -25,7 +25,7 @@ class BankAccessRepositoryTest {
             bankName = "Deutsche Bank",
             blz = "37040044",
             bic = "DEUTDEDBXXX",
-            userId = "testuser123"
+            userId = "testuser123",
         )
 
         assertNotNull(bankAccess)

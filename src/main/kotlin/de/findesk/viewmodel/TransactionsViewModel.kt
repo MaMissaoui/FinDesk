@@ -1,7 +1,7 @@
 package de.findesk.viewmodel
 
-import de.findesk.data.entity.Transaction
 import de.findesk.data.entity.Category
+import de.findesk.data.entity.Transaction
 import de.findesk.repository.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,14 +19,14 @@ data class TransactionsState(
     val totalIncome: BigDecimal = BigDecimal.ZERO,
     val totalExpenses: BigDecimal = BigDecimal.ZERO,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
 )
 
 class TransactionsViewModel(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl()
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
 ) {
     private val _state = MutableStateFlow(TransactionsState())
     val state: StateFlow<TransactionsState> = _state.asStateFlow()
@@ -36,7 +36,7 @@ class TransactionsViewModel(
         try {
             val transactions = transactionRepository.findByDateRange(
                 _state.value.startDate,
-                _state.value.endDate
+                _state.value.endDate,
             )
             val categories = categoryRepository.findAll()
 
@@ -48,12 +48,12 @@ class TransactionsViewModel(
                 categories = categories,
                 totalIncome = totalIncome,
                 totalExpenses = totalExpenses,
-                isLoading = false
+                isLoading = false,
             )
         } catch (e: Exception) {
             _state.value = _state.value.copy(
                 isLoading = false,
-                error = e.message ?: "Unknown error"
+                error = e.message ?: "Unknown error",
             )
         }
     }
@@ -102,7 +102,7 @@ class TransactionsViewModel(
             uncategorized.forEach { transaction ->
                 val matchedCategory = ruleRepository.matchTransaction(
                     transaction.purpose,
-                    transaction.partnerName
+                    transaction.partnerName,
                 )
                 if (matchedCategory != null) {
                     transactionRepository.updateCategory(transaction.id.value, matchedCategory.id.value)

@@ -16,12 +16,12 @@ data class DocumentsState(
     val isUploading: Boolean = false,
     val isProcessingOcr: Boolean = false,
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
 )
 
 class DocumentsViewModel(
     private val documentService: DocumentService = DocumentService(),
-    private val ocrService: OcrService = OcrService()
+    private val ocrService: OcrService = OcrService(),
 ) {
     private val _state = MutableStateFlow(DocumentsState())
     val state: StateFlow<DocumentsState> = _state.asStateFlow()
@@ -32,12 +32,12 @@ class DocumentsViewModel(
             val unlinked = emptyList<Document>() // TODO: Implement
             _state.value = _state.value.copy(
                 unlinkedDocuments = unlinked,
-                isLoading = false
+                isLoading = false,
             )
         } catch (e: Exception) {
             _state.value = _state.value.copy(
                 isLoading = false,
-                error = e.message
+                error = e.message,
             )
         }
     }
@@ -51,7 +51,7 @@ class DocumentsViewModel(
         } catch (e: Exception) {
             _state.value = _state.value.copy(
                 isUploading = false,
-                error = e.message
+                error = e.message,
             )
         }
     }

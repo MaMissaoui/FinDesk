@@ -22,41 +22,41 @@ fun DashboardScreen() {
         modifier = Modifier
             .fillMaxSize()
             .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         // Summary Cards
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 SummaryCard(
                     title = "Total Balance",
                     value = "€12,450.00",
                     icon = Icons.Default.AccountBox,
                     color = PrimaryBlue,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
                 SummaryCard(
                     title = "Monthly Income",
                     value = "€3,200.00",
                     icon = Icons.Default.Add,
                     color = Success,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
                 SummaryCard(
                     title = "Monthly Expenses",
                     value = "€2,150.00",
                     icon = Icons.Default.Delete,
                     color = Error,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
                 SummaryCard(
                     title = "Pending Tasks",
                     value = "5",
                     icon = Icons.Default.Warning,
                     color = Warning,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -65,30 +65,30 @@ fun DashboardScreen() {
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 // Expense Chart
                 Card(
                     modifier = Modifier.weight(1f).height(300.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier.padding(16.dp),
                     ) {
                         Text(
                             text = "Expenses by Category",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Box(
                             modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = "Chart Placeholder",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = MediumGray
+                                color = MediumGray,
                             )
                         }
                     }
@@ -97,25 +97,25 @@ fun DashboardScreen() {
                 // Tax Deductions Chart
                 Card(
                     modifier = Modifier.weight(1f).height(300.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp)
+                        modifier = Modifier.padding(16.dp),
                     ) {
                         Text(
                             text = "Tax Deductions",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Box(
                             modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = "Chart Placeholder",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = MediumGray
+                                color = MediumGray,
                             )
                         }
                     }
@@ -127,20 +127,20 @@ fun DashboardScreen() {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(16.dp),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
                             text = "Recent Transactions",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.SemiBold,
                         )
                         TextButton(onClick = { /* Navigate to transactions */ }) {
                             Text("View All")
@@ -154,21 +154,21 @@ fun DashboardScreen() {
                         description = "REWE Supermarket",
                         amount = "-€45.67",
                         category = "Groceries",
-                        isExpense = true
+                        isExpense = true,
                     )
                     TransactionItem(
                         date = "Yesterday",
                         description = "Salary Deposit",
                         amount = "+€3,200.00",
                         category = "Income",
-                        isExpense = false
+                        isExpense = false,
                     )
                     TransactionItem(
                         date = "2 days ago",
                         description = "Amazon Purchase",
                         amount = "-€89.99",
                         category = "Shopping",
-                        isExpense = true
+                        isExpense = true,
                     )
                 }
             }
@@ -182,30 +182,30 @@ private fun SummaryCard(
     value: String,
     icon: ImageVector,
     color: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MediumGray
+                    color = MediumGray,
                 )
                 Icon(
                     imageVector = icon,
                     contentDescription = title,
                     tint = color,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(24.dp),
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -213,7 +213,7 @@ private fun SummaryCard(
                 text = value,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                color = DarkGray
+                color = DarkGray,
             )
         }
     }
@@ -225,32 +225,32 @@ private fun TransactionItem(
     description: String,
     amount: String,
     category: String,
-    isExpense: Boolean
+    isExpense: Boolean,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Column {
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
             )
             Text(
                 text = "$date • $category",
                 style = MaterialTheme.typography.bodySmall,
-                color = MediumGray
+                color = MediumGray,
             )
         }
         Text(
             text = amount,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = if (isExpense) Error else Success
+            color = if (isExpense) Error else Success,
         )
     }
     HorizontalDivider()

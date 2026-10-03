@@ -80,7 +80,7 @@ compose.desktop {
         // JVM arguments
         jvmArgs += listOf(
             "-Xmx1024m",
-            "-Dfile.encoding=UTF-8"
+            "-Dfile.encoding=UTF-8",
         )
     }
 }
@@ -117,7 +117,8 @@ tasks.register("buildInfo") {
             else -> "Unknown"
         }
 
-        println("""
+        println(
+            """
             |FinDesk Build Information
             |========================
             |Version: $version
@@ -134,6 +135,7 @@ tasks.register("buildInfo") {
             |  macOS:   DMG installer
             |  Windows: MSI installer, EXE portable
             |  Linux:   DEB, RPM packages
-        """.trimMargin())
+            """.trimMargin(),
+        )
     }
 }

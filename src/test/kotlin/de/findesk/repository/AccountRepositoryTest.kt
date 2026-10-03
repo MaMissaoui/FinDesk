@@ -33,7 +33,7 @@ class AccountRepositoryTest {
             bankAccessId = testBankAccessId,
             iban = "DE89370400440532013000",
             balance = BigDecimal("5000.00"),
-            accountType = "checking"
+            accountType = "checking",
         )
 
         assertNotNull(account)

@@ -5,3 +5,5 @@ indent_size = 4
 ktlint_code_style = intellij_idea
 # Compose @Composable functions are PascalCase
 ktlint_function_naming_ignore_when_annotated_with = Composable
+# Wildcard imports are idiomatic for Compose/Exposed
+ktlint_standard_no-wildcard-imports = disabled

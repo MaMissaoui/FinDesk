@@ -17,7 +17,7 @@ interface DocumentRepository {
         filePath: String,
         mimeType: String,
         ocrTextId: Int? = null,
-        linkedTransactionId: Int? = null
+        linkedTransactionId: Int? = null,
     ): Document
     fun linkToTransaction(id: Int, transactionId: Int): Document?
     fun unlinkFromTransaction(id: Int): Document?
@@ -50,7 +50,7 @@ class DocumentRepositoryImpl : DocumentRepository {
         filePath: String,
         mimeType: String,
         ocrTextId: Int?,
-        linkedTransactionId: Int?
+        linkedTransactionId: Int?,
     ): Document = transaction {
         Document.new {
             this.fileName = fileName

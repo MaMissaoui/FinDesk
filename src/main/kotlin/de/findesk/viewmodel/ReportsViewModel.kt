@@ -14,11 +14,11 @@ data class ReportsState(
     val monthlyReport: ReportService.MonthlyReport? = null,
     val categoryTrends: List<ReportService.CategoryTrend> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
 )
 
 class ReportsViewModel(
-    private val reportService: ReportService = ReportService()
+    private val reportService: ReportService = ReportService(),
 ) {
     private val _state = MutableStateFlow(ReportsState())
     val state: StateFlow<ReportsState> = _state.asStateFlow()
@@ -40,7 +40,7 @@ class ReportsViewModel(
             isLoading = true,
             error = null,
             selectedYear = year,
-            selectedMonth = month
+            selectedMonth = month,
         )
         try {
             // TODO: Implement coroutine launch

@@ -26,7 +26,7 @@ class FinTSClientTest {
             date = LocalDate.of(2026, 10, 1),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
-            purpose = "Shopping"
+            purpose = "Shopping",
         )
 
         assertNotNull(hash1)
@@ -37,7 +37,7 @@ class FinTSClientTest {
             date = LocalDate.of(2026, 10, 1),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
-            purpose = "Shopping"
+            purpose = "Shopping",
         )
 
         assertEquals(hash1, hash2)
@@ -49,14 +49,14 @@ class FinTSClientTest {
             date = LocalDate.of(2026, 10, 1),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
-            purpose = "Shopping"
+            purpose = "Shopping",
         )
 
         val hash2 = client.createTransactionHash(
             date = LocalDate.of(2026, 10, 2),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
-            purpose = "Shopping"
+            purpose = "Shopping",
         )
 
         assertNotEquals(hash1, hash2)
@@ -85,7 +85,7 @@ class FinTSClientTest {
 
         tanManager.requestTan(
             method = TanMethod(id = "900", name = "SMS-TAN"),
-            challenge = "Please enter TAN"
+            challenge = "Please enter TAN",
         ) { tan ->
             receivedTan = tan
         }
@@ -104,7 +104,7 @@ class FinTSClientTest {
 
         tanManager.requestTan(
             method = TanMethod(id = "900", name = "SMS-TAN"),
-            challenge = "Test"
+            challenge = "Test",
         ) { tan ->
             receivedTan = tan
         }
@@ -122,7 +122,7 @@ class FinTSClientTest {
             blz = "37040044",
             bic = "DEUTDEDBXXX",
             userId = "testuser",
-            hbciVersion = "300"
+            hbciVersion = "300",
         )
 
         assertEquals("Deutsche Bank", config.bankName)
@@ -135,7 +135,7 @@ class FinTSClientTest {
         val method = TanMethod(
             id = "942",
             name = "chipTAN optisch",
-            mediumName = "TAN-Generator"
+            mediumName = "TAN-Generator",
         )
 
         assertEquals("942", method.id)

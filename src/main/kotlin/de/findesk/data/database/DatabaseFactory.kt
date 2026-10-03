@@ -27,7 +27,7 @@ object DatabaseFactory {
                 OcrTextsTable,
                 SettingsTable,
                 PluginsTable,
-                AuditLogTable
+                AuditLogTable,
             )
         }
     }

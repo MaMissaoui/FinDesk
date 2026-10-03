@@ -21,18 +21,18 @@ fun AccountsScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp)
+            .padding(24.dp),
     ) {
         // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = "Bank Accounts",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
             Button(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Add Account")
@@ -45,7 +45,7 @@ fun AccountsScreen() {
 
         // Account List
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             items(sampleAccounts) { account ->
                 AccountCard(account = account)
@@ -57,7 +57,10 @@ fun AccountsScreen() {
     if (showAddDialog) {
         AddAccountDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { /* TODO */ showAddDialog = false }
+            onConfirm = {
+                /* TODO */
+                showAddDialog = false
+            },
         )
     }
 }
@@ -66,26 +69,26 @@ fun AccountsScreen() {
 private fun AccountCard(account: SampleAccount) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
                     Text(
                         text = account.name,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                     Text(
                         text = account.iban,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MediumGray
+                        color = MediumGray,
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -93,12 +96,12 @@ private fun AccountCard(account: SampleAccount) {
                         text = account.balance,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (account.balance.startsWith("-")) Error else DarkGray
+                        color = if (account.balance.startsWith("-")) Error else DarkGray,
                     )
                     Text(
                         text = account.type,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MediumGray
+                        color = MediumGray,
                     )
                 }
             }
@@ -110,11 +113,11 @@ private fun AccountCard(account: SampleAccount) {
             // Quick Actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(
                     onClick = { /* TODO */ },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = "Sync", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -122,7 +125,7 @@ private fun AccountCard(account: SampleAccount) {
                 }
                 OutlinedButton(
                     onClick = { /* TODO */ },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.List, contentDescription = "Transactions", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -130,7 +133,7 @@ private fun AccountCard(account: SampleAccount) {
                 }
                 OutlinedButton(
                     onClick = { /* TODO */ },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Send, contentDescription = "Transfer", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
@@ -144,7 +147,7 @@ private fun AccountCard(account: SampleAccount) {
 @Composable
 private fun AddAccountDialog(
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
 ) {
     var bankName by remember { mutableStateOf("") }
     var blz by remember { mutableStateOf("") }
@@ -155,25 +158,25 @@ private fun AddAccountDialog(
         title = { Text("Add Bank Account") },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 OutlinedTextField(
                     value = bankName,
                     onValueChange = { bankName = it },
                     label = { Text("Bank Name") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = blz,
                     onValueChange = { blz = it },
                     label = { Text("BLZ (Bank Code)") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = userId,
                     onValueChange = { userId = it },
                     label = { Text("User ID") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         },
@@ -186,7 +189,7 @@ private fun AddAccountDialog(
             TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
-        }
+        },
     )
 }
 
@@ -195,11 +198,11 @@ private data class SampleAccount(
     val name: String,
     val iban: String,
     val balance: String,
-    val type: String
+    val type: String,
 )
 
 private val sampleAccounts = listOf(
     SampleAccount("Girokonto", "DE89 3704 0044 0532 0130 00", "€5,234.56", "Checking"),
     SampleAccount("Sparkonto", "DE89 3704 0044 0532 0130 01", "€12,450.00", "Savings"),
-    SampleAccount("Visa Card", "DE89 3704 0044 0532 0130 02", "-€456.78", "Credit Card")
+    SampleAccount("Visa Card", "DE89 3704 0044 0532 0130 02", "-€456.78", "Credit Card"),
 )

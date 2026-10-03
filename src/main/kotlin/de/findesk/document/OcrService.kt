@@ -13,7 +13,7 @@ import java.math.BigDecimal
  * Supports PDF and image files
  */
 class OcrService(
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl()
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
 ) {
     companion object {
         // Default Tesseract language
@@ -57,7 +57,7 @@ class OcrService(
                 text = text,
                 language = detectLanguage(text),
                 confidence = confidence,
-                pageCount = 1
+                pageCount = 1,
             )
         } catch (e: Exception) {
             null
@@ -82,7 +82,7 @@ class OcrService(
                 text = text,
                 language = detectLanguage(text),
                 confidence = confidence,
-                pageCount = 1
+                pageCount = 1,
             )
         } catch (e: Exception) {
             null
@@ -160,7 +160,7 @@ class OcrService(
         val text: String,
         val language: String,
         val confidence: BigDecimal,
-        val pageCount: Int
+        val pageCount: Int,
     )
 
     /**
@@ -170,6 +170,6 @@ class OcrService(
         val documentId: Int,
         val fileName: String,
         val matchingText: String,
-        val confidence: BigDecimal
+        val confidence: BigDecimal,
     )
 }
