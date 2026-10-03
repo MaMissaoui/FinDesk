@@ -5,6 +5,39 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 
 ---
 
+## Work Queue (audit 2026-10-03)
+
+The earlier "all phases complete" status was wrong. This is what the code actually does, and what's being worked on, in order.
+
+**Cross-cutting bugs**
+- [ ] Repositories return Exposed DAO entities after the transaction closes. Reading a reference (`txn.category`) then throws, and `ReportService.generateTaxReport` silently returns an empty report for any categorized transaction. Fix: immutable UI models (`de.findesk.model`) built inside `transaction {}`.
+- [ ] `DashboardViewModel`: income and expenses both use `getMonthlyTotal` (net), so they always show the same value.
+- [ ] `TransactionsViewModel`: the category filter is stored but never applied. `searchByText` only matches `partnerName`, not `purpose`.
+- [x] Tests wrote to the real `~/.findesk/findesk.db` (fixed: `TestDatabase`).
+
+**Phase A: Wiring (foundation)**
+- [ ] ViewModels get a `CoroutineScope` and run repository and service calls on `Dispatchers.IO`.
+- [ ] Every screen observes its ViewModel instead of `sample*` lists (Dashboard, Accounts, Transactions, Documents, Reports).
+
+**Phase B: Pure-JVM features**
+- [ ] Documents: upload (file chooser), link/unlink to transaction, search by file name and OCR text, delete, open externally.
+- [ ] Transactions: text, category and date filters, CSV export, category assignment.
+- [ ] Accounts: add bank-access and account dialog, delete, manual balance edit.
+- [ ] Reports: tax and monthly reports from real data, CSV and PDF export (PDFBox).
+- [ ] PDF text extraction (PDFBox) for text-based PDFs.
+- [ ] Dashboard charts (Compose Canvas): expenses by category, monthly income vs expenses.
+- [ ] Settings screen: data directory info, categories and rules management, theme.
+
+**Phase C: OCR**
+- [ ] Tesseract via tess4j (deu+eng), OCR text stored in `ocr_texts` and linked to the document.
+
+**Phase D: Banking (unverified against real banks)**
+- [ ] HBCI4Java PIN/TAN client: accounts, balances, statements (KUmsAll), imported with hash dedup.
+- [ ] SEPA transfer with explicit confirmation and TAN dialog. Tested with fakes only; never against a live bank.
+- [ ] Payments screen.
+
+---
+
 ## Phase 1: Project Foundation ✅
 **Status:** Completed
 
@@ -81,7 +114,7 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 ---
 
 ## Phase 4: Account & Transaction Management
-**Status:** ✅ Completed
+**Status:** 🟡 Partial (repositories done; UI shows hardcoded sample data)
 
 ### Goals
 - Implement core financial data management screens
@@ -89,24 +122,24 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 - Transaction filtering and categorization
 
 ### Deliverables
-- [x] **Dashboard Screen:**
+- [ ] **Dashboard Screen:**
   - Balance overview widgets
   - Recent transactions list
   - Expense pie chart
   - Tax deduction bar chart
   - Pending tasks/notifications
-- [x] **Accounts Screen:**
+- [ ] **Accounts Screen:**
   - Account list with balances
   - Account detail view
   - Balance history line chart
   - Upcoming payments section
-- [x] **Transactions Screen:**
+- [ ] **Transactions Screen:**
   - Transaction list with filters (date, account, category, amount, text search)
   - Transaction detail panel
   - Category assignment
   - Document attachment
   - Tax relevance marking
-- [x] **Categories & Rules:**
+- [ ] **Categories & Rules:**
   - Category management (CRUD)
   - Rule editor for auto-categorization
   - Budget limits per category
@@ -116,7 +149,7 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 ---
 
 ## Phase 5: Banking Integration (HBCI4Java)
-**Status:** ✅ Completed
+**Status:** 🔴 Stubbed (HBCI4Java not a dependency; client returns empty results)
 
 ### Goals
 - Integrate HBCI4Java for FinTS/HBCI banking
@@ -125,25 +158,25 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 - Payment initiation
 
 ### Deliverables
-- [x] **FinTS Client Wrapper:**
+- [ ] **FinTS Client Wrapper:**
   - Clean Kotlin API around HBCI4Java
   - Bank connection management
   - BPD/UPD caching
-- [x] **Account Synchronization:**
+- [ ] **Account Synchronization:**
   - Connect to bank via FinTS
   - Fetch account list and balances
   - Sync transaction history
   - Handle delta updates
-- [x] **Transaction Import:**
+- [ ] **Transaction Import:**
   - MT940/CAMT parsing
   - Duplicate detection (hash-based)
   - Auto-categorization via rules engine
-- [x] **Payment System (SEPA):**
+- [ ] **Payment System (SEPA):**
   - Single transfers
   - Standing orders
   - TAN management (chipTAN, photoTAN, pushTAN)
   - Payment status tracking
-- [x] **TAN Management:**
+- [ ] **TAN Management:**
   - TAN method selection
   - TAN entry dialogs
   - Session management
@@ -152,7 +185,7 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 ---
 
 ## Phase 6: Documents, OCR & Reports
-**Status:** ✅ Completed
+**Status:** 🔴 Stubbed (no Tesseract/PDFBox; OCR returns placeholder text)
 
 ### Goals
 - Document management system
@@ -160,26 +193,26 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 - Tax reporting and export
 
 ### Deliverables
-- [x] **Document Management:**
+- [ ] **Document Management:**
   - File upload (PDF, images)
   - Document storage (local filesystem)
   - Document list with search
   - Link documents to transactions
-- [x] **OCR Pipeline:**
+- [ ] **OCR Pipeline:**
   - Tesseract integration (JNI or external process)
   - Text extraction from receipts
   - OCR confidence scoring
   - Searchable OCR text
-- [x] **Document-Transaction Matching:**
+- [ ] **Document-Transaction Matching:**
   - Automatic matching based on amounts/dates
   - Manual linking interface
   - Receipt preview
-- [x] **Tax Reports:**
+- [ ] **Tax Reports:**
   - Annual income summary
   - Deductions by category
   - Tax-relevant transaction filtering
   - Export to PDF/CSV
-- [x] **Reports & Analytics:**
+- [ ] **Reports & Analytics:**
   - Monthly/yearly spending reports
   - Category breakdowns
   - Trend analysis
@@ -249,7 +282,7 @@ src/main/kotlin/de/findesk/
 ---
 
 *Last Updated: October 3, 2026*
-*Current Phase: All Phases Complete*
+*Current Phase: Audit corrections — see "Work Queue" at top*
 
 ---
 
