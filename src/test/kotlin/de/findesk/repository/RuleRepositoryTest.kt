@@ -1,5 +1,6 @@
 package de.findesk.repository
 
+import de.findesk.data.database.DatabaseFactory
 import de.findesk.data.table.*
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -23,18 +24,7 @@ class RuleRepositoryTest {
         Database.connect("jdbc:sqlite:${dbFile.absolutePath}", driver = "org.sqlite.JDBC")
 
         transaction {
-            SchemaUtils.create(
-                BankAccessTable,
-                AccountsTable,
-                CategoriesTable,
-                TransactionsTable,
-                RulesTable,
-                DocumentsTable,
-                OcrTextsTable,
-                SettingsTable,
-                PluginsTable,
-                AuditLogTable,
-            )
+            SchemaUtils.create(*DatabaseFactory.tables)
         }
 
         ruleRepo = RuleRepositoryImpl()

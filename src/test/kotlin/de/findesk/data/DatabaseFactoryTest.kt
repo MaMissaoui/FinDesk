@@ -29,18 +29,7 @@ class DatabaseFactoryTest {
         Database.connect("jdbc:sqlite::memory:", driver = "org.sqlite.JDBC")
 
         transaction {
-            SchemaUtils.create(
-                BankAccessTable,
-                AccountsTable,
-                TransactionsTable,
-                CategoriesTable,
-                RulesTable,
-                DocumentsTable,
-                OcrTextsTable,
-                SettingsTable,
-                PluginsTable,
-                AuditLogTable,
-            )
+            SchemaUtils.create(*DatabaseFactory.tables)
 
             // Verify tables were created by checking columns exist
             val bankAccessColumns = BankAccessTable.columns.map { it.name }
@@ -65,18 +54,7 @@ class DatabaseFactoryTest {
         Database.connect("jdbc:sqlite::memory:", driver = "org.sqlite.JDBC")
 
         transaction {
-            SchemaUtils.create(
-                BankAccessTable,
-                AccountsTable,
-                TransactionsTable,
-                CategoriesTable,
-                RulesTable,
-                DocumentsTable,
-                OcrTextsTable,
-                SettingsTable,
-                PluginsTable,
-                AuditLogTable,
-            )
+            SchemaUtils.create(*DatabaseFactory.tables)
 
             // Verify BankAccessTable columns
             val bankAccessColumns = BankAccessTable.columns.map { it.name }
