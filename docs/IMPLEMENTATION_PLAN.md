@@ -139,7 +139,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
   - [x] Account detail view with balance history chart (30/90/365 days, reconstructed from bookings)
   - [x] Upcoming payments (Dashboard, from detected recurring bookings)
 - [x] **Transactions Screen:** filters (period, account, category, direction, text), inline category assignment, document indicator, manual entry, CSV export
-  - [ ] Amount-range filter, detail panel
+  - [x] Amount-range filter, detail panel (documents, attach receipt, create rule from booking)
 - [x] **Categories & Rules:** category CRUD with tax-relevance and budget, regex rule editor
   - [x] Budget limits evaluated on the dashboard
 - [x] ViewModel layer for state management

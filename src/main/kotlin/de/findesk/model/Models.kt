@@ -99,4 +99,7 @@ data class TransactionFilter(
     val taxRelevantOnly: Boolean = false,
     val direction: Direction = Direction.ALL,
     val text: String? = null,
+    /** Absolute amount bounds (match income and expenses alike). */
+    val minAmount: BigDecimal? = null,
+    val maxAmount: BigDecimal? = null,
 )

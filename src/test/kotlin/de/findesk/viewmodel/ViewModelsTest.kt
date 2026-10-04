@@ -115,6 +115,54 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `amount range matches absolute values in both directions`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.updatePeriod(Period.THIS_YEAR).join()
+        vm.updateAmountRange(BigDecimal("25"), BigDecimal("150")).join()
+        assertEquals(setOf("REWE", "UNICEF"), vm.state.value.transactions.map { it.partnerName }.toSet())
+        vm.updateAmountRange(BigDecimal("1000"), null).join()
+        assertEquals(listOf("Employer"), vm.state.value.transactions.map { it.partnerName }, "income matched by absolute amount")
+        vm.close()
+    }
+
+    @Test
+    fun `rule from a transaction escapes regex and drops reference numbers`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        val acc = account
+        data.txn(acc, LocalDate.of(2026, 3, 6), "-12.99", partner = "NETFLIX.COM 4711-2026")
+        data.txn(acc, LocalDate.of(2026, 2, 6), "-12.99", partner = "NETFLIX.COM 4711-2025")
+        vm.loadTransactions().join()
+        val netflix = vm.state.value.transactions.first { it.partnerName!!.startsWith("NETFLIX") }
+
+        val pattern = vm.rulePatternFor(netflix)
+        assertEquals("NETFLIX\\.COM", pattern)
+
+        vm.createRule(pattern, food).join()
+        assertEquals("Rule created and applied to 2 uncategorized transaction(s)", vm.state.value.message)
+        assertEquals(2, data.transactionRepo.findItems().count { it.partnerName!!.startsWith("NETFLIX") && it.categoryId == food })
+        vm.close()
+    }
+
+    @Test
+    fun `receipts attached from the detail panel are linked to the transaction`() = runBlocking {
+        val docsDir = File(tmp, "docs")
+        val documentService = de.findesk.document.DocumentService(ocrService = de.findesk.document.OcrService(engine = null), documentsDir = docsDir)
+        val vm = TransactionsViewModel(today = { today }, documentService = documentService)
+        vm.loadTransactions().join()
+        val rewe = vm.state.value.transactions.first { it.partnerName == "REWE" }
+        val png = File(tmp, "bon.png").also { javax.imageio.ImageIO.write(java.awt.image.BufferedImage(5, 5, java.awt.image.BufferedImage.TYPE_INT_RGB), "png", it) }
+
+        vm.selectTransaction(rewe).join()
+        assertTrue(vm.state.value.selectedDocuments.isEmpty())
+        vm.attachDocuments(rewe.id, listOf(png)).join()
+
+        assertEquals(listOf("bon.png"), vm.state.value.selectedDocuments.map { it.fileName })
+        assertEquals(1, vm.state.value.transactions.first { it.id == rewe.id }.documentCount)
+        assertEquals(1, vm.state.value.selected!!.documentCount, "open panel refreshed")
+        vm.close()
+    }
+
+    @Test
     fun `auto categorize applies rules to uncategorized transactions`() = runBlocking {
         data.ruleRepo.create("kiosk", food)
         val vm = TransactionsViewModel(today = { today })

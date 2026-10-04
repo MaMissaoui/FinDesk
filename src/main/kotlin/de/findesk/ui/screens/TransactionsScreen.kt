@@ -119,6 +119,8 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
                     label = { Text(d.name.lowercase().replaceFirstChar { it.uppercase() }) },
                 )
             }
+            Spacer(Modifier.width(8.dp))
+            AmountRangeInputs(state.minAmount, state.maxAmount) { min, max -> vm.updateAmountRange(min, max) }
             Spacer(Modifier.weight(1f))
             Text(
                 "${state.transactions.size} transactions · in ${Formats.money(state.totalIncome)} · out ${Formats.money(state.totalExpenses)}",
@@ -153,6 +155,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
                             categories = state.categories,
                             onCategory = { vm.updateTransactionCategory(txn.id, it) },
                             onDelete = { confirmDelete = txn },
+                            onOpen = { vm.selectTransaction(txn) },
                         )
                         HorizontalDivider()
                     }
@@ -161,6 +164,22 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
         }
     }
 
+    state.selected?.let { txn ->
+        TransactionDetailDialog(
+            txn = txn,
+            documents = state.selectedDocuments,
+            categories = state.categories,
+            account = state.accounts.firstOrNull { it.id == txn.accountId },
+            suggestedPattern = vm.rulePatternFor(txn),
+            onCategory = { vm.updateTransactionCategory(txn.id, it) },
+            onAttach = {
+                val files = FileDialogs.openFiles("Attach receipt", de.findesk.document.DocumentService.SUPPORTED_EXTENSIONS)
+                if (files.isNotEmpty()) vm.attachDocuments(txn.id, files)
+            },
+            onCreateRule = { pattern, categoryId -> vm.createRule(pattern, categoryId) },
+            onClose = { vm.selectTransaction(null) },
+        )
+    }
     state.importPreview?.let { preview ->
         ImportDialog(
             preview = preview,
@@ -217,12 +236,13 @@ private fun TransactionRow(
     categories: List<CategoryItem>,
     onCategory: (Int?) -> Unit,
     onDelete: () -> Unit,
+    onOpen: () -> Unit,
 ) {
     var categoryMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(Formats.date(txn.date), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -457,4 +477,123 @@ private fun ImportDialog(
         },
         dismissButton = { TextButton(enabled = !importing, onClick = onCancel) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun AmountRangeInputs(min: BigDecimal?, max: BigDecimal?, onChange: (BigDecimal?, BigDecimal?) -> Unit) {
+    var minText by remember { mutableStateOf(min?.toPlainString().orEmpty()) }
+    var maxText by remember { mutableStateOf(max?.toPlainString().orEmpty()) }
+    fun apply() = onChange(Formats.parseAmount(minText)?.abs(), Formats.parseAmount(maxText)?.abs())
+    OutlinedTextField(
+        minText,
+        {
+            minText = it
+            if (it.isBlank() || Formats.parseAmount(it) != null) apply()
+        },
+        placeholder = { Text("min €") },
+        singleLine = true,
+        modifier = Modifier.width(100.dp),
+    )
+    Text("–")
+    OutlinedTextField(
+        maxText,
+        {
+            maxText = it
+            if (it.isBlank() || Formats.parseAmount(it) != null) apply()
+        },
+        placeholder = { Text("max €") },
+        singleLine = true,
+        modifier = Modifier.width(100.dp),
+    )
+}
+
+@Composable
+private fun TransactionDetailDialog(
+    txn: TransactionItem,
+    documents: List<de.findesk.model.DocumentItem>,
+    categories: List<CategoryItem>,
+    account: AccountItem?,
+    suggestedPattern: String,
+    onCategory: (Int?) -> Unit,
+    onAttach: () -> Unit,
+    onCreateRule: (String, Int) -> Unit,
+    onClose: () -> Unit,
+) {
+    var pattern by remember(txn.id) { mutableStateOf(suggestedPattern) }
+    var ruleCategory by remember(txn.id) { mutableStateOf(categories.firstOrNull { it.id == txn.categoryId }) }
+    val patternValid = pattern.isNotBlank() && runCatching { Regex(pattern) }.isSuccess
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(txn.description) },
+        text = {
+            Column(Modifier.width(560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    Formats.money(txn.amount, txn.currency, signed = true),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (txn.isExpense) Error else Success,
+                )
+                DetailRow("Date", Formats.date(txn.date))
+                DetailRow("Account", account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: Formats.iban(txn.accountIban))
+                txn.partnerName?.let { DetailRow("Partner", it) }
+                txn.purpose?.let { DetailRow("Purpose", it) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Category", fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+                    DropdownSelector(
+                        label = txn.categoryName ?: "Uncategorized",
+                        options = listOf<CategoryItem?>(null) + categories,
+                        optionLabel = { it?.let { c -> c.name + if (c.isTaxRelevant) " (tax)" else "" } ?: "Uncategorized" },
+                        onSelect = { onCategory(it?.id) },
+                    )
+                    if (txn.isTaxRelevant) {
+                        Spacer(Modifier.width(8.dp))
+                        CategoryBadge("tax-relevant", "#F59E0B")
+                    }
+                }
+
+                HorizontalDivider()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Documents", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onAttach) { Text("Attach receipt…") }
+                }
+                if (documents.isEmpty()) Text("No documents linked", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                documents.forEach { d ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(d.fileName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = {
+                            val f = java.io.File(d.filePath)
+                            if (f.exists() && java.awt.Desktop.isDesktopSupported()) Thread { java.awt.Desktop.getDesktop().open(f) }.start()
+                        }) { Text("Open") }
+                    }
+                }
+
+                if (categories.isNotEmpty()) {
+                    HorizontalDivider()
+                    Text("Categorize similar bookings automatically", style = MaterialTheme.typography.labelLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            pattern,
+                            { pattern = it },
+                            label = { Text("Pattern (regex)") },
+                            singleLine = true,
+                            isError = !patternValid,
+                            modifier = Modifier.weight(1f),
+                        )
+                        DropdownSelector(ruleCategory?.name ?: "Category", categories, { it.name }, { ruleCategory = it })
+                        Button(enabled = patternValid && ruleCategory != null, onClick = { onCreateRule(pattern, ruleCategory!!.id) }) { Text("Create rule") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row {
+        Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
 }

@@ -181,6 +181,12 @@ class TransactionRepositoryImpl : TransactionRepository {
                     Direction.EXPENSES -> add(TransactionsTable.amount less BigDecimal.ZERO)
                     Direction.ALL -> Unit
                 }
+                filter.minAmount?.abs()?.let { min ->
+                    add((TransactionsTable.amount greaterEq min) or (TransactionsTable.amount lessEq min.negate()))
+                }
+                filter.maxAmount?.abs()?.let { max ->
+                    add((TransactionsTable.amount lessEq max) and (TransactionsTable.amount greaterEq max.negate()))
+                }
                 filter.text?.trim()?.takeIf { it.isNotEmpty() }?.let {
                     val pattern = "%$it%"
                     add((TransactionsTable.partnerName like pattern) or (TransactionsTable.purpose like pattern))

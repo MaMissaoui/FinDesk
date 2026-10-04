@@ -73,6 +73,10 @@ data class TransactionsState(
     val totalIncome: BigDecimal = BigDecimal.ZERO,
     val totalExpenses: BigDecimal = BigDecimal.ZERO,
     val importPreview: ImportPreview? = null,
+    val minAmount: BigDecimal? = null,
+    val maxAmount: BigDecimal? = null,
+    val selected: TransactionItem? = null,
+    val selectedDocuments: List<de.findesk.model.DocumentItem> = emptyList(),
     val isImporting: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -87,6 +91,7 @@ class TransactionsViewModel(
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val reportService: ReportService = ReportService(),
     private val importService: StatementImportService = StatementImportService(),
+    private val documentService: de.findesk.document.DocumentService = de.findesk.document.DocumentService(),
     private val today: () -> LocalDate = { LocalDate.now() },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
@@ -106,6 +111,8 @@ class TransactionsViewModel(
             uncategorizedOnly = s.categoryFilter == CategoryFilter.None,
             direction = s.direction,
             text = s.searchQuery,
+            minAmount = s.minAmount,
+            maxAmount = s.maxAmount,
         )
     }
 
@@ -129,6 +136,8 @@ class TransactionsViewModel(
 
     private fun refresh() {
         val transactions = transactionRepository.findItems(currentFilter())
+        // Keep the open detail panel in sync with edits
+        _state.value.selected?.let { sel -> _state.update { it.copy(selected = transactions.firstOrNull { t -> t.id == sel.id } ?: sel) } }
         val categories = categoryRepository.findAllItems()
         val accounts = accountRepository.findAllItems()
         _state.update {
@@ -171,6 +180,62 @@ class TransactionsViewModel(
     fun updateAccountFilter(accountId: Int?): Job {
         _state.update { it.copy(accountId = accountId) }
         return loadTransactions()
+    }
+
+    fun updateAmountRange(min: BigDecimal?, max: BigDecimal?): Job {
+        _state.update { it.copy(minAmount = min, maxAmount = max) }
+        return loadTransactions()
+    }
+
+    /** Opens the detail panel with the transaction's documents. */
+    fun selectTransaction(txn: TransactionItem?): Job {
+        _state.update { it.copy(selected = txn, selectedDocuments = emptyList()) }
+        if (txn == null) return Job().apply { complete() }
+        return launchSafely(onError) {
+            val docs = documentService.getDocumentsForTransaction(txn.id)
+            _state.update { if (it.selected?.id == txn.id) it.copy(selectedDocuments = docs) else it }
+        }
+    }
+
+    fun attachDocuments(transactionId: Int, files: List<File>): Job = launchSafely(onError) {
+        val failures = mutableListOf<String>()
+        files.forEach { f ->
+            try {
+                documentService.uploadDocument(f, transactionId)
+            } catch (e: Exception) {
+                failures += "${f.name}: ${e.userMessage()}"
+            }
+        }
+        val docs = documentService.getDocumentsForTransaction(transactionId)
+        _state.update { it.copy(selectedDocuments = docs, error = failures.takeIf { f -> f.isNotEmpty() }?.joinToString("\n")) }
+        refresh()
+    }
+
+    /**
+     * Suggested rule pattern for a transaction: the first words of the partner name, regex-escaped, without
+     * reference numbers ("NETFLIX.COM 1234" -> "NETFLIX\\.COM") so the rule also matches future bookings.
+     */
+    fun rulePatternFor(txn: TransactionItem): String = (txn.partnerName ?: txn.purpose ?: "").trim()
+        .split(Regex("\\s+"))
+        .filter { w -> w.isNotEmpty() && w.count(Char::isDigit) < 3 }
+        .take(3)
+        .joinToString(" ")
+        .replace(Regex("[\\\\.^$|?*+()\\[\\]{}]")) { "\\" + it.value }
+
+    /** Creates an auto-categorization rule and applies it to all uncategorized transactions. */
+    fun createRule(pattern: String, categoryId: Int): Job = launchSafely(onError) {
+        ruleRepository.create(pattern, categoryId, priority = 5)
+        val uncategorized = transactionRepository.findItems(TransactionFilter(uncategorizedOnly = true))
+        var applied = 0
+        uncategorized.forEach { t ->
+            if (de.findesk.repository.ruleMatches(pattern, listOfNotNull(t.purpose, t.partnerName).joinToString(" "))) {
+                transactionRepository.updateCategory(t.id, categoryId)
+                applied++
+            }
+        }
+        auditLogRepository.log("SAVE_RULE", "user", "Rule '$pattern' created from a transaction, applied to $applied")
+        refresh()
+        _state.update { it.copy(message = "Rule created and applied to $applied uncategorized transaction(s)") }
     }
 
     fun updateTransactionCategory(transactionId: Int, categoryId: Int?): Job = launchSafely(onError) {
