@@ -71,7 +71,7 @@ class ScreenshotTest {
                             Screen.DASHBOARD -> DashboardScreen()
                             Screen.ACCOUNTS -> AccountsScreen()
                             Screen.TRANSACTIONS -> TransactionsScreen()
-                            Screen.PAYMENTS -> PaymentsPlaceholderScreen()
+                            Screen.PAYMENTS -> PaymentsScreen()
                             Screen.DOCUMENTS -> DocumentsScreen()
                             Screen.REPORTS -> ReportsScreen()
                             Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {})

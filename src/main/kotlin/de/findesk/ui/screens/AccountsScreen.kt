@@ -37,6 +37,9 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     var editBalance by remember { mutableStateOf<AccountItem?>(null) }
     var confirmDeleteAccount by remember { mutableStateOf<AccountItem?>(null) }
     var confirmDeleteBank by remember { mutableStateOf<BankAccessItem?>(null) }
+    var editConnection by remember { mutableStateOf<BankAccessItem?>(null) }
+
+    BankingPromptHost(vm.bankingInteraction)
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -71,6 +74,11 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                 BankCard(
                     bank = bank,
                     accounts = accounts,
+                    syncing = state.syncingBankId == bank.id,
+                    syncStep = state.syncStep,
+                    syncEnabled = state.syncingBankId == null,
+                    onSync = { vm.syncBankAccess(bank.id) },
+                    onEditConnection = { editConnection = bank },
                     onAddAccount = { addAccountFor = bank },
                     onDeleteBank = { confirmDeleteBank = bank },
                     onTransactions = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = it.id)) },
@@ -81,8 +89,20 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
         }
     }
 
+    editConnection?.let { bank ->
+        ConnectionDialog(
+            bank = bank,
+            defaultUrl = vm.lookupBank(bank.blz)?.pinTanUrl,
+            onDismiss = { editConnection = null },
+            onConfirm = { userId, url ->
+                vm.updateConnection(bank.id, userId, url)
+                editConnection = null
+            },
+        )
+    }
     if (showAddBank) {
         AddBankDialog(
+            lookup = vm::lookupBank,
             validate = vm::validateBankAccess,
             onDismiss = { showAddBank = false },
             onConfirm = { name, blz, bic, user ->
@@ -134,6 +154,11 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
 private fun BankCard(
     bank: BankAccessItem,
     accounts: List<AccountItem>,
+    syncing: Boolean,
+    syncStep: String?,
+    syncEnabled: Boolean,
+    onSync: () -> Unit,
+    onEditConnection: () -> Unit,
     onAddAccount: () -> Unit,
     onDeleteBank: () -> Unit,
     onTransactions: (AccountItem) -> Unit,
@@ -152,6 +177,19 @@ private fun BankCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                if (syncing) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(syncStep ?: "Syncing…", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.width(8.dp))
+                } else {
+                    OutlinedButton(onClick = onSync, enabled = syncEnabled) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Sync")
+                    }
+                }
+                IconButton(onClick = onEditConnection) { Icon(Icons.Default.Settings, contentDescription = "Connection settings") }
                 TextButton(onClick = onAddAccount) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
@@ -192,6 +230,7 @@ private fun BankCard(
 
 @Composable
 private fun AddBankDialog(
+    lookup: (String) -> de.findesk.banking.BankDirectory.Entry?,
     validate: (String, String) -> String?,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, String) -> Unit,
@@ -208,8 +247,23 @@ private fun AddBankDialog(
         title = { Text("Add Bank") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    blz,
+                    { input ->
+                        blz = input.filter(Char::isDigit).take(8)
+                        if (blz.length == 8) {
+                            lookup(blz)?.let { entry ->
+                                if (bankName.isBlank()) bankName = entry.name
+                                if (bic.isBlank()) bic = entry.bic
+                            }
+                        }
+                    },
+                    label = { Text("BLZ (8 digits)") },
+                    supportingText = { lookup(blz)?.let { Text("${it.name}, ${it.city}" + if (it.pinTanUrl == null) " · no FinTS server listed" else " · online sync available") } },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 OutlinedTextField(bankName, { bankName = it }, label = { Text("Bank name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(blz, { blz = it.filter(Char::isDigit).take(8) }, label = { Text("BLZ (8 digits)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(bic, { bic = it }, label = { Text("BIC (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(userId, { userId = it }, label = { Text("Online banking user ID (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -279,6 +333,48 @@ private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm
             }
         },
         confirmButton = { Button(onClick = { parsed?.let(onConfirm) }, enabled = parsed != null) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun ConnectionDialog(
+    bank: BankAccessItem,
+    defaultUrl: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit,
+) {
+    var userId by remember { mutableStateOf(bank.userId) }
+    var url by remember { mutableStateOf(bank.serverUrl.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Online banking for ${bank.bankName}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.width(460.dp)) {
+                OutlinedTextField(userId, { userId = it }, label = { Text("User ID (Anmeldename / Legitimations-ID)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    url,
+                    { url = it },
+                    label = { Text("FinTS server URL") },
+                    placeholder = { Text(defaultUrl ?: "https://…") },
+                    supportingText = { Text(if (defaultUrl != null) "Leave empty to use $defaultUrl" else "Ask your bank for its FinTS (PIN/TAN) address") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                bank.tanMethod?.let { Text("Remembered TAN procedure: $it", style = MaterialTheme.typography.bodySmall) }
+                Text(
+                    "Your PIN is asked for on every sync and is never stored.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = userId.isNotBlank() && (url.isBlank() || url.trim().startsWith("https://")),
+                onClick = { onConfirm(userId, url) },
+            ) { Text("Save") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

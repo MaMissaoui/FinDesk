@@ -1,0 +1,75 @@
+package de.findesk.viewmodel
+
+import de.findesk.banking.BankingInteraction
+import de.findesk.banking.TanChallenge
+import de.findesk.banking.TanMethod
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+
+/** A question from the bank waiting for the user. Answer with [UiBankingInteraction.answer]. */
+sealed interface BankingPrompt {
+    data class Pin(val bankName: String, val userId: String) : BankingPrompt
+    data class ChooseTanMethod(val options: List<TanMethod>) : BankingPrompt
+    data class ChooseTanMedium(val options: List<String>) : BankingPrompt
+    data class Tan(val challenge: TanChallenge) : BankingPrompt
+    data class Decoupled(val message: String) : BankingPrompt
+    data class ConfirmPayee(val message: String) : BankingPrompt
+}
+
+/**
+ * Bridges blocking banking callbacks (on an IO thread) to Compose dialogs: each call publishes a
+ * [BankingPrompt] and waits until the UI answers or cancels. The PIN is passed through, never kept.
+ */
+class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInteraction {
+    private val _prompt = MutableStateFlow<BankingPrompt?>(null)
+    val prompt: StateFlow<BankingPrompt?> = _prompt.asStateFlow()
+
+    private val _info = MutableStateFlow<String?>(null)
+    val info: StateFlow<String?> = _info.asStateFlow()
+
+    @Volatile
+    private var pending: CompletableFuture<String?>? = null
+
+    /** Answer the current prompt; null cancels. For yes/no prompts any non-null value means yes. */
+    fun answer(value: String?) {
+        pending?.complete(value)
+    }
+
+    fun clearInfo() {
+        _info.value = null
+    }
+
+    @Synchronized
+    private fun ask(prompt: BankingPrompt): String? {
+        val future = CompletableFuture<String?>()
+        pending = future
+        _prompt.value = prompt
+        return try {
+            future.get(timeoutMinutes, TimeUnit.MINUTES)
+        } catch (e: Exception) {
+            null
+        } finally {
+            pending = null
+            _prompt.value = null
+        }
+    }
+
+    override fun pin(bankName: String, userId: String): String? = ask(BankingPrompt.Pin(bankName, userId))
+
+    override fun selectTanMethod(options: List<TanMethod>): String? = ask(BankingPrompt.ChooseTanMethod(options))
+
+    override fun selectTanMedium(options: List<String>): String? = ask(BankingPrompt.ChooseTanMedium(options))
+
+    override fun tan(challenge: TanChallenge): String? = ask(BankingPrompt.Tan(challenge))
+
+    override fun confirmDecoupled(message: String): Boolean = ask(BankingPrompt.Decoupled(message)) != null
+
+    override fun confirmPayee(message: String): Boolean = ask(BankingPrompt.ConfirmPayee(message)) != null
+
+    override fun info(message: String) {
+        if (message.isNotBlank()) _info.value = message
+    }
+}

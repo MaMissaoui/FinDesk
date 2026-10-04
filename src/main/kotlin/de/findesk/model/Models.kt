@@ -21,6 +21,7 @@ data class BankAccessItem(
     val userId: String,
     val hbciVersion: String,
     val tanMethod: String?,
+    val serverUrl: String?,
     val lastSync: LocalDateTime?,
 )
 

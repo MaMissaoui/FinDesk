@@ -35,9 +35,18 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Tesseract via tess4j (deu+eng), OCR text stored in `ocr_texts` and linked to the document.
 
 **Phase D: Banking (unverified against real banks)**
-- [ ] HBCI4Java PIN/TAN client: accounts, balances, statements (KUmsAll), imported with hash dedup.
-- [ ] SEPA transfer with explicit confirmation and TAN dialog. Tested with fakes only; never against a live bank.
-- [ ] Payments screen.
+- [x] HBCI4Java 4.1.17 PIN/TAN gateway: accounts, balances and statements (MT940, with CAMT fallback) in a single dialog, imported with hash dedup and rules.
+- [x] TAN handling: procedure/medium selection (remembered), TAN entry, photoTAN/QR images, decoupled (app) confirmation.
+- [x] SEPA transfer with review, explicit confirmation and Verification-of-Payee confirmation (abort unless confirmed).
+- [x] Payments screen, Sync per bank, connection settings, offline BLZ lookup (name, BIC, FinTS URL).
+- [ ] **First real-bank test.** Everything is tested against fakes and a closed local port only. Try a sync with one real login and watch the result before relying on it.
+- [ ] chipTAN optical (flicker code) isn't rendered. Use "chipTAN manuell" instead.
+- [ ] Standing orders, scheduled transfers.
+
+**Known gaps / next**
+- [ ] CSV/CAMT file import for banks without FinTS.
+- [ ] SQLCipher encryption for the database (data and passports are unencrypted at rest, except the passport passphrase-encrypted file).
+- [ ] Budget tracking per category (budget limits are stored but not yet evaluated).
 
 ---
 
@@ -117,7 +126,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 ---
 
 ## Phase 4: Account & Transaction Management
-**Status:** 🟡 Partial (repositories done; UI shows hardcoded sample data)
+**Status:** ✅ Done (open sub-items below)
 
 ### Goals
 - Implement core financial data management screens
@@ -125,101 +134,45 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - Transaction filtering and categorization
 
 ### Deliverables
-- [ ] **Dashboard Screen:**
-  - Balance overview widgets
-  - Recent transactions list
-  - Expense pie chart
-  - Tax deduction bar chart
-  - Pending tasks/notifications
-- [ ] **Accounts Screen:**
-  - Account list with balances
-  - Account detail view
-  - Balance history line chart
-  - Upcoming payments section
-- [ ] **Transactions Screen:**
-  - Transaction list with filters (date, account, category, amount, text search)
-  - Transaction detail panel
-  - Category assignment
-  - Document attachment
-  - Tax relevance marking
-- [ ] **Categories & Rules:**
-  - Category management (CRUD)
-  - Rule editor for auto-categorization
-  - Budget limits per category
+- [x] **Dashboard Screen:** balance/income/expense widgets, recent transactions, expense donut, tax-deduction donut, income vs expenses bars, pending tasks
+- [x] **Accounts Screen:** banks with accounts and balances, add/edit balance/delete
+  - [ ] Account detail view with balance history chart
+  - [ ] Upcoming payments section
+- [x] **Transactions Screen:** filters (period, account, category, direction, text), inline category assignment, document indicator, manual entry, CSV export
+  - [ ] Amount-range filter, detail panel
+- [x] **Categories & Rules:** category CRUD with tax-relevance and budget, regex rule editor
+  - [ ] Budget limits are stored but not evaluated
 - [x] ViewModel layer for state management
-- [ ] Unit tests for business logic
+- [x] Unit tests for business logic
 
 ---
 
 ## Phase 5: Banking Integration (HBCI4Java)
-**Status:** 🔴 Stubbed (HBCI4Java not a dependency; client returns empty results)
-
-### Goals
-- Integrate HBCI4Java for FinTS/HBCI banking
-- Account synchronization
-- Transaction import
-- Payment initiation
+**Status:** 🟡 Implemented, not yet verified against a real bank (see Work Queue)
 
 ### Deliverables
-- [ ] **FinTS Client Wrapper:**
-  - Clean Kotlin API around HBCI4Java
-  - Bank connection management
-  - BPD/UPD caching
-- [ ] **Account Synchronization:**
-  - Connect to bank via FinTS
-  - Fetch account list and balances
-  - Sync transaction history
-  - Handle delta updates
-- [ ] **Transaction Import:**
-  - MT940/CAMT parsing
-  - Duplicate detection (hash-based)
-  - Auto-categorization via rules engine
-- [ ] **Payment System (SEPA):**
-  - Single transfers
-  - Standing orders
-  - TAN management (chipTAN, photoTAN, pushTAN)
-  - Payment status tracking
-- [ ] **TAN Management:**
-  - TAN method selection
-  - TAN entry dialogs
-  - Session management
-- [ ] Security best practices for credential storage
+- [x] **FinTS Client Wrapper:** `FinTSGateway` port + `Hbci4JavaGateway`; BPD/UPD cached in the encrypted HBCI4Java passport file
+- [x] **Account Synchronization:** accounts matched by IBAN (new ones created), balances, statements; delta sync overlapping the last sync by 10 days
+- [x] **Transaction Import:** MT940 with CAMT fallback (parsed by HBCI4Java), hash dedup incl. bank id/running balance, rules
+- [x] **Payment System (SEPA):** single transfers with review + confirmation + Verification of Payee; audit-logged
+  - [ ] Standing orders, payment status tracking
+- [x] **TAN Management:** procedure/medium selection (remembered), TAN dialog, photoTAN/QR image, decoupled confirmation
+  - [ ] chipTAN optical flicker code
+- [x] Credentials: PIN never stored; passport passphrase random per bank (settings table)
 
 ---
 
 ## Phase 6: Documents, OCR & Reports
-**Status:** 🔴 Stubbed (no Tesseract/PDFBox; OCR returns placeholder text)
-
-### Goals
-- Document management system
-- OCR pipeline for receipt processing
-- Tax reporting and export
+**Status:** ✅ Done
 
 ### Deliverables
-- [ ] **Document Management:**
-  - File upload (PDF, images)
-  - Document storage (local filesystem)
-  - Document list with search
-  - Link documents to transactions
-- [ ] **OCR Pipeline:**
-  - Tesseract integration (JNI or external process)
-  - Text extraction from receipts
-  - OCR confidence scoring
-  - Searchable OCR text
-- [ ] **Document-Transaction Matching:**
-  - Automatic matching based on amounts/dates
-  - Manual linking interface
-  - Receipt preview
-- [ ] **Tax Reports:**
-  - Annual income summary
-  - Deductions by category
-  - Tax-relevant transaction filtering
-  - Export to PDF/CSV
-- [ ] **Reports & Analytics:**
-  - Monthly/yearly spending reports
-  - Category breakdowns
-  - Trend analysis
-  - Custom date range selection
+- [x] **Document Management:** upload (PDF, JPG, PNG, TIFF), local storage, search by name and text, link/unlink, open, delete
+- [x] **OCR Pipeline:** PDF text layer via PDFBox; Tesseract (tess4j, deu+eng) for images and scans, with confidence; searchable
+- [x] **Document-Transaction Matching:** suggestions from total and date found in the text; manual linking
+  - [ ] In-app receipt preview (opens in the system viewer instead)
+- [x] **Tax Reports:** annual summary, tax-relevant deductions by category, PDF and CSV export
+- [x] **Reports & Analytics:** monthly breakdown, category shares, top vendors, category trends (service)
+  - [ ] Custom date range selection in Reports
 
 ---
 
@@ -285,7 +238,7 @@ src/main/kotlin/de/findesk/
 ---
 
 *Last Updated: October 3, 2026*
-*Current Phase: Audit corrections — see "Work Queue" at top*
+*Current Phase: Work queue complete except the items left open above*
 
 ---
 

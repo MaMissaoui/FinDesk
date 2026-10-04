@@ -10,5 +10,6 @@ object BankAccessTable : IntIdTable("bank_access") {
     val userId = varchar("user_id", 100)
     val hbciVersion = varchar("hbci_version", 10).default("300")
     val tanMethod = varchar("tan_method", 50).nullable()
+    val serverUrl = varchar("server_url", 255).nullable()
     val lastSync = datetime("last_sync").nullable()
 }

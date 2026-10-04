@@ -34,7 +34,9 @@ object DatabaseFactory {
 
         transaction {
             addLogger(StdOutSqlLogger)
-            SchemaUtils.create(*tables)
+            // Also adds columns introduced after a database was created (e.g. bank_access.server_url)
+            @Suppress("DEPRECATION")
+            SchemaUtils.createMissingTablesAndColumns(*tables)
         }
     }
 

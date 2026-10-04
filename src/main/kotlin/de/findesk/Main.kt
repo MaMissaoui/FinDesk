@@ -61,7 +61,7 @@ fun App() {
                             Screen.DASHBOARD -> DashboardScreen(onNavigate = navigate)
                             Screen.ACCOUNTS -> AccountsScreen(onNavigate = navigate)
                             Screen.TRANSACTIONS -> TransactionsScreen(args = navigationState.args)
-                            Screen.PAYMENTS -> PaymentsPlaceholderScreen()
+                            Screen.PAYMENTS -> PaymentsScreen()
                             Screen.DOCUMENTS -> DocumentsScreen()
                             Screen.REPORTS -> ReportsScreen()
                             Screen.SETTINGS -> SettingsScreen(darkTheme = isDarkTheme, onDarkThemeChange = setDarkTheme)

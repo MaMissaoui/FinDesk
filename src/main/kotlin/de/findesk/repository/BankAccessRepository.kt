@@ -19,6 +19,10 @@ interface BankAccessRepository {
     fun delete(id: Int): Boolean
     fun updateLastSync(id: Int): BankAccess?
     fun findAllItems(): List<BankAccessItem>
+    fun findItem(id: Int): BankAccessItem?
+
+    /** Stores the FinTS server URL and/or the chosen TAN method (null leaves a value unchanged). */
+    fun updateConnection(id: Int, serverUrl: String? = null, tanMethod: String? = null, userId: String? = null): BankAccessItem?
 
     /** Deletes the bank access together with its accounts and their transactions. */
     fun deleteWithAccounts(id: Int): Boolean
@@ -74,5 +78,15 @@ class BankAccessRepositoryImpl : BankAccessRepository {
             .map { it[AccountsTable.id].value }
             .forEach { deleteAccountCascade(it) }
         BankAccessTable.deleteWhere { BankAccessTable.id eq id } > 0
+    }
+
+    override fun findItem(id: Int): BankAccessItem? = transaction { BankAccess.findById(id)?.toItem() }
+
+    override fun updateConnection(id: Int, serverUrl: String?, tanMethod: String?, userId: String?): BankAccessItem? = transaction {
+        BankAccess.findById(id)?.apply {
+            userId?.let { this.userId = it.trim() }
+            serverUrl?.let { this.serverUrl = it.trim().ifEmpty { null } }
+            tanMethod?.let { this.tanMethod = it }
+        }?.toItem()
     }
 }

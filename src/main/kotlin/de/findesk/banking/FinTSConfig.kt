@@ -60,6 +60,10 @@ data class FinTSTransaction(
     val transactionCode: String?,
     val reference: String?,
     val primaNota: String? = null,
+    /** Running balance after this booking, if the bank reports it. */
+    val balanceAfter: BigDecimal? = null,
+    /** Bank-side booking id (CAMT), if any. */
+    val bankId: String? = null,
 )
 
 /**

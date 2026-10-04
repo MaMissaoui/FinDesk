@@ -1,5 +1,8 @@
 package de.findesk.viewmodel
 
+import de.findesk.banking.BankDirectory
+import de.findesk.banking.BankingResult
+import de.findesk.banking.BankingService
 import de.findesk.model.AccountItem
 import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
@@ -18,6 +21,9 @@ data class AccountsState(
     val accounts: List<AccountItem> = emptyList(),
     val bankAccesses: List<BankAccessItem> = emptyList(),
     val isLoading: Boolean = false,
+    /** Bank access currently syncing, if any. */
+    val syncingBankId: Int? = null,
+    val syncStep: String? = null,
     val error: String? = null,
     val message: String? = null,
 ) {
@@ -28,6 +34,8 @@ class AccountsViewModel(
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
+    private val bankingService: BankingService = BankingService(),
+    val bankingInteraction: UiBankingInteraction = UiBankingInteraction(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(AccountsState())
@@ -116,6 +124,41 @@ class AccountsViewModel(
         auditLogRepository.log("DELETE_BANK_ACCESS", "user", "Deleted bank access $bankAccessId")
         refresh()
         _state.update { it.copy(message = "Bank removed") }
+    }
+
+    /** Bank name, BIC and FinTS URL from the bundled directory, for pre-filling the add-bank dialog. */
+    fun lookupBank(blz: String): BankDirectory.Entry? = BankDirectory.lookup(blz)
+
+    fun updateConnection(bankAccessId: Int, userId: String, serverUrl: String): Job = launchSafely(onError) {
+        bankAccessRepository.updateConnection(bankAccessId, serverUrl = serverUrl, userId = userId)
+        refresh()
+        _state.update { it.copy(message = "Connection settings saved") }
+    }
+
+    /** Online sync via FinTS. Prompts for PIN/TAN through [bankingInteraction]. */
+    fun syncBankAccess(bankAccessId: Int): Job {
+        _state.update { it.copy(syncingBankId = bankAccessId, syncStep = "Connecting…", error = null, message = null) }
+        val progressJob = launchSafely({}) {
+            bankingService.syncProgress.collect { p -> _state.update { it.copy(syncStep = p?.currentStep ?: it.syncStep) } }
+        }
+        return launchSafely({ e -> _state.update { it.copy(syncingBankId = null, error = e.userMessage()) } }) {
+            try {
+                when (val r = bankingService.syncBankConnection(bankAccessId, bankingInteraction)) {
+                    is BankingResult.Success -> {
+                        refresh()
+                        val warn = r.data.warnings.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                        _state.update { it.copy(message = r.data.summary(), error = warn) }
+                    }
+
+                    is BankingResult.Error -> _state.update { it.copy(error = if (r.code == "CANCELLED") null else r.message) }
+
+                    is BankingResult.TanRequired -> _state.update { it.copy(error = "TAN required") }
+                }
+            } finally {
+                progressJob.cancel()
+                _state.update { it.copy(syncingBankId = null, syncStep = null) }
+            }
+        }
     }
 
     fun clearMessages() {

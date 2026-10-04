@@ -19,7 +19,8 @@ A modern personal financial workspace that unifies multi-banking, transactions, 
 | UI Framework | Compose Desktop 1.7.3 |
 | Database | SQLite + Exposed ORM |
 | Banking | HBCI4Java (FinTS) |
-| OCR | Tesseract |
+| OCR | Tesseract (tess4j) + Apache PDFBox |
+| Banking | HBCI4Java 4.x (FinTS 3.0 PIN/TAN) |
 | Build | Gradle |
 
 ## Quick Start
@@ -28,6 +29,7 @@ A modern personal financial workspace that unifies multi-banking, transactions, 
 
 - **JDK 21+** (OpenJDK or Oracle)
 - **Gradle** (wrapper included)
+- **Tesseract** (optional, for OCR of images and scanned PDFs): `brew install tesseract tesseract-lang` on macOS, `apt install tesseract-ocr tesseract-ocr-deu` on Debian/Ubuntu. PDFs with a text layer work without it.
 
 ### Run the Application
 
@@ -76,22 +78,11 @@ cd FinDesk
 # Fedora/RHEL package
 ./gradlew packageRpm
 
-# Universal AppImage
-./gradlew packageAppImage
-
 # Output: build/compose/binaries/main/deb/findesk_1.0.0-1_amd64.deb
 # Output: build/compose/binaries/main/rpm/findesk-1.0.0-1.x86_64.rpm
-# Output: build/compose/binaries/main/appimage/FinDesk-1.0.0.AppImage
 ```
 
-#### All Platforms
-```bash
-# Build all distribution packages
-./gradlew buildAllDistributions
-
-# Create portable ZIP
-./gradlew createPortableZip
-```
+Packages are built for the operating system you run the build on.
 
 ## Project Structure
 
@@ -139,6 +130,16 @@ FinDesk/
 ![Documents](docs/screenshots/documents.png)
 
 ## Configuration
+
+### Data Directory
+
+All data lives in one directory: `~/.findesk` (`%USERPROFILE%\.findesk` on Windows). Set the `FINDESK_HOME` environment variable to use another location, for example a portable install or a throwaway copy for testing.
+
+### Online Banking (FinTS)
+
+Add your bank by BLZ. Name, BIC and FinTS server are filled in from the bundled bank directory. Then set your online banking user ID under the bank's connection settings and press **Sync**. FinDesk asks for your PIN on every sync and never stores it. TAN procedures (pushTAN/decoupled, photoTAN, QR-TAN, chipTAN manual, SMS-TAN) are prompted as the bank requires. Transfers are only sent after a review step and explicit confirmation.
+
+> The FinTS integration has been tested against simulated banks only. Try your first sync with care.
 
 ### Database Location
 The SQLite database is stored at:

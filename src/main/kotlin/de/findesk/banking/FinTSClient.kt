@@ -1,28 +1,30 @@
 package de.findesk.banking
 
-import de.findesk.data.entity.Account
-import de.findesk.data.entity.BankAccess
-import de.findesk.data.entity.Transaction
+import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
+import de.findesk.util.AppPaths
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.math.BigDecimal
 import java.security.MessageDigest
+import java.security.SecureRandom
 import java.time.LocalDate
-import java.time.LocalDateTime
+import java.util.Base64
 
 /**
- * Main FinTS client wrapper providing clean Kotlin APIs
- * Wraps HBCI4Java for bank communication
+ * Turns a stored bank access into a FinTS connection and runs operations through a [FinTSGateway],
+ * publishing connection status and progress for the UI.
  */
 class FinTSClient(
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
-    private val accountRepository: AccountRepository = AccountRepositoryImpl(),
-    private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
+    private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
+    private val gateway: FinTSGateway = Hbci4JavaGateway(),
     private val tanManager: TanManager = TanManager(),
+    private val passportDir: File = File(AppPaths.dataDir, "passports"),
 ) {
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
@@ -38,161 +40,101 @@ class FinTSClient(
     )
 
     /**
-     * Connect to bank and sync accounts
+     * Builds the connection for a stored bank access. The server URL comes from the bank access or,
+     * if unset, from the bundled bank directory.
      */
-    suspend fun connectAndSync(config: FinTSConfig): BankingResult<List<FinTSAccount>> = withContext(Dispatchers.IO) {
-        _connectionStatus.value = ConnectionStatus.CONNECTING
-        try {
-            // TODO: Implement actual HBCI4Java connection
-            // This is a placeholder for the HBCI4Java integration
-
-            // 1. Initialize HBCI handler
-            // 2. Set up passport (PinTan)
-            // 3. Sync bank parameters (BPD/UPD)
-            // 4. Fetch accounts
-
-            _connectionStatus.value = ConnectionStatus.CONNECTED
-
-            // Store bank access
-            val bankAccess = bankAccessRepository.create(
-                bankName = config.bankName,
-                blz = config.blz,
-                bic = config.bic,
-                userId = config.userId,
-                hbciVersion = config.hbciVersion,
-            )
-
-            BankingResult.Success(emptyList())
-        } catch (e: Exception) {
-            _connectionStatus.value = ConnectionStatus.ERROR
-            BankingResult.Error("CONNECTION_FAILED", e.message ?: "Unknown error")
+    fun connectionFor(bankAccess: BankAccessItem): BankingResult<FinTSConnection> {
+        val serverUrl = bankAccess.serverUrl?.takeIf { it.isNotBlank() } ?: BankDirectory.lookup(bankAccess.blz)?.pinTanUrl
+            ?: return BankingResult.Error("NO_SERVER", "No FinTS server known for BLZ ${bankAccess.blz}. Enter the bank's FinTS URL.")
+        runCatching { FinDeskHbciCallback.hostFor(serverUrl) }.onFailure {
+            return BankingResult.Error("BAD_SERVER", it.message ?: "Invalid FinTS server URL")
         }
-    }
-
-    /**
-     * Fetch accounts for a bank connection
-     */
-    suspend fun fetchAccounts(bankAccessId: Int): BankingResult<List<FinTSAccount>> = withContext(Dispatchers.IO) {
-        try {
-            // TODO: Implement HBCI4Java account fetching
-            // HBCIAccount.getUPD().accounts
-
-            BankingResult.Success(emptyList())
-        } catch (e: Exception) {
-            BankingResult.Error("FETCH_ACCOUNTS_FAILED", e.message ?: "Unknown error")
+        if (bankAccess.userId.isBlank()) {
+            return BankingResult.Error("NO_USER", "Enter your online banking user ID (Anmeldename/Legitimations-ID) for ${bankAccess.bankName}.")
         }
-    }
-
-    /**
-     * Fetch account balance
-     */
-    suspend fun fetchBalance(accountId: Int): BankingResult<FinTSBalance> = withContext(Dispatchers.IO) {
-        try {
-            // TODO: Implement HBCI4Java balance fetch
-            // HBCIJob balanceJob = hbciHandler.newJob("SaldoReq");
-
-            BankingResult.Error("NOT_IMPLEMENTED", "Balance fetch not yet implemented")
-        } catch (e: Exception) {
-            BankingResult.Error("FETCH_BALANCE_FAILED", e.message ?: "Unknown error")
-        }
-    }
-
-    /**
-     * Fetch transactions for an account
-     */
-    suspend fun fetchTransactions(
-        accountId: Int,
-        startDate: LocalDate,
-        endDate: LocalDate = LocalDate.now(),
-    ): BankingResult<List<FinTSTransaction>> = withContext(Dispatchers.IO) {
-        try {
-            // TODO: Implement HBCI4Java transaction fetch
-            // HBCIAccount hbciAccount = ...
-            // HBCIJob statementJob = hbciHandler.newJob("KUmsAll");
-
-            BankingResult.Success(emptyList())
-        } catch (e: Exception) {
-            BankingResult.Error("FETCH_TRANSACTIONS_FAILED", e.message ?: "Unknown error")
-        }
-    }
-
-    /**
-     * Sync all accounts for a bank connection
-     */
-    suspend fun syncAll(bankAccessId: Int): BankingResult<SyncResult> = withContext(Dispatchers.IO) {
-        _connectionStatus.value = ConnectionStatus.SYNCING
-        _syncProgress.value = SyncProgress(
-            currentStep = "Connecting to bank...",
-            progress = 0.0f,
+        return BankingResult.Success(
+            FinTSConnection(
+                bankName = bankAccess.bankName,
+                blz = bankAccess.blz,
+                userId = bankAccess.userId,
+                serverUrl = serverUrl,
+                hbciVersion = bankAccess.hbciVersion,
+                passportFile = File(passportDir, "bank-${bankAccess.id}.dat"),
+                passportPassphrase = passportPassphrase(bankAccess.id),
+                tanMethod = bankAccess.tanMethod,
+            ),
         )
-
-        try {
-            // 1. Fetch accounts
-            _syncProgress.value = _syncProgress.value?.copy(
-                currentStep = "Fetching accounts...",
-                progress = 0.2f,
-            )
-
-            // 2. Fetch balances
-            _syncProgress.value = _syncProgress.value?.copy(
-                currentStep = "Fetching balances...",
-                progress = 0.4f,
-            )
-
-            // 3. Fetch transactions for each account
-            _syncProgress.value = _syncProgress.value?.copy(
-                currentStep = "Fetching transactions...",
-                progress = 0.6f,
-            )
-
-            // 4. Store transactions
-            _syncProgress.value = _syncProgress.value?.copy(
-                currentStep = "Saving data...",
-                progress = 0.8f,
-            )
-
-            // 5. Update last sync time
-            bankAccessRepository.updateLastSync(bankAccessId)
-
-            _syncProgress.value = _syncProgress.value?.copy(
-                currentStep = "Sync complete",
-                progress = 1.0f,
-            )
-            _connectionStatus.value = ConnectionStatus.CONNECTED
-
-            BankingResult.Success(
-                SyncResult(
-                    accountsSynced = 0,
-                    transactionsImported = 0,
-                    duplicatesSkipped = 0,
-                ),
-            )
-        } catch (e: Exception) {
-            _connectionStatus.value = ConnectionStatus.ERROR
-            _syncProgress.value = null
-            BankingResult.Error("SYNC_FAILED", e.message ?: "Unknown error")
-        }
     }
 
     /**
-     * Initiate a SEPA single transfer
+     * Fetch accounts, balances and bookings for one bank access in a single dialog.
+     */
+    suspend fun fetchAll(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        since: (iban: String) -> LocalDate?,
+        to: LocalDate = LocalDate.now(),
+    ): BankingResult<List<AccountSnapshot>> = run(bankAccessId, ConnectionStatus.SYNCING, "Connecting to bank…") { connection ->
+        gateway.fetchAll(connection, interaction, since, to)
+    }
+
+    /**
+     * Send a SEPA single transfer. The caller must have obtained explicit user confirmation first.
      */
     suspend fun initiateTransfer(
-        fromAccountId: Int,
-        toIban: String,
-        toBic: String,
-        toName: String,
-        amount: BigDecimal,
-        purpose: String,
-    ): BankingResult<TransferResult> = withContext(Dispatchers.IO) {
-        try {
-            // TODO: Implement HBCI4Java SEPA transfer
-            // HBCIJob sepaJob = hbciHandler.newJob("UebSEPA");
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+    ): BankingResult<TransferResult> = run(bankAccessId, ConnectionStatus.CONNECTING, "Sending transfer…") { connection ->
+        gateway.transfer(connection, interaction, fromIban, order)
+    }
 
-            BankingResult.Error("NOT_IMPLEMENTED", "Transfer not yet implemented")
-        } catch (e: Exception) {
-            BankingResult.Error("TRANSFER_FAILED", e.message ?: "Unknown error")
+    private suspend fun <T> run(
+        bankAccessId: Int,
+        status: ConnectionStatus,
+        step: String,
+        block: (FinTSConnection) -> T,
+    ): BankingResult<T> = withContext(Dispatchers.IO) {
+        val bankAccess = bankAccessRepository.findItem(bankAccessId)
+            ?: return@withContext BankingResult.Error("NOT_FOUND", "Bank connection $bankAccessId not found")
+        val connection = when (val c = connectionFor(bankAccess)) {
+            is BankingResult.Success -> c.data
+            is BankingResult.Error -> return@withContext c
+            is BankingResult.TanRequired -> return@withContext c
         }
+        _connectionStatus.value = status
+        _syncProgress.value = SyncProgress(step, 0.1f)
+        try {
+            val result = block(connection)
+            gateway.lastTanMethod?.takeIf { it != bankAccess.tanMethod }?.let {
+                bankAccessRepository.updateConnection(bankAccessId, tanMethod = it)
+            }
+            _connectionStatus.value = ConnectionStatus.CONNECTED
+            BankingResult.Success(result)
+        } catch (e: BankingCancelledException) {
+            _connectionStatus.value = ConnectionStatus.DISCONNECTED
+            BankingResult.Error("CANCELLED", e.message ?: "Cancelled")
+        } catch (e: Exception) {
+            _connectionStatus.value = ConnectionStatus.ERROR
+            BankingResult.Error("FINTS_ERROR", e.message ?: "FinTS dialog failed")
+        } finally {
+            _syncProgress.value = null
+        }
+    }
+
+    internal fun reportProgress(step: String, progress: Float, processed: Int = 0, total: Int = 0) {
+        _syncProgress.value = SyncProgress(step, progress, processed, total)
+    }
+
+    /** Random per-bank passphrase for the HBCI4Java passport file, kept in the settings table. */
+    private fun passportPassphrase(bankAccessId: Int): String {
+        val key = "fints.passport.$bankAccessId"
+        settingsRepository.getValue(key)?.let { return it }
+        val bytes = ByteArray(24).also { SecureRandom().nextBytes(it) }
+        val passphrase = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        settingsRepository.setValue(key, passphrase)
+        return passphrase
     }
 
     /**
@@ -206,12 +148,9 @@ class FinTSClient(
     ): String = transactionHash(date, amount, partnerName, purpose)
 
     /**
-     * Get available TAN methods for a bank
+     * TAN methods commonly offered by German banks. The bank's actual list is requested during the dialog.
      */
-    suspend fun getTanMethods(config: FinTSConfig): List<TanMethod> {
-        // TODO: Fetch from bank BPD
-        return tanManager.getSupportedMethods()
-    }
+    fun getTanMethods(): List<TanMethod> = tanManager.getSupportedMethods()
 
     data class SyncResult(
         val accountsSynced: Int,
@@ -231,6 +170,15 @@ class FinTSClient(
             val input = "$date|${amount.stripTrailingZeros().toPlainString()}|${partnerName.orEmpty()}|${purpose.orEmpty()}"
             val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
             return bytes.joinToString("") { "%02x".format(it) }
+        }
+
+        /**
+         * Hash for bank-imported bookings. Includes the bank's booking id or the running balance so that
+         * two identical purchases on the same day aren't treated as duplicates.
+         */
+        fun importHash(t: FinTSTransaction): String {
+            val discriminator = t.bankId ?: t.balanceAfter?.stripTrailingZeros()?.toPlainString() ?: t.primaNota.orEmpty()
+            return transactionHash(t.date, t.amount, t.partnerName, "${t.purpose.orEmpty()}#${t.account.iban}#$discriminator")
         }
     }
 }

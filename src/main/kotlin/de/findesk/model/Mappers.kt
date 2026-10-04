@@ -17,6 +17,7 @@ fun BankAccess.toItem() = BankAccessItem(
     userId = userId,
     hbciVersion = hbciVersion,
     tanMethod = tanMethod,
+    serverUrl = serverUrl,
     lastSync = lastSync,
 )
 

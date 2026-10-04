@@ -36,6 +36,9 @@ dependencies {
     // OCR (needs a native Tesseract install, e.g. `brew install tesseract tesseract-lang`)
     implementation("net.sourceforge.tess4j:tess4j:5.20.0")
 
+    // FinTS/HBCI online banking
+    implementation("com.github.hbci4j:hbci4j-core:4.1.17")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 
