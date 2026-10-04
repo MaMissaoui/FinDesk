@@ -357,6 +357,38 @@ class HbciCallbackTest {
     }
 
     @Test
+    fun `chipTAN optical challenges carry a renderable flicker code`() {
+        val ui = ScriptedInteraction()
+        val cb = FinDeskHbciCallback(connection, ui)
+        ask(cb, HBCICallback.NEED_PT_TAN, msg = "Bitte Karte einstecken", ret = "039870110490631098765432100812345678041,00")
+        assertEquals("1784011049063F059876543210041234567844312C303019", ui.tanChallenges.single().flickerCode)
+
+        ask(cb, HBCICallback.NEED_PT_TAN, msg = "TAN per SMS", ret = "")
+        assertNull(ui.tanChallenges.last().flickerCode, "no flicker for other procedures")
+        assertNull(FinDeskHbciCallback.flickerFor("not a code"))
+    }
+
+    @Test
+    fun `flicker renderer produces changing frames until stopped`() {
+        val frames = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val renderer = object : org.kapott.hbci.manager.FlickerRenderer("0D85012045201998041234567855") {
+            override fun paint(b1: Boolean, b2: Boolean, b3: Boolean, b4: Boolean, b5: Boolean) {
+                frames += listOf(b1, b2, b3, b4, b5).joinToString("") { if (it) "1" else "0" }
+            }
+            override fun done(iterations: Int) {}
+        }
+        renderer.setFrequency(40)
+        renderer.start()
+        Thread.sleep(500)
+        renderer.stop()
+        val count = frames.size
+        Thread.sleep(150)
+        assertTrue(count > 5, "frames: $count")
+        assertTrue(frames.toSet().size > 2, "bars change")
+        assertTrue(frames.size <= count + 1, "stopped")
+    }
+
+    @Test
     fun `bank errors abort the dialog and are kept for the user`() {
         val cb = FinDeskHbciCallback(connection, ScriptedInteraction())
         assertEquals("ERR", ask(cb, HBCICallback.HAVE_ERROR, msg = "9050 Teilweise fehlerhaft"))

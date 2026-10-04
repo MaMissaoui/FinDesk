@@ -40,7 +40,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] SEPA transfer with review, explicit confirmation and Verification-of-Payee confirmation (abort unless confirmed).
 - [x] Payments screen, Sync per bank, connection settings, offline BLZ lookup (name, BIC, FinTS URL).
 - [ ] **First real-bank test.** Everything is tested against fakes and a closed local port only. Try a sync with one real login and watch the result before relying on it.
-- [ ] chipTAN optical (flicker code) isn't rendered. Use "chipTAN manuell" instead.
+- [x] chipTAN optical: flicker animation via HBCI4Java's FlickerRenderer, with speed and size controls.
 - [ ] Standing orders, scheduled transfers.
 
 **Known gaps / next**
@@ -157,7 +157,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] **Payment System (SEPA):** single transfers with review + confirmation + Verification of Payee; audit-logged
   - [ ] Standing orders, payment status tracking
 - [x] **TAN Management:** procedure/medium selection (remembered), TAN dialog, photoTAN/QR image, decoupled confirmation
-  - [ ] chipTAN optical flicker code
+  - [x] chipTAN optical flicker code
 - [x] Credentials: PIN never stored; passport passphrase random per bank (settings table)
 
 ---

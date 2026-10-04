@@ -137,7 +137,7 @@ All data lives in one directory: `~/.findesk` (`%USERPROFILE%\.findesk` on Windo
 
 ### Online Banking (FinTS)
 
-Add your bank by BLZ. Name, BIC and FinTS server are filled in from the bundled bank directory. Then set your online banking user ID under the bank's connection settings and press **Sync**. FinDesk asks for your PIN on every sync and never stores it. TAN procedures (pushTAN/decoupled, photoTAN, QR-TAN, chipTAN manual, SMS-TAN) are prompted as the bank requires. Transfers are only sent after a review step and explicit confirmation.
+Add your bank by BLZ. Name, BIC and FinTS server are filled in from the bundled bank directory. Then set your online banking user ID under the bank's connection settings and press **Sync**. FinDesk asks for your PIN on every sync and never stores it. TAN procedures (pushTAN/decoupled, photoTAN, QR-TAN, chipTAN optical and manual, SMS-TAN) are prompted as the bank requires. Transfers are only sent after a review step and explicit confirmation.
 
 > The FinTS integration has been tested against simulated banks only. Try your first sync with care.
 

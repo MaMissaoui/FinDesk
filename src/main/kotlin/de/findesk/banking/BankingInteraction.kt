@@ -35,8 +35,10 @@ data class TanChallenge(
     /** PNG/JPEG for photoTAN or QR-TAN, if the bank sent an image. */
     val image: ByteArray? = null,
     val imageMimeType: String? = null,
+    /** chipTAN optical: rendered flicker code (HHD), to be shown as an animation for the TAN generator. */
+    val flickerCode: String? = null,
 ) {
-    override fun equals(other: Any?): Boolean = other is TanChallenge && message == other.message && image.contentEquals(other.image)
+    override fun equals(other: Any?): Boolean = other is TanChallenge && message == other.message && image.contentEquals(other.image) && flickerCode == other.flickerCode
 
     override fun hashCode(): Int = message.hashCode() * 31 + (image?.contentHashCode() ?: 0)
 }

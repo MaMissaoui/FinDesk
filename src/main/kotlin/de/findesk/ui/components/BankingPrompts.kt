@@ -54,6 +54,7 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
                 masked = false,
                 onAnswer = interaction::answer,
             ) {
+                p.challenge.flickerCode?.let { FlickerCodeView(it, Modifier.align(Alignment.CenterHorizontally)) }
                 if (bitmap != null) {
                     Image(bitmap, contentDescription = "TAN challenge", modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally))
                 }

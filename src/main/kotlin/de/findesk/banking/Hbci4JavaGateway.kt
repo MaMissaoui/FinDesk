@@ -265,7 +265,7 @@ internal class FinDeskHbciCallback(
                 retData.set(chosen)
             }
 
-            HBCICallback.NEED_PT_TAN -> retData.set(interaction.tan(TanChallenge(message)) ?: cancel())
+            HBCICallback.NEED_PT_TAN -> retData.set(interaction.tan(TanChallenge(message, flickerCode = flickerFor(retData.toString()))) ?: cancel())
 
             HBCICallback.NEED_PT_PHOTOTAN -> {
                 val code = MatrixCode.tryParse(retData.toString())
@@ -316,6 +316,9 @@ internal class FinDeskHbciCallback(
     }
 
     companion object {
+        /** chipTAN optical: the challenge's HHD code rendered for flickering, or null if there is none. */
+        fun flickerFor(challengeData: String): String? = challengeData.trim().takeIf { it.isNotEmpty() }?.let { runCatching { org.kapott.hbci.manager.FlickerCode(it).render() }.getOrNull() }
+
         /**
          * HBCI4Java wants the PIN/TAN address without protocol and builds the URL with port 443 itself,
          * so "https://bank.de:443/fints" becomes "bank.de/fints". Other explicit ports aren't supported.
