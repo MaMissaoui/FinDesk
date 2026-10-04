@@ -161,6 +161,11 @@ class AccountsViewModel(
         }
     }
 
+    override fun close() {
+        bankingInteraction.cancelPending()
+        super.close()
+    }
+
     fun clearMessages() {
         _state.update { it.copy(error = null, message = null) }
     }

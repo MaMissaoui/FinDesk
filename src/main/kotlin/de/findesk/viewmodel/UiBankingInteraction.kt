@@ -33,9 +33,21 @@ class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInter
     @Volatile
     private var pending: CompletableFuture<String?>? = null
 
+    @Volatile
+    private var closed = false
+
     /** Answer the current prompt; null cancels. For yes/no prompts any non-null value means yes. */
     fun answer(value: String?) {
         pending?.complete(value)
+    }
+
+    /**
+     * Cancels the open prompt and all future ones, unblocking the banking thread. Called when the
+     * owning screen closes; otherwise the thread would wait out the timeout while holding the FinTS lock.
+     */
+    fun cancelPending() {
+        closed = true
+        pending?.complete(null)
     }
 
     fun clearInfo() {
@@ -44,8 +56,10 @@ class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInter
 
     @Synchronized
     private fun ask(prompt: BankingPrompt): String? {
+        if (closed) return null
         val future = CompletableFuture<String?>()
         pending = future
+        if (closed) future.complete(null) // closed between the check and publishing the future
         _prompt.value = prompt
         return try {
             future.get(timeoutMinutes, TimeUnit.MINUTES)

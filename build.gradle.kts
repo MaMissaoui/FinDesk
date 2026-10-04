@@ -54,6 +54,10 @@ compose.desktop {
         mainClass = "de.findesk.MainKt"
 
         nativeDistributions {
+            // From `./gradlew suggestRuntimeModules`, plus modules only loaded at runtime:
+            // TLS cipher suites for bank connections, XML for JAXB (HBCI4Java), extra charsets for FinTS
+            modules("java.instrument", "java.naming", "java.prefs", "java.smartcardio", "java.sql", "jdk.unsupported", "java.xml", "jdk.crypto.ec", "jdk.charsets")
+
             packageName = "FinDesk"
             packageVersion = "1.0.0"
             description = "Your Financial Workspace - Modern banking and document management"

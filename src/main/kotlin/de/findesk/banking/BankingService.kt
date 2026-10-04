@@ -127,7 +127,8 @@ class BankingService(
                     duplicates += result.duplicates
                     categorized += result.categorized
                 }
-                bankAccessRepository.updateLastSync(bankAccessId)
+                // If statements failed for any account, keep the old sync date so the next sync re-fetches that window
+                if (warnings.isEmpty()) bankAccessRepository.updateLastSync(bankAccessId)
                 val report = SyncReport(snapshots.size, added, imported, duplicates, categorized, warnings)
                 auditLogRepository.log("SYNC_BANK", "user", "${bankAccess.bankName}: ${report.summary()}")
                 BankingResult.Success(report)

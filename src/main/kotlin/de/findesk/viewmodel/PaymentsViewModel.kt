@@ -38,6 +38,9 @@ class PaymentsViewModel(
 
     private val onError: (Exception) -> Unit = { e -> _state.update { it.copy(isSending = false, error = e.userMessage()) } }
 
+    /** Set before anything is sent; a second click while a transfer is in flight is ignored. */
+    private val sending = java.util.concurrent.atomic.AtomicBoolean(false)
+
     fun load(): Job = launchSafely(onError) { refresh() }
 
     private fun refresh() {
@@ -71,9 +74,17 @@ class PaymentsViewModel(
     /** Step 2: the user confirmed the reviewed order. Sends it; the bank will ask for a TAN. */
     fun confirmAndSend(): Job {
         val (from, order) = _state.value.review ?: return Job().apply { complete() }
+        if (!sending.compareAndSet(false, true)) return Job().apply { complete() }
         _state.update { it.copy(isSending = true, error = null, message = null) }
-        return launchSafely(onError) {
-            val result = bankingService.initiateTransfer(from.id, order, bankingInteraction, confirmed = true)
+        return launchSafely({ e ->
+            sending.set(false)
+            onError(e)
+        }) {
+            val result = try {
+                bankingService.initiateTransfer(from.id, order, bankingInteraction, confirmed = true)
+            } finally {
+                sending.set(false)
+            }
             refresh()
             _state.update {
                 when (result) {
@@ -83,6 +94,11 @@ class PaymentsViewModel(
                 }
             }
         }
+    }
+
+    override fun close() {
+        bankingInteraction.cancelPending()
+        super.close()
     }
 
     fun clearMessages() {

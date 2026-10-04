@@ -153,6 +153,47 @@ class BankingSyncTest {
     }
 
     @Test
+    fun `failed statements keep the old sync date so the window is fetched again`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val previous = LocalDateTime.of(2026, 9, 1, 8, 0)
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = previous }
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00").copy(statementError = "9010 Auftrag abgelehnt"))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(listOf("3000: 9010 Auftrag abgelehnt"), report.warnings)
+        assertEquals(previous, data.bankAccessRepo.findItem(bankId)!!.lastSync)
+    }
+
+    @Test
+    fun `confirming twice sends one transfer`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val release = java.util.concurrent.CountDownLatch(1)
+        val slowGateway = object : FinTSGateway by gateway {
+            override fun transfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult {
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                return gateway.transfer(connection, ScriptedInteraction(), fromIban, order)
+            }
+        }
+        val slowService = BankingService(finTSClient = FinTSClient(gateway = slowGateway, passportDir = File(tmp, "p2")), today = { today })
+        val vm = de.findesk.viewmodel.PaymentsViewModel(bankingService = slowService)
+        vm.load().join()
+        vm.review(vm.state.value.accounts.single(), TransferOrder("Max Mustermann", savings, null, BigDecimal("10.00"), "Test"))
+
+        val first = vm.confirmAndSend()
+        val second = vm.confirmAndSend() // double click while the first is in flight
+        release.countDown()
+        first.join()
+        second.join()
+
+        assertEquals(1, gateway.transfers.size)
+        assertEquals("Transfer to Max Mustermann sent", vm.state.value.message)
+        vm.close()
+    }
+
+    @Test
     fun `cancelled PIN and bank errors are reported, nothing imported`() = runBlocking {
         gateway.snapshots = listOf(snapshot(giro, "1.00", booking(giro, today, "-1.00", "X", "Y")))
         val cancelled = service.syncBankConnection(bankId, ScriptedInteraction(pinValue = null))
@@ -336,6 +377,19 @@ class HbciCallbackTest {
         assertEquals("depot", Hbci4JavaGateway.accountTypeFor("30"))
         assertEquals("credit_card", Hbci4JavaGateway.accountTypeFor("50"))
         assertEquals("checking", Hbci4JavaGateway.accountTypeFor(null))
+    }
+
+    @Test
+    fun `closing the screen unblocks a waiting prompt and refuses new ones`() {
+        val ui = UiBankingInteraction()
+        var result: String? = "unset"
+        val worker = thread { result = ui.pin("Bank", "user") }
+        while (ui.prompt.value == null) Thread.sleep(5)
+        ui.cancelPending()
+        worker.join(2000)
+        assertFalse(worker.isAlive)
+        assertNull(result)
+        assertNull(ui.pin("Bank", "user"), "no new prompt after close")
     }
 
     @Test

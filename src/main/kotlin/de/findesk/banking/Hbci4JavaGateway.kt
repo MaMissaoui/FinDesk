@@ -55,16 +55,13 @@ class Hbci4JavaGateway : FinTSGateway {
                     addToQueue()
                 }
             }.getOrNull()
-            if (p.from != null) p.umsatz = statementJob(handler, "KUmsAll", p.konto, p.from, to)
+            // MT940 if the bank offers it, otherwise CAMT. Decided up front: a second dialog would resend the PIN
+            if (p.from != null) {
+                p.umsatz = statementJob(handler, "KUmsAll", p.konto, p.from, to) ?: statementJob(handler, "KUmsAllCamt", p.konto, p.from, to)
+            }
         }
-        handler.execute()
-
-        // Banks that dropped MT940 only answer CAMT requests
-        val retry = pending.filter { p -> p.from != null && (p.umsatz?.jobResult?.isOK != true) }
-        if (retry.isNotEmpty()) {
-            retry.forEach { p -> p.umsatz = statementJob(handler, "KUmsAllCamt", p.konto, p.from!!, to) }
-            handler.execute()
-        }
+        // A failed dialog (e.g. rejected PIN) must not be followed by anything that sends the PIN again
+        checkStatus(handler.execute().let { it.isOK to it.errorString })
 
         pending.map { p ->
             val account = p.konto.toAccount(connection)
