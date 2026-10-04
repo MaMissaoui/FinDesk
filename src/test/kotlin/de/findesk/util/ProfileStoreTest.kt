@@ -112,4 +112,26 @@ class ProfileStoreTest {
             if (previousHome == null) System.clearProperty("findesk.home") else System.setProperty("findesk.home", previousHome)
         }
     }
+
+    @Test
+    fun `backup and restore of the default profile leave other profiles alone`() {
+        val business = ProfileStore(root).create("Business")
+        File(business.dir, "findesk.db").writeText("business data")
+        File(business.dir, "passports").apply { mkdirs() }.resolve("bank-1.dat").writeText("business passport")
+        DatabaseFactory.init(root.absolutePath)
+        TestData().account()
+
+        val service = de.findesk.data.backup.BackupService(root)
+        val zipFile = File(root.parentFile, "personal-${System.nanoTime()}.zip")
+        service.createBackup(zipFile)
+        val entries = java.util.zip.ZipFile(zipFile).use { z -> z.entries().toList().map { it.name } }
+        assertTrue(entries.none { it.startsWith("profiles") }, entries.toString())
+
+        service.stageRestore(zipFile)
+        DatabaseFactory.init(root.absolutePath) // applies the restore
+        assertEquals("business data", File(business.dir, "findesk.db").readText())
+        assertEquals("business passport", File(business.dir, "passports/bank-1.dat").readText())
+        assertEquals(listOf(null, business.slug), ProfileStore(root).list().map { it.slug })
+        zipFile.delete()
+    }
 }
