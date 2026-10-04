@@ -181,7 +181,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [ ] Plugin system
 - [ ] Multi-currency support
 - [x] Import CSV and CAMT.053
-  - [ ] QIF, OFX, MT940 files
+  - [x] QIF, OFX, MT940 files (hand-written parsers, same import pipeline and dedup as CSV/CAMT)
 - [x] Budget tracking (monthly limits per category)
 - [x] Recurring transaction detection (weekly/monthly/quarterly/yearly; Reports "Recurring" tab with yearly cost)
 - [ ] Multi-profile support (personal/business)

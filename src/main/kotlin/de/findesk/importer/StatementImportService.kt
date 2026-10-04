@@ -36,7 +36,7 @@ class StatementImportService(
 
     companion object {
         const val MAX_FILE_BYTES = 100L * 1024 * 1024
-        val EXTENSIONS = setOf("csv", "txt", "xml", "zip")
+        val EXTENSIONS = setOf("csv", "txt", "xml", "zip", "sta", "mt940", "ofx", "qfx", "qif")
     }
 
     /** Reads and parses a file. [csvMapping] overrides the detected CSV column mapping. */
@@ -45,7 +45,18 @@ class StatementImportService(
         require(file.length() <= MAX_FILE_BYTES) { "File is too large" }
         val bytes = file.readBytes()
         val ext = file.extension.lowercase()
-        if (ext == "xml" || ext == "zip" || CamtParser.looksLikeCamt(bytes)) CamtParser.parse(bytes) else CsvStatementParser.parse(bytes, csvMapping)
+        when {
+            ext == "xml" || ext == "zip" -> CamtParser.parse(bytes)
+            ext == "ofx" || ext == "qfx" -> OfxParser.parse(bytes)
+            ext == "qif" -> QifParser.parse(bytes)
+            ext == "sta" || ext == "mt940" -> Mt940Parser.parse(bytes)
+            ext == "csv" -> CsvStatementParser.parse(bytes, csvMapping)
+            Mt940Parser.looksLike(bytes) -> Mt940Parser.parse(bytes)
+            CamtParser.looksLikeCamt(bytes) -> CamtParser.parse(bytes)
+            OfxParser.looksLike(bytes) -> OfxParser.parse(bytes)
+            QifParser.looksLike(bytes) -> QifParser.parse(bytes)
+            else -> CsvStatementParser.parse(bytes, csvMapping)
+        }
     }
 
     /** Account whose IBAN the statement names, if it exists locally. */
