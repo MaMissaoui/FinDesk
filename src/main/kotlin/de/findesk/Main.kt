@@ -13,6 +13,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -30,6 +31,8 @@ import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.shortcutScreen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
+import de.findesk.util.AppPaths
+import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,6 +43,7 @@ fun App(
     navigationState: NavigationState = remember { NavigationState() },
     language: AppLanguage = AppLanguage.EN,
     onLanguageChange: (AppLanguage) -> Unit = {},
+    profileLabel: String? = null,
 ) {
     val settings = remember { SettingsRepositoryImpl() }
     val scope = rememberCoroutineScope()
@@ -59,6 +63,7 @@ fun App(
                 Sidebar(
                     currentScreen = navigationState.currentScreen,
                     onScreenSelected = { navigationState.navigateTo(it) },
+                    profileName = profileLabel,
                 )
 
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -101,10 +106,18 @@ fun App(
     }
 }
 
-fun main() = application {
-    // Initialize database
+fun main() {
+    // Profile first: it decides which data directory the database, documents and passports come from
+    val profiles = ProfileStore()
+    val profile = profiles.active()
+    AppPaths.activeProfile = profile.slug
     DatabaseFactory.init()
+    val profileLabel = profile.name.takeIf { profiles.list().size > 1 }
+    application { FinDeskWindow(profileLabel) }
+}
 
+@Composable
+private fun ApplicationScope.FinDeskWindow(profileLabel: String?) {
     val settings = SettingsRepositoryImpl()
     val windowState = rememberWindowState()
     val navigationState = remember { NavigationState() }
@@ -127,10 +140,10 @@ fun main() = application {
             if (target != null) navigationState.navigateTo(target)
             target != null
         },
-        title = strings[StringKey.WindowTitle],
+        title = strings[StringKey.WindowTitle] + profileLabel?.let { " · $it" }.orEmpty(),
         state = windowState,
         icon = painterResource("icon-512.png"),
     ) {
-        App(navigationState, language, setLanguage)
+        App(navigationState, language, setLanguage, profileLabel)
     }
 }

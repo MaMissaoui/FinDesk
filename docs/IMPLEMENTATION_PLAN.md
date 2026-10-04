@@ -184,7 +184,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
   - [x] QIF, OFX, MT940 files (hand-written parsers, same import pipeline and dedup as CSV/CAMT)
 - [x] Budget tracking (monthly limits per category)
 - [x] Recurring transaction detection (weekly/monthly/quarterly/yearly; Reports "Recurring" tab with yearly cost)
-- [ ] Multi-profile support (personal/business)
+- [x] Multi-profile support (personal/business): each profile is its own data directory (db, documents, passports); default stays at the root; switching applies at next start; delete moves the folder to profiles-deleted
 - [x] Backup and restore functionality (ZIP with consistent DB copy, documents, passports; restore applied at next start, previous data kept)
 - [x] Dark mode toggle (persisted)
 - [x] Keyboard shortcuts (Ctrl/Cmd+1..7, Ctrl/Cmd+,)

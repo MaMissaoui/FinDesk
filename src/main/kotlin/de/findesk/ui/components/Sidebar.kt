@@ -25,6 +25,8 @@ fun Sidebar(
     currentScreen: Screen,
     onScreenSelected: (Screen) -> Unit,
     modifier: Modifier = Modifier,
+    /** Open profile, shown when there is more than one. */
+    profileName: String? = null,
 ) {
     Column(
         modifier = modifier
@@ -44,12 +46,16 @@ fun Sidebar(
                 contentDescription = "FinDesk Logo",
                 modifier = Modifier.size(40.dp),
             )
-            Text(
-                text = "FinDesk",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-            )
+            Column {
+                Text(
+                    text = "FinDesk",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                )
+                // Opaque white: any transparency drops below 4.5:1 on PrimaryBlue (ContrastTest)
+                if (profileName != null) Text(profileName, style = MaterialTheme.typography.bodySmall, color = Color.White, maxLines = 1)
+            }
         }
 
         // Navigation Items

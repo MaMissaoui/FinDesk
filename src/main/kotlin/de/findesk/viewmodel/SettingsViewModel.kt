@@ -5,6 +5,7 @@ import de.findesk.model.CategoryItem
 import de.findesk.model.RuleItem
 import de.findesk.repository.*
 import de.findesk.util.Currencies
+import de.findesk.util.ProfileStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -35,6 +36,10 @@ data class SettingsState(
     val restoredFrom: String? = null,
     /** Backup chosen for restore, waiting for confirmation. */
     val restoreCandidate: Pair<java.io.File, de.findesk.data.backup.BackupService.BackupInfo>? = null,
+    val profiles: List<ProfileStore.Profile> = emptyList(),
+    /** Profile running now (null = default) and the one that opens at the next start. */
+    val openProfile: String? = null,
+    val nextProfile: String? = null,
     val isBusy: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -51,6 +56,8 @@ class SettingsViewModel(
     private val dataDirectory: String = de.findesk.util.AppPaths.dataDir.absolutePath,
     private val isOcrAvailable: Boolean = false,
     private val backupService: de.findesk.data.backup.BackupService = de.findesk.data.backup.BackupService(java.io.File(dataDirectory)),
+    private val profileStore: ProfileStore = ProfileStore(),
+    private val openProfile: String? = de.findesk.util.AppPaths.activeProfile,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(SettingsState())
@@ -82,6 +89,9 @@ class SettingsViewModel(
                 isOcrAvailable = isOcrAvailable,
                 hasPendingRestore = backupService.hasPendingRestore,
                 restoredFrom = de.findesk.data.database.DatabaseFactory.restoredFrom?.absolutePath,
+                profiles = profileStore.list(),
+                openProfile = openProfile,
+                nextProfile = profileStore.active().slug,
                 isLoading = false,
             )
         }
@@ -203,6 +213,32 @@ class SettingsViewModel(
         backupService.cancelPendingRestore()
         refresh()
         _state.update { it.copy(message = "Pending restore cancelled") }
+    }
+
+    fun createProfile(name: String): Job = launchSafely(onError) {
+        val profile = profileStore.create(name)
+        auditLogRepository.log("PROFILE_CREATED", "user", "Profile ${profile.name} (${profile.slug})")
+        refresh()
+    }
+
+    fun renameProfile(slug: String?, name: String): Job = launchSafely(onError) {
+        profileStore.rename(slug, name)
+        auditLogRepository.log("PROFILE_RENAMED", "user", "Profile ${slug ?: "default"} renamed to ${name.trim()}")
+        refresh()
+    }
+
+    /** Opens [slug] at the next start; the database is never switched while the app runs. */
+    fun switchProfile(slug: String?): Job = launchSafely(onError) {
+        profileStore.setActive(slug)
+        auditLogRepository.log("PROFILE_SWITCH", "user", "Next start opens profile ${slug ?: "default"}")
+        refresh()
+    }
+
+    fun deleteProfile(slug: String): Job = launchSafely(onError) {
+        val movedTo = profileStore.delete(slug, openProfile)
+        auditLogRepository.log("PROFILE_DELETED", "user", "Profile $slug moved to ${movedTo.absolutePath}")
+        refresh()
+        _state.update { it.copy(message = "Profile moved to ${movedTo.absolutePath}") }
     }
 
     fun clearMessages() {

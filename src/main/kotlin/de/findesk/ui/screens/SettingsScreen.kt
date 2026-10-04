@@ -27,6 +27,7 @@ import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.util.Formats
+import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsViewModel
 import java.math.BigDecimal
 
@@ -47,6 +48,9 @@ fun SettingsScreen(
     var editRule by remember { mutableStateOf<RuleItem?>(null) }
     var newRule by remember { mutableStateOf(false) }
     var confirmDeleteCategory by remember { mutableStateOf<CategoryItem?>(null) }
+    var newProfile by remember { mutableStateOf(false) }
+    var renameProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
+    var confirmDeleteProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -88,6 +92,44 @@ fun SettingsScreen(
                         optionLabel = { it },
                         onSelect = { vm.setPrimaryCurrency(it) },
                     )
+                }
+            }
+        }
+
+        item {
+            SectionCard(
+                s[StringKey.Profiles],
+                Modifier.fillMaxWidth(),
+                actions = { TextButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
+            ) {
+                Text(s[StringKey.ProfilesHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                state.profiles.forEach { p ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
+                        if (p.slug == state.openProfile) {
+                            Text(s[StringKey.ProfileOpen], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        if (p.slug == state.nextProfile && p.slug != state.openProfile) {
+                            Text(s[StringKey.ProfileNextStart], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
+                        IconButton(onClick = { renameProfile = p }) { Icon(Icons.Default.Edit, contentDescription = s.format(StringKey.RenameProfile, p.name)) }
+                        IconButton(enabled = !p.isDefault && p.slug != state.openProfile, onClick = { confirmDeleteProfile = p }) {
+                            Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteProfile, p.name))
+                        }
+                    }
+                }
+                if (state.nextProfile != state.openProfile) {
+                    val next = state.profiles.firstOrNull { it.slug == state.nextProfile }?.name.orEmpty()
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(s.format(StringKey.RestartToOpenProfile, next))
+                    }
                 }
             }
         }
@@ -234,6 +276,29 @@ fun SettingsScreen(
         }
     }
 
+    if (newProfile || renameProfile != null) {
+        ProfileNameDialog(
+            initial = renameProfile?.name.orEmpty(),
+            onDismiss = {
+                newProfile = false
+                renameProfile = null
+            },
+            onConfirm = { name ->
+                renameProfile?.let { vm.renameProfile(it.slug, name) } ?: vm.createProfile(name)
+                newProfile = false
+                renameProfile = null
+            },
+        )
+    }
+    confirmDeleteProfile?.let { p ->
+        ConfirmDialog(
+            title = s.format(StringKey.DeleteProfile, p.name),
+            text = s.format(StringKey.DeleteProfileText, p.name),
+            onConfirm = { p.slug?.let(vm::deleteProfile) },
+            onDismiss = { confirmDeleteProfile = null },
+        )
+    }
+
     if (newCategory || editCategory != null) {
         CategoryDialog(
             existing = editCategory,
@@ -377,6 +442,28 @@ private fun RuleDialog(
             }
         },
         confirmButton = { Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+    )
+}
+
+@Composable
+private fun ProfileNameDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    val s = strings()
+    var name by remember { mutableStateOf(initial) }
+    val valid = name.isNotBlank() && name.trim().length <= ProfileStore.MAX_NAME_LENGTH
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial.isEmpty()) s[StringKey.NewProfile] else s.format(StringKey.RenameProfile, initial)) },
+        text = {
+            OutlinedTextField(
+                name,
+                { name = it.take(ProfileStore.MAX_NAME_LENGTH) },
+                label = { Text(s[StringKey.ProfileName]) },
+                singleLine = true,
+                supportingText = { Text("${name.trim().length}/${ProfileStore.MAX_NAME_LENGTH}") },
+            )
+        },
+        confirmButton = { Button(enabled = valid, onClick = { onConfirm(name) }) { Text(s[StringKey.Save]) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
