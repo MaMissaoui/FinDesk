@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -16,7 +18,12 @@ import de.findesk.document.ReportService
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.ui.components.*
-import de.findesk.ui.theme.*
+import de.findesk.ui.theme.CategoryColors
+import de.findesk.ui.theme.Error
+import de.findesk.ui.theme.PrimaryBlue
+import de.findesk.ui.theme.Success
+import de.findesk.ui.theme.Warning
+import de.findesk.ui.theme.amountColor
 import de.findesk.util.Formats
 import de.findesk.viewmodel.ReportsViewModel
 import java.math.BigDecimal
@@ -39,7 +46,12 @@ fun ReportsScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(s[StringKey.ReportsAndTax], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(
+                s[StringKey.ReportsAndTax],
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
             if (state.isExporting) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))
@@ -177,12 +189,12 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
             itemsIndexed(report.monthlyBreakdown) { _, m ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Text(monthName(m.month, TextStyle.FULL, s) + if (report.isCalendarYear) "" else " ${m.year}", modifier = Modifier.weight(1f))
-                    Text(Formats.money(m.income), color = Success, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-                    Text(Formats.money(m.expenses), color = Error, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(Formats.money(m.income), color = amountColor(false), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(Formats.money(m.expenses), color = amountColor(true), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                     Text(
                         Formats.money(m.net, signed = true),
                         fontWeight = FontWeight.SemiBold,
-                        color = if (m.net.signum() < 0) Error else Success,
+                        color = amountColor(m.net.signum() < 0),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
                     )
@@ -258,8 +270,30 @@ private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (Local
     val from = parse(fromText)
     val to = parse(toText)
     val s = strings()
-    OutlinedTextField(fromText, { fromText = it }, label = { Text(s[StringKey.FromDate]) }, singleLine = true, isError = from == null, modifier = Modifier.width(150.dp))
-    OutlinedTextField(toText, { toText = it }, label = { Text(s[StringKey.ToDate]) }, singleLine = true, isError = to == null, modifier = Modifier.width(150.dp))
+    OutlinedTextField(
+        fromText,
+        { fromText = it },
+        label = { Text(s[StringKey.FromDate]) },
+        singleLine = true,
+        isError = from == null,
+        supportingText = { if (from == null) Text(s[StringKey.EnterValidDate]) },
+        modifier = Modifier.width(150.dp),
+    )
+    OutlinedTextField(
+        toText,
+        { toText = it },
+        label = { Text(s[StringKey.ToDate]) },
+        singleLine = true,
+        isError = to == null || (from != null && to != null && from.isAfter(to)),
+        supportingText = {
+            if (to == null) {
+                Text(s[StringKey.EnterValidDate])
+            } else if (from != null && to != null && from.isAfter(to)) {
+                Text(s[StringKey.InvalidDateRange])
+            }
+        },
+        modifier = Modifier.width(150.dp),
+    )
     Button(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text(s[StringKey.Apply]) }
 }
 
@@ -300,7 +334,7 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
                         }
                         Text(s.cadence(r.cadence), modifier = Modifier.weight(1f))
                         Text(Formats.date(r.nextDate), modifier = Modifier.weight(1f))
-                        Text((if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, signed = true), color = if (r.isIncome) Success else Error, modifier = Modifier.weight(1f))
+                        Text((if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, signed = true), color = amountColor(!r.isIncome), modifier = Modifier.weight(1f))
                         Text(Formats.money(r.yearlyAmount.abs()), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     }
                     HorizontalDivider()

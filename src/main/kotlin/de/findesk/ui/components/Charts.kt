@@ -14,9 +14,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
+import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.Success
@@ -30,7 +33,7 @@ import java.util.Locale
 
 /** Donut chart with a legend; slices beyond [maxSlices] are folded into "Other". */
 @Composable
-fun DonutChart(slices: List<ChartSlice>, modifier: Modifier = Modifier, maxSlices: Int = 6) {
+fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Modifier, maxSlices: Int = 6) {
     val shown = if (slices.size > maxSlices) {
         slices.take(maxSlices - 1) + ChartSlice("Other", slices.drop(maxSlices - 1).fold(BigDecimal.ZERO) { a, s -> a + s.amount }, "#9E9E9E")
     } else {
@@ -39,8 +42,9 @@ fun DonutChart(slices: List<ChartSlice>, modifier: Modifier = Modifier, maxSlice
     val total = shown.fold(BigDecimal.ZERO) { a, s -> a + s.amount }.toFloat()
     val colors = shown.map { categoryColor(it.color, it.label) }
     val track = MaterialTheme.colorScheme.surfaceVariant
+    val description = buildDonutDescription(title, shown, strings())
 
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = modifier.semantics { contentDescription = description }, verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
             Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                 val stroke = size.minDimension * 0.18f
@@ -79,11 +83,12 @@ fun DonutChart(slices: List<ChartSlice>, modifier: Modifier = Modifier, maxSlice
 
 /** Grouped income/expense bars per month. */
 @Composable
-fun IncomeExpenseBars(months: List<MonthBar>, modifier: Modifier = Modifier) {
+fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier = Modifier) {
     val max = months.flatMap { listOf(it.income, it.expenses) }.maxOrNull()?.toFloat()?.takeIf { it > 0f } ?: 1f
     val grid = MaterialTheme.colorScheme.outlineVariant
+    val description = buildBarsDescription(title, months, strings())
 
-    Column(modifier) {
+    Column(modifier.semantics { contentDescription = description }) {
         Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
             val groupWidth = size.width / months.size.coerceAtLeast(1)
             val barWidth = groupWidth * 0.3f
@@ -99,7 +104,7 @@ fun IncomeExpenseBars(months: List<MonthBar>, modifier: Modifier = Modifier) {
         Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
             months.forEach { m ->
                 Text(
-                    Month.of(m.month).getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
+                    Month.of(m.month).getDisplayName(TextStyle.SHORT, strings().language.locale),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
@@ -124,9 +129,14 @@ private fun Legend(color: Color, label: String) {
 
 /** Simple line chart of dated values with min/max labels and a zero line when the range crosses zero. */
 @Composable
-fun BalanceLineChart(points: List<Pair<java.time.LocalDate, BigDecimal>>, modifier: Modifier = Modifier) {
+fun BalanceLineChart(
+    points: List<Pair<java.time.LocalDate, BigDecimal>>,
+    title: String = strings()[StringKey.BalanceHistory],
+    modifier: Modifier = Modifier,
+) {
+    val s = strings()
     if (points.size < 2) {
-        Text(strings()[StringKey.NotEnoughData], modifier = modifier, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(s[StringKey.NotEnoughData], modifier = modifier, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val values = points.map { it.second.toFloat() }
@@ -136,11 +146,12 @@ fun BalanceLineChart(points: List<Pair<java.time.LocalDate, BigDecimal>>, modifi
     val line = MaterialTheme.colorScheme.primary
     val zero = MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
     val grid = MaterialTheme.colorScheme.outlineVariant
+    val description = buildLineDescription(title, points, s)
 
-    Column(modifier) {
+    Column(modifier.semantics { contentDescription = description }) {
         Row(Modifier.fillMaxWidth()) {
             Text(Formats.money(points.maxOf { it.second }), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-            Text(strings()[StringKey.Max], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(s[StringKey.Max], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Canvas(Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp)) {
             fun y(v: Float) = size.height - (v - min) / span * size.height
@@ -153,9 +164,34 @@ fun BalanceLineChart(points: List<Pair<java.time.LocalDate, BigDecimal>>, modifi
             drawPath(path, line, style = Stroke(width = 2.5f))
         }
         Row(Modifier.fillMaxWidth()) {
-            Text(de.findesk.util.Formats.date(points.first().first), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-            Text(strings().format(StringKey.MinAmount, Formats.money(points.minOf { it.second })), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Text(de.findesk.util.Formats.date(points.last().first), style = MaterialTheme.typography.labelSmall)
+            Text(Formats.date(points.first().first), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+            Text(s.format(StringKey.MinAmount, Formats.money(points.minOf { it.second })), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(Formats.date(points.last().first), style = MaterialTheme.typography.labelSmall)
         }
     }
+}
+
+private fun buildBarsDescription(title: String, months: List<MonthBar>, s: Strings): String {
+    if (months.isEmpty()) return "$title: ${s[StringKey.NotEnoughData]}"
+    val parts = months.take(5).map {
+        "${Month.of(it.month).getDisplayName(TextStyle.SHORT, s.language.locale)} ${Formats.money(it.income)} / ${Formats.money(it.expenses)}"
+    }
+    val more = months.size - 5
+    val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""
+    return "$title: ${parts.joinToString(", ")}$suffix"
+}
+
+private fun buildDonutDescription(title: String, slices: List<ChartSlice>, s: Strings): String {
+    if (slices.isEmpty()) return "$title: ${s[StringKey.NotEnoughData]}"
+    val parts = slices.take(5).map { "${it.label} ${Formats.money(it.amount)}" }
+    val more = slices.size - 5
+    val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""
+    return "$title: ${parts.joinToString(", ")}$suffix · ${Formats.money(slices.fold(BigDecimal.ZERO) { a, x -> a + x.amount })}"
+}
+
+private fun buildLineDescription(title: String, points: List<Pair<java.time.LocalDate, BigDecimal>>, s: Strings): String {
+    if (points.size < 2) return "$title: ${s[StringKey.NotEnoughData]}"
+    val min = points.minOf { it.second }
+    val max = points.maxOf { it.second }
+    return "$title: ${Formats.date(points.first().first)} – ${Formats.date(points.last().first)} · ${s.format(StringKey.MinAmount, Formats.money(min))} · ${s[StringKey.Max]} ${Formats.money(max)}"
 }

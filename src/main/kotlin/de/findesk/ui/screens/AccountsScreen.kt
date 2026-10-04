@@ -11,6 +11,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
@@ -20,7 +24,7 @@ import de.findesk.model.BankAccessItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
-import de.findesk.ui.theme.Error
+import de.findesk.ui.theme.amountColor
 import de.findesk.util.Formats
 import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
@@ -47,7 +51,12 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Column {
-                Text(s[StringKey.BankAccounts], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    s[StringKey.BankAccounts],
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.semantics { heading() },
+                )
                 Text(
                     s.format(StringKey.AccountsTotal, Formats.money(state.totalBalance), state.accounts.size),
                     style = MaterialTheme.typography.bodyMedium,
@@ -224,7 +233,15 @@ private fun BankCard(
             }
             accounts.forEach { account ->
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onOpenAccount(account) }) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clickable(
+                            onClick = { onOpenAccount(account) },
+                            onClickLabel = s[StringKey.OpenAccount],
+                            role = Role.Button,
+                        ),
+                ) {
                     Column(Modifier.weight(1f)) {
                         Text(s.accountType(account.accountType), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                         Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -233,7 +250,7 @@ private fun BankCard(
                         Formats.money(account.balance, account.currency),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = if (account.balance.signum() < 0) Error else MaterialTheme.colorScheme.onSurface,
+                        color = if (account.balance.signum() < 0) amountColor(true) else MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.width(8.dp))
                     IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
@@ -359,7 +376,14 @@ private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(text, { text = it }, label = { Text(s[StringKey.BalanceEuro]) }, singleLine = true, isError = parsed == null)
+                OutlinedTextField(
+                    text,
+                    { text = it },
+                    label = { Text(s[StringKey.BalanceEuro]) },
+                    singleLine = true,
+                    isError = parsed == null,
+                    supportingText = { if (parsed == null) Text(s[StringKey.EnterValidBalance]) },
+                )
             }
         },
         confirmButton = { Button(onClick = { parsed?.let(onConfirm) }, enabled = parsed != null) { Text(s[StringKey.Save]) } },
@@ -434,7 +458,7 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                BalanceLineChart(detail.history, Modifier.fillMaxWidth().height(220.dp))
+                BalanceLineChart(detail.history, modifier = Modifier.fillMaxWidth().height(220.dp))
                 Text(s[StringKey.RecentBookings], style = MaterialTheme.typography.labelLarge)
                 if (detail.recent.isEmpty()) Text(s[StringKey.NoneInPeriod], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 detail.recent.forEach { t ->
@@ -444,7 +468,7 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                         Text(
                             Formats.money(t.amount, t.currency, signed = true),
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (t.isExpense) Error else de.findesk.ui.theme.Success,
+                            color = amountColor(t.isExpense),
                         )
                     }
                 }

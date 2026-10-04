@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankingService
@@ -43,7 +45,12 @@ fun PaymentsScreen() {
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(Modifier.weight(3f).verticalScroll(rememberScrollState())) {
-            Text(s[StringKey.SepaTransfer], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                s[StringKey.SepaTransfer],
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() },
+            )
             Spacer(Modifier.height(16.dp))
             MessageBanner(state.message, state.error, vm::clearMessages)
 
@@ -84,6 +91,11 @@ fun PaymentsScreen() {
                         { amount = it },
                         label = { Text(s[StringKey.AmountEuro]) },
                         isError = amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
+                        supportingText = {
+                            if (amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) {
+                                Text(s[StringKey.EnterAmountGreaterThan0])
+                            }
+                        },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )

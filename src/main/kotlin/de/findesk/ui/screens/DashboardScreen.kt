@@ -9,6 +9,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
@@ -17,7 +20,11 @@ import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
-import de.findesk.ui.theme.*
+import de.findesk.ui.theme.Error
+import de.findesk.ui.theme.PrimaryBlue
+import de.findesk.ui.theme.Success
+import de.findesk.ui.theme.Warning
+import de.findesk.ui.theme.amountColor
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BudgetStatus
 import de.findesk.viewmodel.DashboardViewModel
@@ -61,9 +68,16 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     state.pendingTasks.toString(),
                     Icons.Default.Warning,
                     Warning,
-                    Modifier.weight(1f).clickable(enabled = state.uncategorizedCount > 0) {
-                        onNavigate(Screen.TRANSACTIONS, NavigationArgs(uncategorizedOnly = true))
-                    },
+                    Modifier
+                        .weight(1f)
+                        .clickable(
+                            enabled = state.uncategorizedCount > 0,
+                            onClick = {
+                                onNavigate(Screen.TRANSACTIONS, NavigationArgs(uncategorizedOnly = true))
+                            },
+                            onClickLabel = s[StringKey.ViewPendingTasks],
+                            role = Role.Button,
+                        ),
                     subtitle = s.format(StringKey.PendingSubtitle, state.uncategorizedCount, state.unlinkedDocumentCount),
                 )
             }
@@ -75,11 +89,11 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     if (state.expensesByCategory.isEmpty()) {
                         Text(s[StringKey.NoExpensesThisMonth], color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        DonutChart(state.expensesByCategory)
+                        DonutChart(state.expensesByCategory, s[StringKey.ExpensesByCategory])
                     }
                 }
                 SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(1f).fillMaxHeight()) {
-                    IncomeExpenseBars(state.lastMonths, Modifier.fillMaxSize())
+                    IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxSize())
                 }
             }
         }
@@ -101,7 +115,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                             Text(
                                 (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, signed = true),
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (r.isIncome) Success else Error,
+                                color = amountColor(!r.isIncome),
                             )
                         }
                     }
@@ -125,7 +139,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    DonutChart(state.taxDeductionsByCategory)
+                    DonutChart(state.taxDeductionsByCategory, s[StringKey.TaxDeductibleYtd])
                 }
             }
         }
@@ -165,7 +179,7 @@ private fun RecentTransactionRow(txn: TransactionItem) {
             Formats.money(txn.amount, txn.currency, signed = true),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = if (txn.isExpense) Error else Success,
+            color = amountColor(txn.isExpense),
         )
     }
     HorizontalDivider()
@@ -180,6 +194,7 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float) {
         b.ratio > monthProgress + 0.1f -> Warning
         else -> categoryColor(b.color, b.categoryName)
     }
+    val overBudgetTextColor = amountColor(true)
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth()) {
             Text(b.categoryName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -187,7 +202,7 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float) {
                 s.format(StringKey.SpentOfLimit, Formats.money(b.spent), Formats.money(b.limit)),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = if (b.isOver) Error else MaterialTheme.colorScheme.onSurface,
+                color = if (b.isOver) overBudgetTextColor else MaterialTheme.colorScheme.onSurface,
             )
         }
         Spacer(Modifier.height(4.dp))
@@ -195,7 +210,7 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float) {
         Text(
             if (b.isOver) s.format(StringKey.OverBudget, Formats.money(b.spent - b.limit)) else s.format(StringKey.LeftBudget, Formats.money(b.remaining)),
             style = MaterialTheme.typography.bodySmall,
-            color = if (b.isOver) Error else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (b.isOver) overBudgetTextColor else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

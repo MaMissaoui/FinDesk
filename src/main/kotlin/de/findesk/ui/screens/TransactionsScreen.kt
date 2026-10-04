@@ -13,6 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,8 +31,7 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
-import de.findesk.ui.theme.Error
-import de.findesk.ui.theme.Success
+import de.findesk.ui.theme.amountColor
 import de.findesk.util.Formats
 import de.findesk.viewmodel.CategoryFilter
 import de.findesk.viewmodel.ImportPreview
@@ -52,7 +54,12 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(s[StringKey.Transactions], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(
+                s[StringKey.Transactions],
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
             OutlinedButton(
                 enabled = state.accounts.isNotEmpty(),
                 onClick = {
@@ -247,7 +254,14 @@ private fun TransactionRow(
     val s = strings()
 
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                onClick = onOpen,
+                onClickLabel = s[StringKey.OpenDetails],
+                role = Role.Button,
+            )
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(Formats.date(txn.date), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
@@ -265,7 +279,15 @@ private fun TransactionRow(
             }
         }
         Box(Modifier.weight(1.4f)) {
-            CategoryBadge(txn.categoryName, txn.categoryColor, Modifier.clickable { categoryMenu = true })
+            CategoryBadge(
+                txn.categoryName,
+                txn.categoryColor,
+                Modifier.clickable(
+                    onClick = { categoryMenu = true },
+                    onClickLabel = s.format(StringKey.ChangeCategory, txn.categoryName ?: s[StringKey.Uncategorized]),
+                    role = Role.Button,
+                ),
+            )
             DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                 DropdownMenuItem(text = { Text(s[StringKey.Uncategorized]) }, onClick = {
                     categoryMenu = false
@@ -286,7 +308,7 @@ private fun TransactionRow(
             Formats.money(txn.amount, txn.currency, signed = true),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            color = if (txn.isExpense) Error else Success,
+            color = amountColor(txn.isExpense),
             modifier = Modifier.weight(1.2f),
             textAlign = TextAlign.End,
         )
@@ -346,8 +368,24 @@ private fun AddTransactionDialog(
                     FilterChip(selected = !isExpense, onClick = { isExpense = false }, label = { Text(s[StringKey.Income]) })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(dateText, { dateText = it }, label = { Text(s[StringKey.DateFormat]) }, singleLine = true, isError = date == null, modifier = Modifier.weight(1f))
-                    OutlinedTextField(amountText, { amountText = it }, label = { Text(s[StringKey.AmountEuro]) }, singleLine = true, isError = amountText.isNotEmpty() && amount == null, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        dateText,
+                        { dateText = it },
+                        label = { Text(s[StringKey.DateFormat]) },
+                        singleLine = true,
+                        isError = date == null,
+                        supportingText = { if (date == null) Text(s[StringKey.EnterValidDate]) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        amountText,
+                        { amountText = it },
+                        label = { Text(s[StringKey.AmountEuro]) },
+                        singleLine = true,
+                        isError = amountText.isNotEmpty() && amount == null,
+                        supportingText = { if (amountText.isNotEmpty() && amount == null) Text(s[StringKey.EnterValidAmount]) },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
                 OutlinedTextField(partner, { partner = it }, label = { Text(s[StringKey.PartnerPayee]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(purpose, { purpose = it }, label = { Text(s[StringKey.Purpose]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -457,7 +495,7 @@ private fun ImportDialog(
                             Text(
                                 Formats.money(b.amount, b.currency, signed = true),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (b.amount.signum() < 0) Error else Success,
+                                color = amountColor(b.amount.signum() < 0),
                             )
                         }
                     }
@@ -547,7 +585,7 @@ private fun TransactionDetailDialog(
                     Formats.money(txn.amount, txn.currency, signed = true),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (txn.isExpense) Error else Success,
+                    color = amountColor(txn.isExpense),
                 )
                 DetailRow(s[StringKey.DetailDate], Formats.date(txn.date))
                 DetailRow(s[StringKey.DetailAccount], account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: Formats.iban(txn.accountIban))
@@ -593,6 +631,7 @@ private fun TransactionDetailDialog(
                             label = { Text(s[StringKey.PatternRegex]) },
                             singleLine = true,
                             isError = !patternValid,
+                            supportingText = { if (!patternValid) Text(s[StringKey.PatternInvalid]) },
                             modifier = Modifier.weight(1f),
                         )
                         DropdownSelector(ruleCategory?.name ?: s[StringKey.DetailCategory], categories, { it.name }, { ruleCategory = it })

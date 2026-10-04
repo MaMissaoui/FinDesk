@@ -188,7 +188,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Backup and restore functionality (ZIP with consistent DB copy, documents, passports; restore applied at next start, previous data kept)
 - [x] Dark mode toggle (persisted)
 - [x] Keyboard shortcuts (Ctrl/Cmd+1..7, Ctrl/Cmd+,)
-- [ ] Accessibility improvements
+- [x] Accessibility improvements (screen-reader roles/labels/headings, chart summaries, live status messages, text for field errors, WCAG contrast test; not yet checked with a real screen reader)
 
 ---
 

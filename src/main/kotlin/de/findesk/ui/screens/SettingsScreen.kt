@@ -11,6 +11,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.document.TesseractOcrEngine
@@ -47,7 +50,12 @@ fun SettingsScreen(
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Text(s[StringKey.NavSettings], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                s[StringKey.NavSettings],
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() },
+            )
             Spacer(Modifier.height(8.dp))
             MessageBanner(state.message, state.error, vm::clearMessages)
         }
@@ -81,7 +89,17 @@ fun SettingsScreen(
                     Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 state.categories.forEach { c ->
-                    Row(Modifier.fillMaxWidth().clickable { editCategory = c }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                onClick = { editCategory = c },
+                                onClickLabel = s.format(StringKey.EditCategory, c.name),
+                                role = Role.Button,
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
                         Spacer(Modifier.width(12.dp))
                         Text(c.name, modifier = Modifier.weight(1f))
@@ -113,7 +131,17 @@ fun SettingsScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 state.rules.forEach { r ->
-                    Row(Modifier.fillMaxWidth().clickable { editRule = r }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                onClick = { editRule = r },
+                                onClickLabel = s.format(StringKey.EditRule, r.pattern),
+                                role = Role.Button,
+                            )
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                         Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
                         Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)

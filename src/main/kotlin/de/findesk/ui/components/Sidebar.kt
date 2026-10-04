@@ -2,8 +2,8 @@ package de.findesk.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.strings
@@ -67,7 +68,7 @@ fun Sidebar(
         Text(
             text = "v0.1.0",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.6f),
+            color = Color.White,
             modifier = Modifier.padding(top = 16.dp),
         )
     }
@@ -79,7 +80,8 @@ private fun SidebarItem(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val backgroundColor = if (isSelected) Color.White.copy(alpha = 0.2f) else Color.Transparent
+    // Darken rather than lighten: any white highlight drops the white label below 4.5:1 (see ContrastTest)
+    val backgroundColor = if (isSelected) Color.Black.copy(alpha = 0.2f) else Color.Transparent
     val contentColor = Color.White
 
     Row(
@@ -87,14 +89,18 @@ private fun SidebarItem(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(backgroundColor)
-            .clickable(onClick = onClick)
+            .selectable(
+                selected = isSelected,
+                onClick = onClick,
+                role = Role.Tab,
+            )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(
             imageVector = screen.icon,
-            contentDescription = screen.title(strings()),
+            contentDescription = null,
             tint = contentColor,
             modifier = Modifier.size(24.dp),
         )

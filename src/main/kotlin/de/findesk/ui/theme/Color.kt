@@ -1,6 +1,9 @@
 package de.findesk.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 // Primary Colors
 val PrimaryBlue = Color(0xFF2D6CDF)
@@ -20,10 +23,20 @@ val BackgroundLight = Color(0xFFF5F7FA)
 val SurfaceWhite = Color(0xFFFFFFFF)
 
 // Semantic Colors
-val Success = Color(0xFF10B981)
+val Success = Color(0xFF098765)
+val SuccessDark = Color(0xFF34D399)
 val Warning = Color(0xFFF59E0B)
-val Error = Color(0xFFEF4444)
+val Error = Color(0xFFDC2626)
+val ErrorDark = Color(0xFFF87171)
 val Info = Color(0xFF3B82F6)
+
+/** Returns the accessible text colour for positive/negative amounts based on the current theme. */
+@Composable
+fun amountColor(isExpense: Boolean): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+    if (isExpense) Error else Success
+} else {
+    if (isExpense) ErrorDark else SuccessDark
+}
 
 // Category Colors
 val CategoryColors = listOf(

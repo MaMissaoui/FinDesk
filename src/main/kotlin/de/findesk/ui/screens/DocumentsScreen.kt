@@ -16,6 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,7 +49,12 @@ fun DocumentsScreen() {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(s[StringKey.NavDocuments], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    s[StringKey.NavDocuments],
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.semantics { heading() },
+                )
                 if (!state.isOcrAvailable) {
                     Text(
                         s[StringKey.OcrNeedsTesseract],
@@ -139,7 +147,11 @@ private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Uni
         modifier = Modifier
             .fillMaxWidth()
             .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
-            .clickable(onClick = onClick)
+            .clickable(
+                onClick = onClick,
+                onClickLabel = s[StringKey.OpenDocument],
+                role = Role.Button,
+            )
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -203,7 +215,14 @@ private fun DocumentDetail(
                 androidx.compose.foundation.Image(
                     bitmap = it,
                     contentDescription = s.format(StringKey.PreviewOf, doc.fileName),
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).clickable { openExternally(File(doc.filePath)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .clickable(
+                            onClick = { openExternally(File(doc.filePath)) },
+                            onClickLabel = s.format(StringKey.OpenPreview, doc.fileName),
+                            role = Role.Button,
+                        ),
                     contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 )
             }

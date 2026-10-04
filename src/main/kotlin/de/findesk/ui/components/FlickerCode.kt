@@ -11,7 +11,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 import org.kapott.hbci.manager.FlickerRenderer
 
 /**
@@ -39,9 +43,10 @@ fun FlickerCodeView(code: String, modifier: Modifier = Modifier) {
         onDispose { renderer.stop() }
     }
 
+    val description = strings()[StringKey.OpticalTanCode]
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.background(Color.Black).padding(12.dp)) {
-            Canvas(Modifier.width(width.dp).height((width * 0.55f).dp)) {
+            Canvas(Modifier.width(width.dp).height((width * 0.55f).dp).semantics { contentDescription = description }) {
                 val gap = size.width * 0.04f
                 val barWidth = (size.width - gap * 4) / 5
                 val markerHeight = size.height * 0.12f

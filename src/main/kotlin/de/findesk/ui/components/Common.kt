@@ -10,6 +10,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -43,7 +48,12 @@ fun MessageBanner(message: String?, error: String?, onDismiss: () -> Unit) {
     }
     val isError = error != null
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp)
+            .semantics(mergeDescendants = true) {
+                liveRegion = if (isError) LiveRegionMode.Assertive else LiveRegionMode.Polite
+            },
         shape = RoundedCornerShape(8.dp),
         color = if (isError) MaterialTheme.colorScheme.errorContainer else Success.copy(alpha = 0.12f),
     ) {
@@ -98,7 +108,12 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, actions: @Composab
     Card(modifier = modifier, shape = RoundedCornerShape(12.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
                 actions()
             }
             Spacer(Modifier.height(12.dp))

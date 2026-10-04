@@ -16,6 +16,7 @@ repositories {
     google()
 }
 
+@OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
 dependencies {
     // Compose Desktop
     implementation(compose.desktop.currentOs)
@@ -47,6 +48,7 @@ dependencies {
     testImplementation("org.jetbrains.exposed:exposed-core:0.61.0")
     testImplementation("org.xerial:sqlite-jdbc:3.47.1.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation(compose.uiTest)
 }
 
 compose.desktop {

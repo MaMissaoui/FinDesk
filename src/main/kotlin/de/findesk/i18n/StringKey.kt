@@ -18,6 +18,19 @@ enum class StringKey {
     ToggleTheme,
     Link,
     Unlink,
+    OpenDetails,
+    ChangeCategory,
+    OpenAccount,
+    OpenDocument,
+    OpenPreview,
+    ViewPendingTasks,
+    EnterValidDate,
+    EnterValidAmount,
+    EnterAmountGreaterThan0,
+    EnterValidBalance,
+    InvalidDateRange,
+    PatternInvalid,
+    OpticalTanCode,
 
     // Window / navigation
     WindowTitle,
@@ -351,4 +364,5 @@ enum class StringKey {
     NotEnoughData,
     Max,
     MinAmount,
+    BalanceHistory,
 }
