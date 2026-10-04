@@ -2,6 +2,9 @@ package de.findesk.viewmodel
 
 import de.findesk.banking.FinTSClient
 import de.findesk.document.ReportService
+import de.findesk.importer.CsvMapping
+import de.findesk.importer.ParsedStatement
+import de.findesk.importer.StatementImportService
 import de.findesk.model.AccountItem
 import de.findesk.model.CategoryItem
 import de.findesk.model.Direction
@@ -51,6 +54,13 @@ sealed interface CategoryFilter {
     data class Only(val categoryId: Int) : CategoryFilter
 }
 
+/** A statement file read and waiting for the user to pick the account and confirm. */
+data class ImportPreview(
+    val file: File,
+    val statement: ParsedStatement,
+    val accountId: Int?,
+)
+
 data class TransactionsState(
     val transactions: List<TransactionItem> = emptyList(),
     val categories: List<CategoryItem> = emptyList(),
@@ -62,6 +72,8 @@ data class TransactionsState(
     val accountId: Int? = null,
     val totalIncome: BigDecimal = BigDecimal.ZERO,
     val totalExpenses: BigDecimal = BigDecimal.ZERO,
+    val importPreview: ImportPreview? = null,
+    val isImporting: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val message: String? = null,
@@ -74,6 +86,7 @@ class TransactionsViewModel(
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val reportService: ReportService = ReportService(),
+    private val importService: StatementImportService = StatementImportService(),
     private val today: () -> LocalDate = { LocalDate.now() },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
@@ -221,6 +234,37 @@ class TransactionsViewModel(
         val ok = reportService.exportToCsv(_state.value.transactions, file)
         _state.update {
             if (ok) it.copy(message = "Exported ${it.transactions.size} transactions to ${file.name}") else it.copy(error = "Export failed")
+        }
+    }
+
+    /** Reads a statement file and opens the import preview (nothing is stored yet). */
+    fun openImport(file: File, mapping: CsvMapping? = null): Job = launchSafely(onError) {
+        val statement = importService.read(file, mapping)
+        val accountId = importService.matchAccount(statement) ?: _state.value.importPreview?.accountId
+            ?: _state.value.accountId ?: _state.value.accounts.singleOrNull()?.id
+        _state.update { it.copy(importPreview = ImportPreview(file, statement, accountId), error = null) }
+    }
+
+    /** Re-reads the CSV with a user-adjusted column mapping. */
+    fun remapImport(mapping: CsvMapping): Job = _state.value.importPreview?.let { openImport(it.file, mapping) } ?: Job().apply { complete() }
+
+    fun selectImportAccount(accountId: Int) {
+        _state.update { s -> s.copy(importPreview = s.importPreview?.copy(accountId = accountId)) }
+    }
+
+    fun cancelImport() {
+        _state.update { it.copy(importPreview = null) }
+    }
+
+    fun confirmImport(updateBalance: Boolean): Job {
+        val preview = _state.value.importPreview ?: return Job().apply { complete() }
+        val accountId = preview.accountId ?: return Job().apply { complete() }
+        _state.update { it.copy(isImporting = true) }
+        return launchSafely({ e -> _state.update { it.copy(isImporting = false, error = e.userMessage()) } }) {
+            val report = importService.import(accountId, preview.statement, updateBalance)
+            // Show everything that was imported, not just this month
+            _state.update { it.copy(importPreview = null, isImporting = false, period = Period.ALL, accountId = accountId, message = report.summary()) }
+            refresh()
         }
     }
 

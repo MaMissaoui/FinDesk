@@ -89,6 +89,32 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `statement import previews, picks the account from the file and imports`() = runBlocking {
+        val other = data.account(iban = "DE44500105175407324931", balance = "0")
+        val csv = File(tmp, "ing.csv").apply {
+            writeText(
+                "IBAN;DE44 5001 0517 5407 3249 31\n\nBuchung;Valuta;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung\n" +
+                    "02.10.2025;02.10.2025;Stadtwerke;Lastschrift;Strom;80,00;EUR;-20,00;EUR\n",
+            )
+        }
+        val vm = TransactionsViewModel(today = { today })
+        vm.loadTransactions().join()
+        vm.openImport(csv).join()
+
+        val preview = vm.state.value.importPreview!!
+        assertEquals(other, preview.accountId, "matched by the IBAN in the file")
+        assertEquals(1, preview.statement.bookings.size)
+        assertEquals(0, data.transactionRepo.findItems().count { it.partnerName == "Stadtwerke" }, "nothing stored before confirming")
+
+        vm.confirmImport(updateBalance = true).join()
+        assertNull(vm.state.value.importPreview)
+        assertEquals(Period.ALL, vm.state.value.period, "imported history is visible even if older than this month")
+        assertEquals(listOf("Stadtwerke"), vm.state.value.transactions.map { it.partnerName })
+        assertEquals(BigDecimal("80.00"), data.accountRepo.findAllItems().first { it.id == other }.balance)
+        vm.close()
+    }
+
+    @Test
     fun `auto categorize applies rules to uncategorized transactions`() = runBlocking {
         data.ruleRepo.create("kiosk", food)
         val vm = TransactionsViewModel(today = { today })

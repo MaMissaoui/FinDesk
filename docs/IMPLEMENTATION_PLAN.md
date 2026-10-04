@@ -44,7 +44,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [ ] Standing orders, scheduled transfers.
 
 **Known gaps / next**
-- [ ] CSV/CAMT file import for banks without FinTS.
+- [x] Statement file import: CSV (Sparkasse, ING, DKB, generic; encoding/delimiter/header detection, adjustable mapping, pending rows skipped) and CAMT.053 XML/ZIP, with re-import dedup.
 - [ ] SQLCipher encryption for the database (data and passports are unencrypted at rest, except the passport passphrase-encrypted file).
 - [ ] Budget tracking per category (budget limits are stored but not yet evaluated).
 

@@ -4,7 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,6 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import de.findesk.importer.CsvMapping
+import de.findesk.importer.StatementImportService
 import de.findesk.model.AccountItem
 import de.findesk.model.CategoryItem
 import de.findesk.model.Direction
@@ -25,6 +29,7 @@ import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.Success
 import de.findesk.util.Formats
 import de.findesk.viewmodel.CategoryFilter
+import de.findesk.viewmodel.ImportPreview
 import de.findesk.viewmodel.Period
 import de.findesk.viewmodel.TransactionsViewModel
 import java.math.BigDecimal
@@ -44,6 +49,17 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Transactions", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            OutlinedButton(
+                enabled = state.accounts.isNotEmpty(),
+                onClick = {
+                    FileDialogs.openFiles("Import bank statement (CSV, CAMT XML/ZIP)", StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
+                },
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Import")
+            }
+            Spacer(Modifier.width(8.dp))
             OutlinedButton(onClick = { vm.autoCategorizeTransactions() }) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -145,6 +161,17 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
         }
     }
 
+    state.importPreview?.let { preview ->
+        ImportDialog(
+            preview = preview,
+            accounts = state.accounts,
+            importing = state.isImporting,
+            onAccount = vm::selectImportAccount,
+            onRemap = { vm.remapImport(it) },
+            onCancel = vm::cancelImport,
+            onImport = { vm.confirmImport(it) },
+        )
+    }
     if (showAdd) {
         AddTransactionDialog(
             accounts = state.accounts,
@@ -313,5 +340,121 @@ private fun AddTransactionDialog(
             }) { Text("Add") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun ImportDialog(
+    preview: ImportPreview,
+    accounts: List<AccountItem>,
+    importing: Boolean,
+    onAccount: (Int) -> Unit,
+    onRemap: (CsvMapping) -> Unit,
+    onCancel: () -> Unit,
+    onImport: (Boolean) -> Unit,
+) {
+    val st = preview.statement
+    val hasBalances = st.bookings.any { it.balanceAfter != null }
+    var updateBalance by remember(preview.file) { mutableStateOf(hasBalances) }
+    val account = accounts.firstOrNull { it.id == preview.accountId }
+
+    AlertDialog(
+        onDismissRequest = { if (!importing) onCancel() },
+        title = { Text("Import ${preview.file.name}") },
+        text = {
+            Column(Modifier.width(720.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                val csv = st.csv
+                Text(
+                    "${st.format.label}" + (csv?.let { " · ${it.charsetName} · delimiter '${if (it.delimiter == '\t') "tab" else it.delimiter.toString()}'" } ?: "") +
+                        " · ${st.bookings.size} booking(s)" +
+                        (if (st.pendingSkipped > 0) " · ${st.pendingSkipped} pending left out" else "") +
+                        (if (st.skipped.isNotEmpty()) " · ${st.skipped.size} unreadable" else ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Into account: ", fontWeight = FontWeight.Medium)
+                    DropdownSelector(
+                        label = account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: "Choose account",
+                        options = accounts,
+                        optionLabel = { "${it.bankName} ${Formats.iban(it.iban)}" },
+                        onSelect = { onAccount(it.id) },
+                    )
+                }
+                if (st.accountIban != null && account != null && st.accountIban != account.iban) {
+                    Text(
+                        "The file belongs to ${Formats.iban(st.accountIban)}, not the selected account.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+
+                if (csv != null) {
+                    Text("Columns", style = MaterialTheme.typography.labelLarge)
+                    val m = csv.mapping
+                    val fields: List<Triple<String, Int?, (Int?) -> CsvMapping>> = listOf(
+                        Triple("Date", m.date) { i -> m.copy(date = i) },
+                        Triple("Amount", m.amount) { i -> m.copy(amount = i, debit = if (i != null) null else m.debit, credit = if (i != null) null else m.credit) },
+                        Triple("Debit", m.debit) { i -> m.copy(debit = i, amount = if (i != null) null else m.amount) },
+                        Triple("Credit", m.credit) { i -> m.copy(credit = i, amount = if (i != null) null else m.amount) },
+                        Triple("Partner", m.partner) { i -> m.copy(partner = i) },
+                        Triple("Purpose", m.purpose) { i -> m.copy(purpose = i) },
+                        Triple("Balance", m.balance) { i -> m.copy(balance = i) },
+                    )
+                    fields.chunked(4).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            row.forEach { (label, index, update) ->
+                                DropdownSelector(
+                                    label = "$label: ${index?.let { csv.headers.getOrNull(it) } ?: "—"}",
+                                    options = listOf<Int?>(null) + csv.headers.indices.toList(),
+                                    optionLabel = { i -> i?.let { csv.headers[it].ifBlank { "Column ${it + 1}" } } ?: "— none —" },
+                                    onSelect = { onRemap(update(it)) },
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (st.bookings.isNotEmpty()) {
+                    Text("Preview", style = MaterialTheme.typography.labelLarge)
+                    st.bookings.take(8).forEach { b ->
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(Formats.date(b.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
+                            Text(
+                                listOfNotNull(b.partnerName, b.purpose).joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                Formats.money(b.amount, b.currency, signed = true),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (b.amount.signum() < 0) Error else Success,
+                            )
+                        }
+                    }
+                    if (st.bookings.size > 8) Text("… and ${st.bookings.size - 8} more", style = MaterialTheme.typography.bodySmall)
+                }
+                st.skipped.take(5).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+
+                if (hasBalances) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = updateBalance, onCheckedChange = { updateBalance = it })
+                        Text("Set the account balance from the newest booking in the file")
+                    }
+                }
+                Text(
+                    "Bookings already imported are recognised and skipped.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            Button(enabled = !importing && account != null && st.bookings.isNotEmpty(), onClick = { onImport(updateBalance) }) {
+                Text(if (importing) "Importing…" else "Import ${st.bookings.size}")
+            }
+        },
+        dismissButton = { TextButton(enabled = !importing, onClick = onCancel) { Text("Cancel") } },
     )
 }
