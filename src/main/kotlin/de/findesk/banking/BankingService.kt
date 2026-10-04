@@ -188,6 +188,18 @@ class BankingService(
         else -> null
     }
 
+    /** Checks a standing order's schedule; returns an error message or null. */
+    fun validateSchedule(schedule: StandingOrderSchedule): String? = when {
+        schedule.interval == null -> "This interval is not supported"
+        !schedule.firstDate.isAfter(today()) -> "The first execution must be after today"
+        schedule.lastDate != null && schedule.lastDate.isBefore(schedule.firstDate) -> "The last execution is before the first"
+        schedule.timeUnit == "M" && schedule.executionDay !in 1..31 && schedule.executionDay != 99 -> "The execution day must be between 1 and 31"
+        schedule.timeUnit == "W" && schedule.executionDay !in 1..7 -> "The execution day must be between 1 (Monday) and 7 (Sunday)"
+        else -> null
+    }
+
+    fun validateExecutionDate(date: LocalDate): String? = if (!date.isAfter(today())) "The execution date must be after today" else null
+
     /**
      * Initiate a SEPA transfer. Moves real money: [confirmed] must reflect an explicit user confirmation
      * of the exact order, otherwise nothing is sent.
@@ -197,9 +209,87 @@ class BankingService(
         order: TransferOrder,
         interaction: BankingInteraction,
         confirmed: Boolean,
-    ): BankingResult<FinTSClient.TransferResult> {
-        if (!confirmed) return BankingResult.Error("NOT_CONFIRMED", "The transfer was not confirmed")
+    ): BankingResult<FinTSClient.TransferResult> = sendOrder("TRANSFER", fromAccountId, order, confirmed, check = null, describe = "") { account, o ->
+        finTSClient.initiateTransfer(account.bankAccessId, interaction, account.iban, o)
+    }
+
+    /** SEPA transfer executed on [date]. Same guards as [initiateTransfer]. */
+    suspend fun scheduleTransfer(
+        fromAccountId: Int,
+        order: TransferOrder,
+        date: LocalDate,
+        interaction: BankingInteraction,
+        confirmed: Boolean,
+    ): BankingResult<FinTSClient.TransferResult> = sendOrder("SCHEDULED_TRANSFER", fromAccountId, order, confirmed, validateExecutionDate(date), " on $date") { account, o ->
+        finTSClient.scheduleTransfer(account.bankAccessId, interaction, account.iban, o, date)
+    }
+
+    /** Creates a standing order at the bank. Moves money repeatedly: same guards as [initiateTransfer]. */
+    suspend fun createStandingOrder(
+        fromAccountId: Int,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+        interaction: BankingInteraction,
+        confirmed: Boolean,
+    ): BankingResult<String?> = sendOrder(
+        "STANDING_ORDER_CREATE",
+        fromAccountId,
+        order,
+        confirmed,
+        validateSchedule(schedule),
+        " ${schedule.interval?.name?.lowercase() ?: "${schedule.step}${schedule.timeUnit}"} from ${schedule.firstDate} on day ${schedule.executionDay}" +
+            (schedule.lastDate?.let { " until $it" } ?: ""),
+    ) { account, o ->
+        finTSClient.createStandingOrder(account.bankAccessId, interaction, account.iban, o, schedule)
+    }
+
+    /** Read-only: the account's standing orders as the bank reports them. */
+    suspend fun loadStandingOrders(fromAccountId: Int, interaction: BankingInteraction): BankingResult<List<StandingOrder>> {
+        val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
+            ?: return BankingResult.Error("NOT_FOUND", "Account not found")
+        return finTSClient.listStandingOrders(account.bankAccessId, interaction, account.iban)
+    }
+
+    /** Deletes a standing order, which stops its future payments. Needs [confirmed] like any order. */
+    suspend fun deleteStandingOrder(
+        fromAccountId: Int,
+        existing: StandingOrder,
+        interaction: BankingInteraction,
+        confirmed: Boolean,
+    ): BankingResult<Unit> {
+        if (!confirmed) return BankingResult.Error("NOT_CONFIRMED", "Deleting the standing order was not confirmed")
+        if (existing.orderId == null || !existing.canDelete) return BankingResult.Error("INVALID", "The bank does not allow deleting this standing order here")
+        val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
+            ?: return BankingResult.Error("NOT_FOUND", "Account not found")
+        if (!Iban.normalize(existing.fromIban).equals(account.iban, ignoreCase = true)) return BankingResult.Error("INVALID", "The standing order belongs to another account")
+        val result = finTSClient.deleteStandingOrder(account.bankAccessId, interaction, existing)
+        withContext(Dispatchers.IO) {
+            auditLogRepository.log(
+                "STANDING_ORDER_DELETE",
+                "user",
+                "${existing.order.amount.toPlainString()} EUR from …${account.iban.takeLast(4)} to ${existing.order.recipientName} (id ${existing.orderId}): ${outcome(result)}",
+            )
+        }
+        if (result is BankingResult.Error) _error.value = result.message
+        return result
+    }
+
+    /**
+     * Shared guard for everything that moves money: explicit confirmation of the exact order, a valid order (and
+     * [check], e.g. the schedule), an EUR source account. Every attempt is audit-logged with its outcome.
+     */
+    private suspend fun <T> sendOrder(
+        action: String,
+        fromAccountId: Int,
+        order: TransferOrder,
+        confirmed: Boolean,
+        check: String?,
+        describe: String,
+        send: suspend (de.findesk.model.AccountItem, TransferOrder) -> BankingResult<T>,
+    ): BankingResult<T> {
+        if (!confirmed) return BankingResult.Error("NOT_CONFIRMED", "The order was not confirmed")
         validateTransfer(order)?.let { return BankingResult.Error("INVALID", it) }
+        check?.let { return BankingResult.Error("INVALID", it) }
 
         _isLoading.value = true
         _error.value = null
@@ -209,17 +299,12 @@ class BankingService(
             // SEPA credit transfers are EUR only; the order amount is in EUR, so another account currency would be wrong
             if (account.currency != "EUR") return BankingResult.Error("CURRENCY", "SEPA transfers can only be sent from EUR accounts (this account is in ${account.currency})")
             val normalized = order.copy(recipientIban = Iban.normalize(order.recipientIban), recipientName = order.recipientName.trim())
-            val result = finTSClient.initiateTransfer(account.bankAccessId, interaction, account.iban, normalized)
+            val result = send(account, normalized)
             withContext(Dispatchers.IO) {
-                val outcome = when (result) {
-                    is BankingResult.Success -> "sent"
-                    is BankingResult.Error -> "failed: ${result.message}"
-                    is BankingResult.TanRequired -> "TAN required"
-                }
                 auditLogRepository.log(
-                    "TRANSFER",
+                    action,
                     "user",
-                    "${normalized.amount.toPlainString()} EUR from …${account.iban.takeLast(4)} to ${normalized.recipientName} …${normalized.recipientIban.takeLast(4)}: $outcome",
+                    "${normalized.amount.toPlainString()} EUR from …${account.iban.takeLast(4)} to ${normalized.recipientName} …${normalized.recipientIban.takeLast(4)}$describe: ${outcome(result)}",
                 )
             }
             if (result is BankingResult.Error) _error.value = result.message
@@ -227,6 +312,12 @@ class BankingService(
         } finally {
             _isLoading.value = false
         }
+    }
+
+    private fun outcome(result: BankingResult<*>): String = when (result) {
+        is BankingResult.Success -> "sent"
+        is BankingResult.Error -> "failed: ${result.message}"
+        is BankingResult.TanRequired -> "TAN required"
     }
 
     data class ImportResult(

@@ -14,8 +14,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankingService
+import de.findesk.banking.StandingOrderInterval
+import de.findesk.banking.StandingOrderSchedule
 import de.findesk.banking.TransferOrder
 import de.findesk.i18n.StringKey
+import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
 import de.findesk.ui.components.*
@@ -37,11 +40,22 @@ fun PaymentsScreen() {
     var bic by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var purpose by remember { mutableStateOf("") }
+    var execution by remember { mutableStateOf(Execution.NOW) }
+    var dateText by remember { mutableStateOf("") }
+    var interval by remember { mutableStateOf(StandingOrderInterval.MONTHLY) }
+    var lastDateText by remember { mutableStateOf("") }
     LaunchedEffect(state.accounts) { if (from == null) from = state.accounts.firstOrNull() }
 
     val parsedAmount = Formats.parseAmount(amount)
     val ibanOk = Iban.isValid(iban)
     val suggestedBic = if (ibanOk) vm.bicFor(iban) else null
+    val date = Formats.parseDate(dateText)
+    val lastDate = lastDateText.takeIf { it.isNotBlank() }?.let(Formats::parseDate)
+    val scheduleOk = when (execution) {
+        Execution.NOW -> true
+        Execution.ON_DATE -> date != null
+        Execution.STANDING -> date != null && (lastDateText.isBlank() || lastDate != null)
+    }
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(Modifier.weight(3f).verticalScroll(rememberScrollState())) {
@@ -106,34 +120,123 @@ fun PaymentsScreen() {
                         supportingText = { Text("${purpose.length}/${BankingService.MAX_PURPOSE_LENGTH}") },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Button(
-                        enabled = from != null && name.isNotBlank() && ibanOk && parsedAmount != null && parsedAmount.signum() > 0 && !state.isSending,
-                        onClick = {
-                            vm.review(
-                                from!!,
-                                TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose),
+                    Text(s[StringKey.Execution], style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Execution.entries.forEach { e ->
+                            FilterChip(selected = execution == e, onClick = { execution = e }, label = { Text(s[e.label]) })
+                        }
+                    }
+                    if (execution != Execution.NOW) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                dateText,
+                                { dateText = it },
+                                label = { Text(s[if (execution == Execution.STANDING) StringKey.FirstExecution else StringKey.ExecutionDate]) },
+                                placeholder = { Text("dd.mm.yyyy") },
+                                isError = dateText.isNotBlank() && date == null,
+                                supportingText = { if (dateText.isNotBlank() && date == null) Text(s[StringKey.EnterValidDate]) },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
                             )
+                            if (execution == Execution.STANDING) {
+                                OutlinedTextField(
+                                    lastDateText,
+                                    { lastDateText = it },
+                                    label = { Text(s[StringKey.LastExecutionOptional]) },
+                                    placeholder = { Text("dd.mm.yyyy") },
+                                    isError = lastDateText.isNotBlank() && lastDate == null,
+                                    supportingText = { if (lastDateText.isNotBlank() && lastDate == null) Text(s[StringKey.EnterValidDate]) },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                        if (execution == Execution.STANDING) {
+                            DropdownSelector(
+                                label = s[intervalLabel(interval)],
+                                options = StandingOrderInterval.entries,
+                                optionLabel = { s[intervalLabel(it)] },
+                                onSelect = { interval = it },
+                            )
+                        }
+                    }
+                    Button(
+                        enabled = from != null && name.isNotBlank() && ibanOk && parsedAmount != null && parsedAmount.signum() > 0 && scheduleOk && !state.isSending,
+                        onClick = {
+                            val order = TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose)
+                            when (execution) {
+                                Execution.NOW -> vm.review(from!!, order)
+
+                                Execution.ON_DATE -> vm.review(from!!, order, date = date)
+
+                                // The execution day follows the first date (day of month, or weekday for weekly orders)
+                                Execution.STANDING -> vm.review(
+                                    from!!,
+                                    order,
+                                    schedule = StandingOrderSchedule.of(
+                                        date!!,
+                                        interval,
+                                        if (interval == StandingOrderInterval.WEEKLY) date.dayOfWeek.value else date.dayOfMonth,
+                                        lastDate,
+                                    ),
+                                )
+                            }
                         },
                     ) { Text(s[StringKey.ReviewTransfer]) }
                 }
             }
         }
 
-        SectionCard(s[StringKey.RecentTransfersLabel], Modifier.weight(2f)) {
-            if (state.recentTransfers.isEmpty()) Text(s[StringKey.NoneYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
-            state.recentTransfers.forEach { e ->
-                Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall)
-                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+        Column(Modifier.weight(2f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            SectionCard(
+                s[StringKey.StandingOrders],
+                Modifier.fillMaxWidth(),
+                actions = {
+                    if (state.isLoadingStandingOrders) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    TextButton(enabled = from != null && !state.isLoadingStandingOrders && !state.isSending, onClick = { from?.let(vm::loadStandingOrders) }) {
+                        Text(s[StringKey.LoadFromBank])
+                    }
+                },
+            ) {
+                val orders = state.standingOrders?.takeIf { state.standingOrdersAccount == from?.id }
+                when {
+                    orders == null -> Text(s[StringKey.StandingOrdersHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    orders.isEmpty() -> Text(s[StringKey.NoStandingOrders], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                orders?.forEach { o ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(o.order.recipientName, fontWeight = FontWeight.Medium)
+                            Text(
+                                scheduleText(o.schedule, s) + (o.nextDate?.let { " · " + s.format(StringKey.NextOn, Formats.date(it)) } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(Formats.money(o.order.amount), fontWeight = FontWeight.SemiBold)
+                        IconButton(enabled = o.canDelete && !state.isSending, onClick = { vm.requestDelete(o) }) {
+                            Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteStandingOrderTo, o.order.recipientName))
+                        }
+                    }
+                }
+            }
+            SectionCard(s[StringKey.RecentTransfersLabel], Modifier.fillMaxWidth()) {
+                if (state.recentTransfers.isEmpty()) Text(s[StringKey.NoneYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                state.recentTransfers.forEach { e ->
+                    Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                }
             }
         }
     }
 
-    state.review?.let { (account, order) ->
-        var acknowledged by remember(order) { mutableStateOf(false) }
+    state.review?.let { review ->
+        val (account, order) = review
+        var acknowledged by remember(review) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { if (!state.isSending) vm.cancelReview() },
-            title = { Text(s[StringKey.ConfirmTransfer]) },
+            title = { Text(s[if (review.schedule != null) StringKey.ConfirmStandingOrder else StringKey.ConfirmTransfer]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
                     ReviewRow(s[StringKey.From], "${account.bankName} ${Formats.iban(account.iban)}")
@@ -142,10 +245,14 @@ fun PaymentsScreen() {
                     order.recipientBic?.let { ReviewRow(s[StringKey.ColBalance].let { "BIC" }, it) }
                     ReviewRow(s[StringKey.AmountEuro], Formats.money(order.amount))
                     ReviewRow(s[StringKey.Purpose], order.purpose.ifBlank { "—" })
+                    ReviewRow(
+                        s[StringKey.Execution],
+                        review.schedule?.let { scheduleText(it, s) } ?: review.date?.let { s.format(StringKey.OnDate, Formats.date(it)) } ?: s[StringKey.ExecuteNow],
+                    )
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
-                        Text(s[StringKey.TransferAcknowledgement])
+                        Text(s[if (review.schedule != null) StringKey.StandingOrderAcknowledgement else StringKey.TransferAcknowledgement])
                     }
                     if (state.isSending) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -162,6 +269,59 @@ fun PaymentsScreen() {
             dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelReview) { Text(s[StringKey.Back]) } },
         )
     }
+
+    state.deleteReview?.let { o ->
+        var acknowledged by remember(o) { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { if (!state.isSending) vm.cancelDelete() },
+            title = { Text(s[StringKey.DeleteStandingOrder]) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
+                    ReviewRow(s[StringKey.To], o.order.recipientName)
+                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(o.order.recipientIban)))
+                    ReviewRow(s[StringKey.AmountEuro], Formats.money(o.order.amount))
+                    ReviewRow(s[StringKey.Execution], scheduleText(o.schedule, s))
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
+                        Text(s[StringKey.DeleteStandingOrderAcknowledgement])
+                    }
+                    if (state.isSending) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(s[StringKey.WaitingForBank])
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = acknowledged && !state.isSending,
+                    onClick = { vm.confirmDelete() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text(s[StringKey.Delete]) }
+            },
+            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelDelete) { Text(s[StringKey.Back]) } },
+        )
+    }
+}
+
+private enum class Execution(val label: StringKey) { NOW(StringKey.ExecuteNow), ON_DATE(StringKey.ExecuteOnDate), STANDING(StringKey.ExecuteStanding) }
+
+private fun intervalLabel(i: StandingOrderInterval): StringKey = when (i) {
+    StandingOrderInterval.WEEKLY -> StringKey.IntervalWeekly
+    StandingOrderInterval.MONTHLY -> StringKey.IntervalMonthly
+    StandingOrderInterval.QUARTERLY -> StringKey.IntervalQuarterly
+    StandingOrderInterval.HALF_YEARLY -> StringKey.IntervalHalfYearly
+    StandingOrderInterval.YEARLY -> StringKey.IntervalYearly
+}
+
+/** "Monthly from 01.11.2026, day 1, until 31.12.2027"; intervals FinDesk doesn't offer show as "every 2 M". */
+private fun scheduleText(schedule: StandingOrderSchedule, s: Strings): String {
+    val interval = schedule.interval?.let { s[intervalLabel(it)] } ?: s.format(StringKey.EveryN, schedule.step, schedule.timeUnit)
+    val base = s.format(StringKey.ScheduleFrom, interval, Formats.date(schedule.firstDate), schedule.executionDay)
+    return base + (schedule.lastDate?.let { " " + s.format(StringKey.ScheduleUntil, Formats.date(it)) } ?: "")
 }
 
 @Composable

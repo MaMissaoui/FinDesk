@@ -28,6 +28,51 @@ data class TransferOrder(
     val purpose: String,
 )
 
+/** Intervals offered for new standing orders. FinTS expresses them as a time unit (M = months, W = weeks) and a step. */
+enum class StandingOrderInterval(val timeUnit: String, val step: Int) {
+    WEEKLY("W", 1),
+    MONTHLY("M", 1),
+    QUARTERLY("M", 3),
+    HALF_YEARLY("M", 6),
+    YEARLY("M", 12),
+    ;
+
+    companion object {
+        fun of(timeUnit: String, step: Int): StandingOrderInterval? = entries.firstOrNull { it.timeUnit == timeUnit && it.step == step }
+    }
+}
+
+/**
+ * When a standing order runs. Kept as the bank's raw time unit and step, so orders with intervals FinDesk doesn't
+ * offer (e.g. every 2 months) can still be shown and deleted exactly as the bank knows them.
+ */
+data class StandingOrderSchedule(
+    val firstDate: LocalDate,
+    /** "M" (months) or "W" (weeks). */
+    val timeUnit: String,
+    val step: Int,
+    /** Day of the month (1-31, 99 = last day) or of the week (1 = Monday ... 7 = Sunday). */
+    val executionDay: Int,
+    val lastDate: LocalDate? = null,
+) {
+    val interval: StandingOrderInterval? get() = StandingOrderInterval.of(timeUnit, step)
+
+    companion object {
+        fun of(firstDate: LocalDate, interval: StandingOrderInterval, executionDay: Int, lastDate: LocalDate? = null) = StandingOrderSchedule(firstDate, interval.timeUnit, interval.step, executionDay, lastDate)
+    }
+}
+
+/** A standing order as the bank reports it. */
+data class StandingOrder(
+    /** Bank's id; needed to delete it. */
+    val orderId: String?,
+    val fromIban: String,
+    val order: TransferOrder,
+    val schedule: StandingOrderSchedule,
+    val nextDate: LocalDate? = null,
+    val canDelete: Boolean = true,
+)
+
 /** One account's state as reported by the bank in a sync. */
 data class AccountSnapshot(
     val account: FinTSAccount,
@@ -56,6 +101,36 @@ interface FinTSGateway {
         fromIban: String,
         order: TransferOrder,
     ): FinTSClient.TransferResult
+
+    /** SEPA transfer executed on [date] (Terminüberweisung). */
+    fun scheduledTransfer(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+        date: LocalDate,
+    ): FinTSClient.TransferResult = throw UnsupportedOperationException("Scheduled transfers are not supported")
+
+    fun listStandingOrders(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+    ): List<StandingOrder> = throw UnsupportedOperationException("Standing orders are not supported")
+
+    /** Returns the bank's id for the new order, if it reports one. */
+    fun createStandingOrder(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+    ): String? = throw UnsupportedOperationException("Standing orders are not supported")
+
+    fun deleteStandingOrder(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        existing: StandingOrder,
+    ): Unit = throw UnsupportedOperationException("Standing orders are not supported")
 
     /** The TAN method chosen during the last dialog, so it can be remembered. */
     val lastTanMethod: String? get() = null

@@ -41,7 +41,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Payments screen, Sync per bank, connection settings, offline BLZ lookup (name, BIC, FinTS URL).
 - [ ] **First real-bank test.** Everything is tested against fakes and a closed local port only. Try a sync with one real login and watch the result before relying on it.
 - [x] chipTAN optical: flicker animation via HBCI4Java's FlickerRenderer, with speed and size controls.
-- [ ] Standing orders, scheduled transfers.
+- [x] Standing orders (list, create, delete) and scheduled transfers via DauerSEPA*/TermUebSEPA; same confirm/review/EUR/audit guards as transfers. Unverified against a real bank.
 
 **Known gaps / next**
 - [x] Statement file import: CSV (Sparkasse, ING, DKB, generic; encoding/delimiter/header detection, adjustable mapping, pending rows skipped) and CAMT.053 XML/ZIP, with re-import dedup.
@@ -155,7 +155,8 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] **Account Synchronization:** accounts matched by IBAN (new ones created), balances, statements; delta sync overlapping the last sync by 10 days
 - [x] **Transaction Import:** MT940 with CAMT fallback (parsed by HBCI4Java), hash dedup incl. bank id/running balance, rules
 - [x] **Payment System (SEPA):** single transfers with review + confirmation + Verification of Payee; audit-logged
-  - [ ] Standing orders, payment status tracking
+  - [x] Standing orders and scheduled transfers (unverified against a real bank)
+  - [ ] Payment status tracking
 - [x] **TAN Management:** procedure/medium selection (remembered), TAN dialog, photoTAN/QR image, decoupled confirmation
   - [x] chipTAN optical flicker code
 - [x] Credentials: PIN never stored; passport passphrase random per bank (settings table)

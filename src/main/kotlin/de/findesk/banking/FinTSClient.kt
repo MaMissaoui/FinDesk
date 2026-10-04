@@ -90,6 +90,42 @@ class FinTSClient(
         gateway.transfer(connection, interaction, fromIban, order)
     }
 
+    suspend fun scheduleTransfer(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+        date: java.time.LocalDate,
+    ): BankingResult<TransferResult> = run(bankAccessId, ConnectionStatus.CONNECTING, "Sending scheduled transfer…") { connection ->
+        gateway.scheduledTransfer(connection, interaction, fromIban, order, date)
+    }
+
+    suspend fun listStandingOrders(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        fromIban: String,
+    ): BankingResult<List<StandingOrder>> = run(bankAccessId, ConnectionStatus.CONNECTING, "Loading standing orders…") { connection ->
+        gateway.listStandingOrders(connection, interaction, fromIban)
+    }
+
+    suspend fun createStandingOrder(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+    ): BankingResult<String?> = run(bankAccessId, ConnectionStatus.CONNECTING, "Sending standing order…") { connection ->
+        gateway.createStandingOrder(connection, interaction, fromIban, order, schedule)
+    }
+
+    suspend fun deleteStandingOrder(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        existing: StandingOrder,
+    ): BankingResult<Unit> = run(bankAccessId, ConnectionStatus.CONNECTING, "Deleting standing order…") { connection ->
+        gateway.deleteStandingOrder(connection, interaction, existing)
+    }
+
     private suspend fun <T> run(
         bankAccessId: Int,
         status: ConnectionStatus,

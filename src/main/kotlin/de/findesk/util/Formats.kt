@@ -30,6 +30,9 @@ object Formats {
 
     fun date(date: LocalDate): String = date.format(dateFormatter)
 
+    /** Parses what users type in date fields: "05.11.2026" or "5.11.2026". */
+    fun parseDate(input: String): LocalDate? = runCatching { LocalDate.parse(input.trim(), java.time.format.DateTimeFormatter.ofPattern("d.M.yyyy")) }.getOrNull()
+
     fun dateTime(dateTime: LocalDateTime): String = dateTime.format(dateTimeFormatter)
 
     /** Groups an IBAN in blocks of four: "DE89 3704 0044 ...". */

@@ -64,6 +64,33 @@ private class FakeGateway : FinTSGateway {
         transfers += fromIban to order
         return FinTSClient.TransferResult("job-1", "ACCEPTED")
     }
+
+    val scheduled = mutableListOf<Triple<String, TransferOrder, LocalDate>>()
+    val created = mutableListOf<Triple<String, TransferOrder, StandingOrderSchedule>>()
+    val deleted = mutableListOf<StandingOrder>()
+    var standingOrders: List<StandingOrder> = emptyList()
+
+    override fun scheduledTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder, date: LocalDate): FinTSClient.TransferResult {
+        interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
+        scheduled += Triple(fromIban, order, date)
+        return FinTSClient.TransferResult("job-2", "SCHEDULED")
+    }
+
+    override fun listStandingOrders(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String): List<StandingOrder> {
+        interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
+        return standingOrders.filter { it.fromIban == fromIban }
+    }
+
+    override fun createStandingOrder(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder, schedule: StandingOrderSchedule): String? {
+        interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
+        created += Triple(fromIban, order, schedule)
+        return "order-${created.size}"
+    }
+
+    override fun deleteStandingOrder(connection: FinTSConnection, interaction: BankingInteraction, existing: StandingOrder) {
+        interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
+        deleted += existing
+    }
 }
 
 class BankingSyncTest {
@@ -194,6 +221,39 @@ class BankingSyncTest {
     }
 
     @Test
+    fun `payments screen sends standing orders and scheduled transfers only after review`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        // The view model's interaction shows dialogs; answer the PIN here instead
+        val scripted = object : FinTSGateway by gateway {
+            override fun scheduledTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder, date: LocalDate) = gateway.scheduledTransfer(connection, ScriptedInteraction(), fromIban, order, date)
+            override fun createStandingOrder(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder, schedule: StandingOrderSchedule) = gateway.createStandingOrder(connection, ScriptedInteraction(), fromIban, order, schedule)
+        }
+        val vm = de.findesk.viewmodel.PaymentsViewModel(bankingService = BankingService(finTSClient = FinTSClient(gateway = scripted, passportDir = File(tmp, "p3")), today = { today }))
+        vm.load().join()
+        val account = vm.state.value.accounts.single()
+        val order = TransferOrder("Vermieter GmbH", savings, null, BigDecimal("850.00"), "Miete")
+
+        vm.review(account, order, date = today)
+        assertNull(vm.state.value.review, "a date that isn't in the future never reaches the review")
+        assertEquals("The execution date must be after today", vm.state.value.error)
+
+        val monthly = StandingOrderSchedule.of(LocalDate.of(2026, 11, 1), StandingOrderInterval.MONTHLY, 1)
+        vm.review(account, order, schedule = monthly)
+        assertTrue(gateway.created.isEmpty(), "reviewing sends nothing")
+        vm.confirmAndSend().join()
+        assertEquals(Triple(giro, order, monthly), gateway.created.single())
+        assertEquals("Standing order to Vermieter GmbH set up", vm.state.value.message)
+
+        vm.review(account, order, date = today.plusDays(3))
+        vm.confirmAndSend().join()
+        assertEquals(today.plusDays(3), gateway.scheduled.single().third)
+        assertTrue(gateway.transfers.isEmpty(), "a scheduled transfer is not sent as an immediate one")
+        assertEquals(listOf("SCHEDULED_TRANSFER", "STANDING_ORDER_CREATE"), vm.state.value.recentTransfers.map { it.action })
+        vm.close()
+    }
+
+    @Test
     fun `cancelled PIN and bank errors are reported, nothing imported`() = runBlocking {
         gateway.snapshots = listOf(snapshot(giro, "1.00", booking(giro, today, "-1.00", "X", "Y")))
         val cancelled = service.syncBankConnection(bankId, ScriptedInteraction(pinValue = null))
@@ -247,6 +307,71 @@ class BankingSyncTest {
 
         assertEquals("CURRENCY", (result as BankingResult.Error).code)
         assertTrue(gateway.transfers.isEmpty(), "a SEPA order in EUR must not leave a USD account")
+    }
+
+    @Test
+    fun `scheduled transfers need confirmation and a future date`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val accountId = data.accountRepo.findAllItems().single().id
+        val order = TransferOrder("Max Mustermann", "DE44500105175407324931", null, BigDecimal("25.00"), "Miete")
+
+        assertEquals("NOT_CONFIRMED", (service.scheduleTransfer(accountId, order, today.plusDays(5), ScriptedInteraction(), confirmed = false) as BankingResult.Error).code)
+        assertEquals("INVALID", (service.scheduleTransfer(accountId, order, today, ScriptedInteraction(), confirmed = true) as BankingResult.Error).code)
+        assertEquals("INVALID", (service.scheduleTransfer(accountId, order.copy(amount = BigDecimal.ZERO), today.plusDays(5), ScriptedInteraction(), confirmed = true) as BankingResult.Error).code)
+        assertTrue(gateway.scheduled.isEmpty())
+
+        assertTrue(service.scheduleTransfer(accountId, order, today.plusDays(5), ScriptedInteraction(), confirmed = true) is BankingResult.Success)
+        assertEquals(Triple(giro, order, today.plusDays(5)), gateway.scheduled.single())
+        assertTrue(AuditLogRepositoryImpl().findByAction("SCHEDULED_TRANSFER").single().details!!.contains("on ${today.plusDays(5)}: sent"))
+    }
+
+    @Test
+    fun `standing orders are validated, confirmed and audit-logged`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val accountId = data.accountRepo.findAllItems().single().id
+        val order = TransferOrder("Vermieter GmbH", "DE44500105175407324931", null, BigDecimal("850.00"), "Miete")
+        val monthly = StandingOrderSchedule.of(LocalDate.of(2026, 11, 1), StandingOrderInterval.MONTHLY, 1)
+
+        assertEquals("NOT_CONFIRMED", (service.createStandingOrder(accountId, order, monthly, ScriptedInteraction(), confirmed = false) as BankingResult.Error).code)
+        listOf(
+            monthly.copy(firstDate = today),
+            monthly.copy(executionDay = 32),
+            monthly.copy(lastDate = LocalDate.of(2026, 10, 31)),
+            StandingOrderSchedule.of(LocalDate.of(2026, 11, 2), StandingOrderInterval.WEEKLY, 8),
+            monthly.copy(step = 2),
+        ).forEach { bad ->
+            assertEquals("INVALID", (service.createStandingOrder(accountId, order, bad, ScriptedInteraction(), confirmed = true) as BankingResult.Error).code, bad.toString())
+        }
+        assertTrue(gateway.created.isEmpty(), "nothing reaches the bank without a valid, confirmed order")
+
+        val created = service.createStandingOrder(accountId, order, monthly, ScriptedInteraction(), confirmed = true)
+        assertEquals("order-1", (created as BankingResult.Success).data)
+        assertEquals(Triple(giro, order, monthly), gateway.created.single())
+        assertTrue(AuditLogRepositoryImpl().findByAction("STANDING_ORDER_CREATE").single().details!!.contains("monthly from 2026-11-01 on day 1: sent"))
+
+        // Listing is read-only and needs no confirmation
+        val existing = StandingOrder("order-1", giro, order, monthly, nextDate = LocalDate.of(2026, 11, 1))
+        gateway.standingOrders = listOf(existing, existing.copy(orderId = "other", fromIban = savings))
+        assertEquals(listOf(existing), (service.loadStandingOrders(accountId, ScriptedInteraction()) as BankingResult.Success).data)
+
+        assertEquals("NOT_CONFIRMED", (service.deleteStandingOrder(accountId, existing, ScriptedInteraction(), confirmed = false) as BankingResult.Error).code)
+        assertEquals("INVALID", (service.deleteStandingOrder(accountId, existing.copy(canDelete = false), ScriptedInteraction(), confirmed = true) as BankingResult.Error).code)
+        assertEquals("INVALID", (service.deleteStandingOrder(accountId, existing.copy(fromIban = savings), ScriptedInteraction(), confirmed = true) as BankingResult.Error).code)
+        assertTrue(gateway.deleted.isEmpty())
+        assertTrue(service.deleteStandingOrder(accountId, existing, ScriptedInteraction(), confirmed = true) is BankingResult.Success)
+        assertEquals(listOf(existing), gateway.deleted)
+        assertTrue(AuditLogRepositoryImpl().findByAction("STANDING_ORDER_DELETE").single().details!!.contains("(id order-1)"))
+    }
+
+    @Test
+    fun `standing orders are refused from accounts that are not in EUR`() = runBlocking {
+        val usd = data.accountRepo.create(bankId, "DE89370400440532013000", currency = "USD").id.value
+        val order = TransferOrder("Vermieter GmbH", "DE44500105175407324931", null, BigDecimal("850.00"), "Miete")
+        val result = service.createStandingOrder(usd, order, StandingOrderSchedule.of(LocalDate.of(2026, 11, 1), StandingOrderInterval.MONTHLY, 1), ScriptedInteraction(), confirmed = true)
+        assertEquals("CURRENCY", (result as BankingResult.Error).code)
+        assertTrue(gateway.created.isEmpty())
     }
 
     @Test

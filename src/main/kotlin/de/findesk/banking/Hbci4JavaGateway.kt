@@ -4,11 +4,14 @@ import org.hbci4java.HBCI4JavaBankAccount
 import org.hbci4java.HBCI4JavaClient
 import org.hbci4java.HBCI4JavaConfig
 import org.kapott.hbci.GV.HBCIJob
+import org.kapott.hbci.GV_Result.GVRDauerList
+import org.kapott.hbci.GV_Result.GVRDauerNew
 import org.kapott.hbci.GV_Result.GVRKUms
 import org.kapott.hbci.GV_Result.GVRSaldoReq
 import org.kapott.hbci.GV_Result.HBCIJobResult
 import org.kapott.hbci.callback.AbstractHBCICallback
 import org.kapott.hbci.callback.HBCICallback
+import org.kapott.hbci.exceptions.JobNotSupportedException
 import org.kapott.hbci.manager.HBCIHandler
 import org.kapott.hbci.manager.MatrixCode
 import org.kapott.hbci.manager.QRCode
@@ -114,6 +117,109 @@ class Hbci4JavaGateway : FinTSGateway {
         FinTSClient.TransferResult(transactionId = job.jobResult.jobId ?: "", status = "ACCEPTED")
     }
 
+    override fun scheduledTransfer(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+        date: LocalDate,
+    ): FinTSClient.TransferResult = withHandler(connection, interaction) { handler ->
+        val job = handler.newJob("TermUebSEPA").apply {
+            setOrderParams(handler.findKonto(fromIban), order)
+            setParam("date", date.toDate())
+            addToQueue()
+        }
+        checkStatus(handler.execute().let { it.isOK to it.errorString })
+        checkJob(job.jobResult)
+        FinTSClient.TransferResult(transactionId = job.jobResult.jobId ?: "", status = "SCHEDULED")
+    }
+
+    override fun listStandingOrders(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+    ): List<StandingOrder> = withHandler(connection, interaction) { handler ->
+        val job = handler.newJob("DauerSEPAList").apply {
+            setParam("src", handler.findKonto(fromIban))
+            addToQueue()
+        }
+        checkStatus(handler.execute().let { it.isOK to it.errorString })
+        checkJob(job.jobResult)
+        (job.jobResult as GVRDauerList).entries.orEmpty().mapNotNull { d ->
+            val first = d.firstdate ?: return@mapNotNull null
+            StandingOrder(
+                orderId = d.orderid,
+                fromIban = d.my?.iban ?: fromIban,
+                order = TransferOrder(
+                    recipientName = d.other?.name.orEmpty(),
+                    recipientIban = d.other?.iban.orEmpty(),
+                    recipientBic = d.other?.bic,
+                    amount = d.value?.bigDecimalValue ?: java.math.BigDecimal.ZERO,
+                    purpose = d.usage.orEmpty().joinToString(" ").trim(),
+                ),
+                schedule = StandingOrderSchedule(first.toLocalDate(), d.timeunit.orEmpty().uppercase(), d.turnus, d.execday, d.lastdate?.toLocalDate()),
+                nextDate = d.nextdate?.toLocalDate(),
+                // Trust the bank: if it says no (or gave no id), deleting is left to online banking
+                canDelete = d.can_delete && d.orderid != null,
+            )
+        }
+    }
+
+    override fun createStandingOrder(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+    ): String? = withHandler(connection, interaction) { handler ->
+        val job = handler.newJob("DauerSEPANew").apply {
+            setOrderParams(handler.findKonto(fromIban), order)
+            setScheduleParams(schedule)
+            addToQueue()
+        }
+        checkStatus(handler.execute().let { it.isOK to it.errorString })
+        checkJob(job.jobResult)
+        (job.jobResult as? GVRDauerNew)?.orderId
+    }
+
+    override fun deleteStandingOrder(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        existing: StandingOrder,
+    ) = withHandler(connection, interaction) { handler ->
+        // The bank identifies the order by its id but expects the original order data alongside
+        val job = handler.newJob("DauerSEPADel").apply {
+            setOrderParams(handler.findKonto(existing.fromIban), existing.order)
+            setScheduleParams(existing.schedule)
+            setParam("orderid", requireNotNull(existing.orderId) { "The bank did not report an id for this standing order" })
+            addToQueue()
+        }
+        checkStatus(handler.execute().let { it.isOK to it.errorString })
+        checkJob(job.jobResult)
+    }
+
+    private fun HBCIJob<*>.setOrderParams(src: Konto, order: TransferOrder) {
+        setParam("src", src)
+        setParam(
+            "dst",
+            Konto().apply {
+                iban = order.recipientIban
+                bic = order.recipientBic?.takeIf { it.isNotBlank() }
+                name = order.recipientName
+            },
+        )
+        setParam("btg", Value(order.amount, "EUR"))
+        setParam("usage", order.purpose)
+    }
+
+    private fun HBCIJob<*>.setScheduleParams(schedule: StandingOrderSchedule) {
+        setParam("firstdate", schedule.firstDate.toDate())
+        setParam("timeunit", schedule.timeUnit)
+        setParam("turnus", schedule.step)
+        setParam("execday", schedule.executionDay)
+        schedule.lastDate?.let { setParam("lastdate", it.toDate()) }
+    }
+
     private fun <T> withHandler(connection: FinTSConnection, interaction: BankingInteraction, block: (HBCIHandler) -> T): T {
         connection.passportFile.parentFile?.mkdirs()
         val callback = FinDeskHbciCallback(connection, interaction)
@@ -139,6 +245,9 @@ class Hbci4JavaGateway : FinTSGateway {
 
     private fun unwrap(e: Throwable, callback: FinDeskHbciCallback): Throwable {
         generateSequence(e) { it.cause }.firstOrNull { it is BankingCancelledException }?.let { return it }
+        if (generateSequence(e) { it.cause }.any { it is JobNotSupportedException }) {
+            return UnsupportedOperationException("Your bank does not offer this order type over FinTS for this account.", e)
+        }
         val networkFailure = generateSequence(e) { it.cause }.any { it is java.io.IOException } ||
             callback.diagnostics.any { it.contains("Senden der HBCI-Nachricht") || it.contains("IOException") }
         if (networkFailure) {
