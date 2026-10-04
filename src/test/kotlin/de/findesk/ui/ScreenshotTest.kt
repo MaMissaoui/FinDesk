@@ -50,14 +50,20 @@ class ScreenshotTest {
             Frame(screen, dark)
         }
         try {
-            // Let LaunchedEffects start and IO-dispatched view model loads finish
-            var image = scene.render(0)
-            repeat(30) { i ->
+            // Let LaunchedEffects start and IO-dispatched view model loads finish. A fixed frame count raced cold
+            // loads (state landing in the last frame, half the screen recomposed), so wait until 10 frames in a
+            // row are identical, at least 1 s, at most 15 s.
+            var frame = 0L
+            fun next() = scene.render(frame++ * 16_000_000L).encodeToData(EncodedImageFormat.PNG)?.bytes ?: error("encode failed")
+            var png = next()
+            var stable = 0
+            while (frame < 150 && (frame < 10 || stable < 10)) {
                 Thread.sleep(100)
-                image = scene.render((i + 1) * 16_000_000L)
+                val current = next()
+                stable = if (current.contentEquals(png)) stable + 1 else 0
+                png = current
             }
-            val png = image.encodeToData(EncodedImageFormat.PNG) ?: error("encode failed")
-            File(outDir, "$name.png").writeBytes(png.bytes)
+            File(outDir, "$name.png").writeBytes(png)
         } finally {
             scene.close()
         }
