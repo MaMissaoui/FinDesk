@@ -129,6 +129,39 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
         }
 
         item {
+            SectionCard("Backup & restore", Modifier.fillMaxWidth()) {
+                Text(
+                    "A backup contains the database, all stored documents and the online-banking connection files.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(enabled = !state.isBusy, onClick = {
+                        FileDialogs.saveFile("Save backup", "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
+                    }) { Text("Create backup") }
+                    OutlinedButton(enabled = !state.isBusy && !state.hasPendingRestore, onClick = {
+                        FileDialogs.openFiles("Restore backup", setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
+                    }) { Text("Restore from backup…") }
+                    if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                }
+                if (state.hasPendingRestore) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("A restore is waiting. Restart FinDesk to apply it.", modifier = Modifier.weight(1f))
+                        TextButton(onClick = { vm.cancelPendingRestore() }) { Text("Cancel restore") }
+                    }
+                }
+                state.restoredFrom?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Backup restored at this start. Your previous data is in $it", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        item {
             SectionCard("Audit log (latest 100)", Modifier.fillMaxWidth()) {
                 state.auditLog.forEach { e ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
@@ -170,6 +203,20 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
                 newRule = false
                 editRule = null
             },
+        )
+    }
+    state.restoreCandidate?.let { (file, info) ->
+        AlertDialog(
+            onDismissRequest = vm::cancelRestoreChoice,
+            title = { Text("Restore ${file.name}?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Created ${info.created.take(16).replace('T', ' ')} · ${info.transactions} transactions · ${info.documents} documents")
+                    Text("On the next start, all current data is replaced by this backup. The current data is moved to a pre-restore folder, not deleted.")
+                }
+            },
+            confirmButton = { Button(onClick = { vm.confirmRestore() }) { Text("Prepare restore") } },
+            dismissButton = { TextButton(onClick = vm::cancelRestoreChoice) { Text("Cancel") } },
         )
     }
     confirmDeleteCategory?.let { c ->

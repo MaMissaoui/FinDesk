@@ -1,5 +1,6 @@
 package de.findesk.data.database
 
+import de.findesk.data.backup.BackupService
 import de.findesk.data.table.*
 import de.findesk.util.AppPaths
 import org.jetbrains.exposed.sql.Database
@@ -28,7 +29,13 @@ object DatabaseFactory {
             AuditLogTable,
         )
 
+    /** Folder holding the data replaced by a restore applied at this start, if any. */
+    var restoredFrom: File? = null
+        private set
+
     fun init(dataDir: String = getDefaultDataDir()) {
+        // A restore staged in Settings is applied before the database is opened
+        restoredFrom = BackupService(File(dataDir)).applyPendingRestore()
         val dbPath = File(dataDir, DB_NAME).absolutePath
         Database.connect("jdbc:sqlite:$dbPath", driver = "org.sqlite.JDBC")
 

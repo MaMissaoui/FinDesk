@@ -184,7 +184,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [ ] Budget planning and tracking
 - [ ] Recurring transaction detection
 - [ ] Multi-profile support (personal/business)
-- [ ] Backup and restore functionality
+- [x] Backup and restore functionality (ZIP with consistent DB copy, documents, passports; restore applied at next start, previous data kept)
 - [ ] Dark mode toggle
 - [ ] Keyboard shortcuts
 - [ ] Accessibility improvements

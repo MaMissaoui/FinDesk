@@ -26,6 +26,12 @@ data class SettingsState(
     val dataDirectory: String = "",
     val documentsDirectory: String = "",
     val isOcrAvailable: Boolean = false,
+    val hasPendingRestore: Boolean = false,
+    /** Set at startup when a restore was applied: where the replaced data was moved. */
+    val restoredFrom: String? = null,
+    /** Backup chosen for restore, waiting for confirmation. */
+    val restoreCandidate: Pair<java.io.File, de.findesk.data.backup.BackupService.BackupInfo>? = null,
+    val isBusy: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val message: String? = null,
@@ -39,6 +45,7 @@ class SettingsViewModel(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val dataDirectory: String = de.findesk.util.AppPaths.dataDir.absolutePath,
     private val isOcrAvailable: Boolean = false,
+    private val backupService: de.findesk.data.backup.BackupService = de.findesk.data.backup.BackupService(java.io.File(dataDirectory)),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(SettingsState())
@@ -66,6 +73,8 @@ class SettingsViewModel(
                 dataDirectory = dataDirectory,
                 documentsDirectory = DocumentService.defaultDocumentsDirectory().absolutePath,
                 isOcrAvailable = isOcrAvailable,
+                hasPendingRestore = backupService.hasPendingRestore,
+                restoredFrom = de.findesk.data.database.DatabaseFactory.restoredFrom?.absolutePath,
                 isLoading = false,
             )
         }
@@ -142,6 +151,44 @@ class SettingsViewModel(
     fun deleteRule(id: Int): Job = launchSafely(onError) {
         ruleRepository.delete(id)
         refresh()
+    }
+
+    fun createBackup(target: java.io.File): Job {
+        _state.update { it.copy(isBusy = true, error = null) }
+        return launchSafely({ e -> _state.update { it.copy(isBusy = false, error = e.userMessage()) } }) {
+            val info = backupService.createBackup(target)
+            auditLogRepository.log("BACKUP_CREATED", "user", "Backup ${target.name}: ${info.transactions} transactions, ${info.documents} documents")
+            refresh()
+            _state.update { it.copy(isBusy = false, message = "Backup saved to ${target.name} (${info.transactions} transactions, ${info.documents} documents)") }
+        }
+    }
+
+    /** Step 1: read the backup's manifest and ask for confirmation. Nothing changes yet. */
+    fun chooseRestore(backup: java.io.File): Job = launchSafely(onError) {
+        val info = backupService.inspect(backup)
+        _state.update { it.copy(restoreCandidate = backup to info) }
+    }
+
+    fun cancelRestoreChoice() {
+        _state.update { it.copy(restoreCandidate = null) }
+    }
+
+    /** Step 2: confirmed. Unpacks the backup; it replaces the current data on the next start. */
+    fun confirmRestore(): Job {
+        val (file, _) = _state.value.restoreCandidate ?: return Job().apply { complete() }
+        _state.update { it.copy(isBusy = true, restoreCandidate = null) }
+        return launchSafely({ e -> _state.update { it.copy(isBusy = false, error = e.userMessage()) } }) {
+            backupService.stageRestore(file)
+            auditLogRepository.log("RESTORE_STAGED", "user", "Restore from ${file.name} staged")
+            refresh()
+            _state.update { it.copy(isBusy = false, message = "Restore prepared. Restart FinDesk to finish; your current data will be kept in a pre-restore folder.") }
+        }
+    }
+
+    fun cancelPendingRestore(): Job = launchSafely(onError) {
+        backupService.cancelPendingRestore()
+        refresh()
+        _state.update { it.copy(message = "Pending restore cancelled") }
     }
 
     fun clearMessages() {
