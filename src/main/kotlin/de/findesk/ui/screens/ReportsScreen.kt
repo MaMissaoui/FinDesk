@@ -28,7 +28,10 @@ import java.util.Locale
 fun ReportsScreen() {
     val vm = rememberViewModel { ReportsViewModel() }
     val state by vm.state.collectAsState()
-    LaunchedEffect(Unit) { vm.loadTaxReport() }
+    LaunchedEffect(Unit) {
+        vm.loadTaxReport()
+        vm.loadRecurring()
+    }
     var selectedTab by remember { mutableStateOf(0) }
     val report = state.taxReport
 
@@ -83,12 +86,16 @@ fun ReportsScreen() {
 
         Spacer(Modifier.height(16.dp))
         TabRow(selectedTabIndex = selectedTab) {
-            listOf("Tax Summary", "Monthly Breakdown", "Category Analysis").forEachIndexed { i, label ->
+            listOf("Tax Summary", "Monthly Breakdown", "Category Analysis", "Recurring").forEachIndexed { i, label ->
                 Tab(selected = selectedTab == i, onClick = { selectedTab = i }, text = { Text(label) })
             }
         }
         Spacer(Modifier.height(24.dp))
 
+        if (selectedTab == 3) {
+            RecurringTab(state.recurring)
+            return@Column
+        }
         if (report == null) return@Column
         if (report.transactionCount == 0) {
             EmptyState(Icons.Default.Info, "No transactions in ${report.title}", "Reports are built from the transactions of the selected period.")
@@ -248,4 +255,50 @@ private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (Local
     OutlinedTextField(fromText, { fromText = it }, label = { Text("From") }, singleLine = true, isError = from == null, modifier = Modifier.width(150.dp))
     OutlinedTextField(toText, { toText = it }, label = { Text("To") }, singleLine = true, isError = to == null, modifier = Modifier.width(150.dp))
     Button(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text("Apply") }
+}
+
+@Composable
+private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.RecurringPayment>) {
+    if (recurring.isEmpty()) {
+        EmptyState(Icons.Default.Refresh, "No recurring bookings found", "Detected from the last 13 months once something repeats at least three times (yearly: twice).")
+        return
+    }
+    val payments = recurring.filter { !it.isIncome }
+    val yearlyCost = payments.fold(BigDecimal.ZERO) { a, r -> a + r.yearlyAmount.abs() }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatCard("Recurring payments", payments.size.toString(), Icons.Default.Refresh, PrimaryBlue, Modifier.weight(1f))
+                StatCard("Cost per year", Formats.money(yearlyCost), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard("Per month", Formats.money(yearlyCost.divide(BigDecimal(12), 2, RoundingMode.HALF_UP)), Icons.Default.DateRange, Warning, Modifier.weight(1f))
+            }
+        }
+        item {
+            SectionCard("Subscriptions, contracts and regular income", Modifier.fillMaxWidth()) {
+                Row(Modifier.fillMaxWidth()) {
+                    listOf("Name" to 3f, "Every" to 1f, "Next" to 1f, "Amount" to 1f, "Per year" to 1f).forEach { (h, w) ->
+                        Text(h, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(w))
+                    }
+                }
+                HorizontalDivider()
+                recurring.sortedByDescending { it.yearlyAmount.abs() }.forEach { r ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(3f)) {
+                            Text(r.name, fontWeight = FontWeight.Medium)
+                            Text(
+                                "${r.occurrences}x seen" + (r.categoryName?.let { " · $it" } ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(r.cadence.label, modifier = Modifier.weight(1f))
+                        Text(Formats.date(r.nextDate), modifier = Modifier.weight(1f))
+                        Text((if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, signed = true), color = if (r.isIncome) Success else Error, modifier = Modifier.weight(1f))
+                        Text(Formats.money(r.yearlyAmount.abs()), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    }
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
 }

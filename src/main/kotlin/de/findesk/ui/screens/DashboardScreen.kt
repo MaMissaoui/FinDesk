@@ -81,6 +81,31 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
+        if (state.upcoming.isNotEmpty()) {
+            item {
+                SectionCard("Upcoming in the next 30 days", Modifier.fillMaxWidth()) {
+                    state.upcoming.forEach { r ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(Formats.date(r.nextDate), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(100.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(r.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                Text(
+                                    r.cadence.label + (r.categoryName?.let { " · $it" } ?: "") + if (r.fixedAmount) "" else " · amount varies",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, signed = true),
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (r.isIncome) Success else Error,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         if (state.budgets.isNotEmpty()) {
             item {
                 SectionCard("Budgets this month", Modifier.fillMaxWidth()) {

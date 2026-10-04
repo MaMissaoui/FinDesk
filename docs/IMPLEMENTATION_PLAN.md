@@ -137,7 +137,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] **Dashboard Screen:** balance/income/expense widgets, recent transactions, expense donut, tax-deduction donut, income vs expenses bars, pending tasks
 - [x] **Accounts Screen:** banks with accounts and balances, add/edit balance/delete
   - [x] Account detail view with balance history chart (30/90/365 days, reconstructed from bookings)
-  - [ ] Upcoming payments section
+  - [x] Upcoming payments (Dashboard, from detected recurring bookings)
 - [x] **Transactions Screen:** filters (period, account, category, direction, text), inline category assignment, document indicator, manual entry, CSV export
   - [ ] Amount-range filter, detail panel
 - [x] **Categories & Rules:** category CRUD with tax-relevance and budget, regex rule editor
@@ -182,7 +182,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [ ] Multi-currency support
 - [ ] Import from other formats (CSV, QIF, OFX)
 - [ ] Budget planning and tracking
-- [ ] Recurring transaction detection
+- [x] Recurring transaction detection (weekly/monthly/quarterly/yearly; Reports "Recurring" tab with yearly cost)
 - [ ] Multi-profile support (personal/business)
 - [x] Backup and restore functionality (ZIP with consistent DB copy, documents, passports; restore applied at next start, previous data kept)
 - [ ] Dark mode toggle

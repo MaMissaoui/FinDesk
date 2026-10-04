@@ -17,6 +17,8 @@ data class ReportsState(
     /** Non-null: report over this custom range instead of [selectedYear]. */
     val customRange: Pair<LocalDate, LocalDate>? = null,
     val taxReport: ReportService.TaxReport? = null,
+    /** Detected over the last 13 months, independent of the selected period. */
+    val recurring: List<de.findesk.document.RecurringDetector.RecurringPayment> = emptyList(),
     val isLoading: Boolean = false,
     val isExporting: Boolean = false,
     val error: String? = null,
@@ -25,6 +27,7 @@ data class ReportsState(
 
 class ReportsViewModel(
     private val reportService: ReportService = ReportService(),
+    private val transactionRepository: de.findesk.repository.TransactionRepository = de.findesk.repository.TransactionRepositoryImpl(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(ReportsState())
@@ -41,6 +44,11 @@ class ReportsViewModel(
             // Ignore stale results if the year changed meanwhile
             _state.update { if (it.selectedYear == year && it.customRange == null) it.copy(taxReport = report, isLoading = false) else it }
         }
+    }
+
+    fun loadRecurring(today: LocalDate = LocalDate.now()): Job = launchSafely(onError) {
+        val txns = transactionRepository.findItems(de.findesk.model.TransactionFilter(startDate = today.minusDays(400), endDate = today))
+        _state.update { it.copy(recurring = de.findesk.document.RecurringDetector.detect(txns, today)) }
     }
 
     fun updateYear(year: Int): Job {

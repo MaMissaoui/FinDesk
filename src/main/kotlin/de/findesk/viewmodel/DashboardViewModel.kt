@@ -51,6 +51,8 @@ data class DashboardState(
     val taxDeductionsByCategory: List<ChartSlice> = emptyList(),
     val lastMonths: List<MonthBar> = emptyList(),
     val budgets: List<BudgetStatus> = emptyList(),
+    /** Recurring bookings expected in the next 30 days (or slightly overdue). */
+    val upcoming: List<de.findesk.document.RecurringDetector.RecurringPayment> = emptyList(),
     /** How far through the month we are (0..1), to judge budget pace. */
     val monthProgress: Float = 0f,
     val hasAccounts: Boolean = false,
@@ -115,6 +117,10 @@ class DashboardViewModel(
                     BudgetStatus(c.id, c.name, c.color, limit, thisMonthExpenses.filter { it.categoryId == c.id }.sumOf { it.amount.abs() })
                 }.sortedByDescending { it.ratio },
                 monthProgress = now.dayOfMonth.toFloat() / now.lengthOfMonth(),
+                upcoming = de.findesk.document.RecurringDetector.upcoming(
+                    de.findesk.document.RecurringDetector.detect(transactionRepository.findItems(TransactionFilter(startDate = now.minusDays(400), endDate = now)), now),
+                    now,
+                ),
                 hasAccounts = accounts.isNotEmpty(),
                 isLoading = false,
             )
