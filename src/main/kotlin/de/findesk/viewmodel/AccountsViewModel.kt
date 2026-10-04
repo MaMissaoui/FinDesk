@@ -17,12 +17,22 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.math.BigDecimal
 
+data class AccountDetail(
+    val account: AccountItem,
+    val days: Int,
+    val history: List<Pair<java.time.LocalDate, BigDecimal>>,
+    val recent: List<de.findesk.model.TransactionItem>,
+    val incomeInPeriod: BigDecimal,
+    val expensesInPeriod: BigDecimal,
+)
+
 data class AccountsState(
     val accounts: List<AccountItem> = emptyList(),
     val bankAccesses: List<BankAccessItem> = emptyList(),
     val isLoading: Boolean = false,
     /** Bank access currently syncing, if any. */
     val syncingBankId: Int? = null,
+    val detail: AccountDetail? = null,
     val syncStep: String? = null,
     val error: String? = null,
     val message: String? = null,
@@ -35,6 +45,8 @@ class AccountsViewModel(
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val bankingService: BankingService = BankingService(),
+    private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
+    private val today: () -> java.time.LocalDate = { java.time.LocalDate.now() },
     val bankingInteraction: UiBankingInteraction = UiBankingInteraction(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
@@ -124,6 +136,32 @@ class AccountsViewModel(
         auditLogRepository.log("DELETE_BANK_ACCESS", "user", "Deleted bank access $bankAccessId")
         refresh()
         _state.update { it.copy(message = "Bank removed") }
+    }
+
+    /** Opens the detail view: balance history over [days] days plus recent bookings. */
+    fun openDetail(accountId: Int, days: Int = 90): Job = launchSafely(onError) {
+        val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: return@launchSafely
+        val to = today()
+        val from = to.minusDays(days.toLong() - 1)
+        // Everything from the window start on, including bookings dated after today, to rewind the balance
+        val txns = transactionRepository.findItems(de.findesk.model.TransactionFilter(startDate = from, accountId = accountId))
+        val inWindow = txns.filter { !it.date.isAfter(to) }
+        _state.update {
+            it.copy(
+                detail = AccountDetail(
+                    account = account,
+                    days = days,
+                    history = de.findesk.util.BalanceHistory.compute(account.balance, txns, from, to),
+                    recent = inWindow.take(15),
+                    incomeInPeriod = inWindow.filter { t -> t.amount.signum() > 0 }.sumOf { t -> t.amount },
+                    expensesInPeriod = inWindow.filter { t -> t.isExpense }.sumOf { t -> t.amount.abs() },
+                ),
+            )
+        }
+    }
+
+    fun closeDetail() {
+        _state.update { it.copy(detail = null) }
     }
 
     /** Bank name, BIC and FinTS URL from the bundled directory, for pre-filling the add-bank dialog. */

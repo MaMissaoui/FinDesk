@@ -98,7 +98,8 @@ class SettingsViewModel(
             categoryRepository.create(name.trim(), color, budgetLimit, isTaxRelevant)
             auditLogRepository.log("ADD_CATEGORY", "user", "Added category ${name.trim()}")
         } else {
-            categoryRepository.update(id, name.trim(), color, budgetLimit, isTaxRelevant)
+            categoryRepository.update(id, name.trim(), color, isTaxRelevant = isTaxRelevant)
+            categoryRepository.setBudget(id, budgetLimit) // update() can't clear a budget
             auditLogRepository.log("UPDATE_CATEGORY", "user", "Updated category ${name.trim()}")
         }
         refresh()

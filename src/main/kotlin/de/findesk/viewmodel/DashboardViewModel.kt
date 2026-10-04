@@ -28,6 +28,18 @@ data class MonthBar(
     val expenses: BigDecimal,
 )
 
+data class BudgetStatus(
+    val categoryId: Int,
+    val categoryName: String,
+    val color: String?,
+    val limit: BigDecimal,
+    val spent: BigDecimal,
+) {
+    val ratio: Float get() = if (limit.signum() > 0) spent.toFloat() / limit.toFloat() else 0f
+    val remaining: BigDecimal get() = limit - spent
+    val isOver: Boolean get() = spent > limit
+}
+
 data class DashboardState(
     val totalBalance: BigDecimal = BigDecimal.ZERO,
     val monthlyIncome: BigDecimal = BigDecimal.ZERO,
@@ -38,6 +50,9 @@ data class DashboardState(
     val expensesByCategory: List<ChartSlice> = emptyList(),
     val taxDeductionsByCategory: List<ChartSlice> = emptyList(),
     val lastMonths: List<MonthBar> = emptyList(),
+    val budgets: List<BudgetStatus> = emptyList(),
+    /** How far through the month we are (0..1), to judge budget pace. */
+    val monthProgress: Float = 0f,
     val hasAccounts: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -49,6 +64,7 @@ class DashboardViewModel(
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val documentRepository: DocumentRepository = DocumentRepositoryImpl(),
+    private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
     private val today: () -> LocalDate = { LocalDate.now() },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
@@ -94,6 +110,11 @@ class DashboardViewModel(
                 expensesByCategory = slices(thisMonthExpenses),
                 taxDeductionsByCategory = slices(window.filter { it.isExpense && it.isTaxRelevant && !it.date.isBefore(yearStart) }),
                 lastMonths = lastMonths,
+                budgets = categoryRepository.findAllItems().mapNotNull { c ->
+                    val limit = c.budgetLimit?.takeIf { it.signum() > 0 } ?: return@mapNotNull null
+                    BudgetStatus(c.id, c.name, c.color, limit, thisMonthExpenses.filter { it.categoryId == c.id }.sumOf { it.amount.abs() })
+                }.sortedByDescending { it.ratio },
+                monthProgress = now.dayOfMonth.toFloat() / now.lengthOfMonth(),
                 hasAccounts = accounts.isNotEmpty(),
                 isLoading = false,
             )

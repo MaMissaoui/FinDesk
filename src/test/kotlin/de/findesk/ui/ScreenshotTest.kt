@@ -38,10 +38,11 @@ class ScreenshotTest {
             render("${screen.ordinal}-${screen.name.lowercase()}", screen, dark = false)
         }
         render("9-dashboard-dark", Screen.DASHBOARD, dark = true)
+        render("8-dashboard-full", Screen.DASHBOARD, dark = false, height = 1800)
     }
 
-    private fun render(name: String, screen: Screen, dark: Boolean) {
-        val scene = ImageComposeScene(width = 1440, height = 900, density = Density(1f)) {
+    private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) {
+        val scene = ImageComposeScene(width = 1440, height = height, density = Density(1f)) {
             Frame(screen, dark)
         }
         try {

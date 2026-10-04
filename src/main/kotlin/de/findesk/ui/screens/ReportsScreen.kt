@@ -19,6 +19,7 @@ import de.findesk.util.Formats
 import de.findesk.viewmodel.ReportsViewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
 import java.time.Month
 import java.time.format.TextStyle
 import java.util.Locale
@@ -40,7 +41,7 @@ fun ReportsScreen() {
             }
             OutlinedButton(
                 enabled = !state.isExporting,
-                onClick = { FileDialogs.saveFile("Export transactions", "findesk-${state.selectedYear}.csv")?.let { vm.exportToCsv(it) } },
+                onClick = { FileDialogs.saveFile("Export transactions", "findesk-${fileSuffix(state.customRange, state.selectedYear)}.csv")?.let { vm.exportToCsv(it) } },
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -49,7 +50,7 @@ fun ReportsScreen() {
             Spacer(Modifier.width(8.dp))
             Button(
                 enabled = !state.isExporting,
-                onClick = { FileDialogs.saveFile("Export tax report", "tax-report-${state.selectedYear}.pdf")?.let { vm.exportToPdf(it) } },
+                onClick = { FileDialogs.saveFile("Export report", "report-${fileSuffix(state.customRange, state.selectedYear)}.pdf")?.let { vm.exportToPdf(it) } },
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
@@ -60,11 +61,23 @@ fun ReportsScreen() {
         Spacer(Modifier.height(16.dp))
         MessageBanner(state.message, state.error, vm::clearMessages)
 
+        var customMode by remember { mutableStateOf(state.customRange != null) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("Tax Year:", style = MaterialTheme.typography.titleMedium)
-            IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = "Previous year") }
-            Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = "Next year") }
+            FilterChip(selected = !customMode, onClick = {
+                customMode = false
+                vm.updateYear(state.selectedYear)
+            }, label = { Text("Tax year") })
+            FilterChip(selected = customMode, onClick = { customMode = true }, label = { Text("Custom range") })
+            if (!customMode) {
+                IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = "Previous year") }
+                Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = "Next year") }
+            } else {
+                DateRangeInputs(
+                    initial = state.customRange ?: (LocalDate.now().withDayOfMonth(1).minusMonths(2) to LocalDate.now()),
+                    onApply = { from, to -> vm.setCustomRange(from, to) },
+                )
+            }
             if (state.isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
         }
 
@@ -78,7 +91,7 @@ fun ReportsScreen() {
 
         if (report == null) return@Column
         if (report.transactionCount == 0) {
-            EmptyState(Icons.Default.Info, "No transactions in ${report.year}", "Reports are built from the transactions of the selected year.")
+            EmptyState(Icons.Default.Info, "No transactions in ${report.title}", "Reports are built from the transactions of the selected period.")
             return@Column
         }
         when (selectedTab) {
@@ -136,7 +149,7 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
 
 @Composable
 private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
-    SectionCard("Monthly Income & Expenses - ${report.year}", Modifier.fillMaxWidth()) {
+    SectionCard("Monthly Income & Expenses - ${report.title}", Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth()) {
             listOf("Month", "Income", "Expenses", "Net").forEachIndexed { i, h ->
                 Text(
@@ -152,7 +165,7 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
         LazyColumn {
             itemsIndexed(report.monthlyBreakdown) { _, m ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                    Text(monthName(m.month, TextStyle.FULL), modifier = Modifier.weight(1f))
+                    Text(monthName(m.month, TextStyle.FULL) + if (report.isCalendarYear) "" else " ${m.year}", modifier = Modifier.weight(1f))
                     Text(Formats.money(m.income), color = Success, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                     Text(Formats.money(m.expenses), color = Error, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                     Text(
@@ -221,3 +234,18 @@ private fun StatItem(label: String, value: String) {
 }
 
 private fun monthName(month: Int, style: TextStyle) = Month.of(month).getDisplayName(style, Locale.ENGLISH)
+
+private fun fileSuffix(range: Pair<LocalDate, LocalDate>?, year: Int) = range?.let { "${it.first}_${it.second}" } ?: year.toString()
+
+@Composable
+private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (LocalDate, LocalDate) -> Unit) {
+    val fmt = remember { java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+    var fromText by remember { mutableStateOf(initial.first.format(fmt)) }
+    var toText by remember { mutableStateOf(initial.second.format(fmt)) }
+    fun parse(s: String) = runCatching { LocalDate.parse(s.trim(), fmt) }.getOrNull()
+    val from = parse(fromText)
+    val to = parse(toText)
+    OutlinedTextField(fromText, { fromText = it }, label = { Text("From") }, singleLine = true, isError = from == null, modifier = Modifier.width(150.dp))
+    OutlinedTextField(toText, { toText = it }, label = { Text("To") }, singleLine = true, isError = to == null, modifier = Modifier.width(150.dp))
+    Button(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text("Apply") }
+}

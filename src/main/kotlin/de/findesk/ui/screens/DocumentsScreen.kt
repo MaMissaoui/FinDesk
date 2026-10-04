@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -186,6 +187,20 @@ private fun DocumentDetail(
                 OutlinedButton(onClick = { openExternally(File(doc.filePath)) }) { Text("Open") }
                 OutlinedButton(onClick = onReprocess) { Text("Re-extract text") }
                 OutlinedButton(onClick = onDelete) { Text("Delete") }
+            }
+
+            val preview by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, doc.id) {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    de.findesk.document.DocumentPreview.render(File(doc.filePath))?.toComposeImageBitmap()
+                }
+            }
+            preview?.let {
+                androidx.compose.foundation.Image(
+                    bitmap = it,
+                    contentDescription = "Preview of ${doc.fileName}",
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).clickable { openExternally(File(doc.filePath)) },
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                )
             }
 
             Text("Linked transaction", style = MaterialTheme.typography.labelLarge)

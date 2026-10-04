@@ -23,7 +23,7 @@ class PdfReportExporter {
     fun export(report: ReportService.TaxReport, outputFile: File) {
         PDDocument().use { doc ->
             val writer = PageWriter(doc)
-            writer.text("FinDesk Tax Report ${report.year}", bold, 18f)
+            writer.text(if (report.isCalendarYear) "FinDesk Tax Report ${report.year}" else "FinDesk Report ${report.title}", bold, 18f)
             writer.text("Generated ${Formats.date(LocalDate.now())}", regular, 9f)
             writer.gap(12f)
 
@@ -45,7 +45,7 @@ class PdfReportExporter {
             writer.heading("Monthly breakdown")
             writer.row("Month", "Income / Expenses / Net", font = bold)
             report.monthlyBreakdown.forEach {
-                val name = Month.of(it.month).getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+                val name = Month.of(it.month).getDisplayName(TextStyle.FULL, Locale.ENGLISH) + if (report.isCalendarYear) "" else " ${it.year}"
                 writer.row(name, "${Formats.money(it.income)} / ${Formats.money(it.expenses)} / ${Formats.money(it.net)}")
             }
             writer.gap(10f)

@@ -17,6 +17,7 @@ import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.*
 import de.findesk.util.Formats
+import de.findesk.viewmodel.BudgetStatus
 import de.findesk.viewmodel.DashboardViewModel
 
 @Composable
@@ -80,6 +81,14 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
+        if (state.budgets.isNotEmpty()) {
+            item {
+                SectionCard("Budgets this month", Modifier.fillMaxWidth()) {
+                    state.budgets.forEach { b -> BudgetRow(b, state.monthProgress) }
+                }
+            }
+        }
+
         item {
             SectionCard("Tax-Deductible Expenses (year to date)", Modifier.fillMaxWidth()) {
                 if (state.taxDeductionsByCategory.isEmpty()) {
@@ -131,4 +140,32 @@ private fun RecentTransactionRow(txn: TransactionItem) {
         )
     }
     HorizontalDivider()
+}
+
+@Composable
+private fun BudgetRow(b: BudgetStatus, monthProgress: Float) {
+    // Over budget: red. Spending faster than the month is passing: amber.
+    val color = when {
+        b.isOver -> Error
+        b.ratio > monthProgress + 0.1f -> Warning
+        else -> categoryColor(b.color, b.categoryName)
+    }
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(b.categoryName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(
+                "${Formats.money(b.spent)} of ${Formats.money(b.limit)}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (b.isOver) Error else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        LinearProgressIndicator(progress = { b.ratio.coerceIn(0f, 1f) }, color = color, modifier = Modifier.fillMaxWidth())
+        Text(
+            if (b.isOver) "${Formats.money(b.spent - b.limit)} over budget" else "${Formats.money(b.remaining)} left",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (b.isOver) Error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }

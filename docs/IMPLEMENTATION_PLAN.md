@@ -46,7 +46,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 **Known gaps / next**
 - [x] Statement file import: CSV (Sparkasse, ING, DKB, generic; encoding/delimiter/header detection, adjustable mapping, pending rows skipped) and CAMT.053 XML/ZIP, with re-import dedup.
 - [ ] SQLCipher encryption for the database (data and passports are unencrypted at rest, except the passport passphrase-encrypted file).
-- [ ] Budget tracking per category (budget limits are stored but not yet evaluated).
+- [x] Budget tracking per category: dashboard card with spent/limit, over-budget and ahead-of-pace warnings.
 
 ---
 
@@ -136,12 +136,12 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 ### Deliverables
 - [x] **Dashboard Screen:** balance/income/expense widgets, recent transactions, expense donut, tax-deduction donut, income vs expenses bars, pending tasks
 - [x] **Accounts Screen:** banks with accounts and balances, add/edit balance/delete
-  - [ ] Account detail view with balance history chart
+  - [x] Account detail view with balance history chart (30/90/365 days, reconstructed from bookings)
   - [ ] Upcoming payments section
 - [x] **Transactions Screen:** filters (period, account, category, direction, text), inline category assignment, document indicator, manual entry, CSV export
   - [ ] Amount-range filter, detail panel
 - [x] **Categories & Rules:** category CRUD with tax-relevance and budget, regex rule editor
-  - [ ] Budget limits are stored but not evaluated
+  - [x] Budget limits evaluated on the dashboard
 - [x] ViewModel layer for state management
 - [x] Unit tests for business logic
 
@@ -169,10 +169,10 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] **Document Management:** upload (PDF, JPG, PNG, TIFF), local storage, search by name and text, link/unlink, open, delete
 - [x] **OCR Pipeline:** PDF text layer via PDFBox; Tesseract (tess4j, deu+eng) for images and scans, with confidence; searchable
 - [x] **Document-Transaction Matching:** suggestions from total and date found in the text; manual linking
-  - [ ] In-app receipt preview (opens in the system viewer instead)
+  - [x] In-app preview (images, first PDF page)
 - [x] **Tax Reports:** annual summary, tax-relevant deductions by category, PDF and CSV export
 - [x] **Reports & Analytics:** monthly breakdown, category shares, top vendors, category trends (service)
-  - [ ] Custom date range selection in Reports
+  - [x] Custom date range selection in Reports (incl. PDF/CSV export)
 
 ---
 

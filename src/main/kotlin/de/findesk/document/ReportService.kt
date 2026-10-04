@@ -45,7 +45,20 @@ class ReportService(
         }
     }
 
-    internal fun buildTaxReport(year: Int, transactions: List<TransactionItem>): TaxReport {
+    /** Same report for any inclusive date range (months may span years). */
+    suspend fun generateRangeReport(from: LocalDate, to: LocalDate): TaxReport = withContext(Dispatchers.IO) {
+        require(!from.isAfter(to)) { "Start date is after end date" }
+        _isLoading.value = true
+        try {
+            buildReport(from, to, transactionRepository.findItems(TransactionFilter(startDate = from, endDate = to)))
+        } finally {
+            _isLoading.value = false
+        }
+    }
+
+    internal fun buildTaxReport(year: Int, transactions: List<TransactionItem>): TaxReport = buildReport(LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), transactions)
+
+    internal fun buildReport(from: LocalDate, to: LocalDate, transactions: List<TransactionItem>): TaxReport {
         val income = transactions.filter { it.amount.signum() > 0 }
         val expenses = transactions.filter { it.isExpense }
 
@@ -54,17 +67,21 @@ class ReportService(
 
         val taxRelevant = expenses.filter { it.isTaxRelevant }
 
-        val monthlyBreakdown = (1..12).map { month ->
-            val monthTxns = transactions.filter { it.date.monthValue == month && it.date.year == year }
+        val months = generateSequence(java.time.YearMonth.from(from)) { it.plusMonths(1) }.takeWhile { !it.isAfter(java.time.YearMonth.from(to)) }.toList()
+        val monthlyBreakdown = months.map { ym ->
+            val monthTxns = transactions.filter { it.date.monthValue == ym.monthValue && it.date.year == ym.year }
             MonthlyData(
-                month = month,
+                year = ym.year,
+                month = ym.monthValue,
                 income = monthTxns.filter { it.amount.signum() > 0 }.sumOf { it.amount },
                 expenses = monthTxns.filter { it.isExpense }.sumOf { it.amount.abs() },
             )
         }
 
         return TaxReport(
-            year = year,
+            year = from.year,
+            from = from,
+            to = to,
             totalIncome = totalIncome,
             totalExpenses = totalExpenses,
             netIncome = totalIncome - totalExpenses,
@@ -203,11 +220,11 @@ class ReportService(
     }
 
     /** Convenience for exporting a whole year from the reports screen. */
-    suspend fun exportYearToCsv(year: Int, outputFile: File): Boolean {
+    suspend fun exportYearToCsv(year: Int, outputFile: File): Boolean = exportRangeToCsv(LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), outputFile)
+
+    suspend fun exportRangeToCsv(from: LocalDate, to: LocalDate, outputFile: File): Boolean {
         val transactions = withContext(Dispatchers.IO) {
-            transactionRepository.findItems(
-                TransactionFilter(startDate = LocalDate.of(year, 1, 1), endDate = LocalDate.of(year, 12, 31), direction = Direction.ALL),
-            )
+            transactionRepository.findItems(TransactionFilter(startDate = from, endDate = to, direction = Direction.ALL))
         }
         return exportToCsv(transactions, outputFile)
     }
@@ -228,6 +245,8 @@ class ReportService(
     // Data classes for reports
     data class TaxReport(
         val year: Int,
+        val from: LocalDate = LocalDate.of(year, 1, 1),
+        val to: LocalDate = LocalDate.of(year, 12, 31),
         val totalIncome: BigDecimal,
         val totalExpenses: BigDecimal,
         val netIncome: BigDecimal,
@@ -240,6 +259,11 @@ class ReportService(
         val categoriesUsed: Int = 0,
     ) {
         val taxRelevantTotal: BigDecimal get() = taxRelevantExpenses.values.fold(BigDecimal.ZERO, BigDecimal::add)
+
+        /** True for a full calendar year. */
+        val isCalendarYear: Boolean get() = from == LocalDate.of(year, 1, 1) && to == LocalDate.of(year, 12, 31)
+
+        val title: String get() = if (isCalendarYear) "$year" else "${de.findesk.util.Formats.date(from)} – ${de.findesk.util.Formats.date(to)}"
 
         companion object {
             fun empty(year: Int) = TaxReport(
@@ -270,6 +294,7 @@ class ReportService(
         val month: Int,
         val income: BigDecimal,
         val expenses: BigDecimal,
+        val year: Int = 0,
     ) {
         val net: BigDecimal get() = income - expenses
     }

@@ -16,6 +16,9 @@ interface CategoryRepository {
     fun update(id: Int, name: String? = null, color: String? = null, budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean? = null): Category?
     fun delete(id: Int): Boolean
     fun findAllItems(): List<CategoryItem>
+
+    /** Sets or clears (null) the monthly budget. */
+    fun setBudget(id: Int, budgetLimit: BigDecimal?): Boolean
 }
 
 class CategoryRepositoryImpl : CategoryRepository {
@@ -70,5 +73,9 @@ class CategoryRepositoryImpl : CategoryRepository {
 
     override fun findAllItems(): List<CategoryItem> = transaction {
         Category.all().orderBy(CategoriesTable.name to org.jetbrains.exposed.sql.SortOrder.ASC).map { it.toItem() }
+    }
+
+    override fun setBudget(id: Int, budgetLimit: BigDecimal?): Boolean = transaction {
+        Category.findById(id)?.apply { this.budgetLimit = budgetLimit } != null
     }
 }

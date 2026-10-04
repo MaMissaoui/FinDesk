@@ -119,3 +119,41 @@ private fun Legend(color: Color, label: String) {
         Text(label, style = MaterialTheme.typography.labelSmall)
     }
 }
+
+/** Simple line chart of dated values with min/max labels and a zero line when the range crosses zero. */
+@Composable
+fun BalanceLineChart(points: List<Pair<java.time.LocalDate, BigDecimal>>, modifier: Modifier = Modifier) {
+    if (points.size < 2) {
+        Text("Not enough data", modifier = modifier, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        return
+    }
+    val values = points.map { it.second.toFloat() }
+    val min = values.min()
+    val max = values.max()
+    val span = (max - min).takeIf { it > 0f } ?: 1f
+    val line = MaterialTheme.colorScheme.primary
+    val zero = MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+    val grid = MaterialTheme.colorScheme.outlineVariant
+
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(Formats.money(points.maxOf { it.second }), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+            Text("max", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Canvas(Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp)) {
+            fun y(v: Float) = size.height - (v - min) / span * size.height
+            drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), 1f)
+            if (min < 0f && max > 0f) drawLine(zero, Offset(0f, y(0f)), Offset(size.width, y(0f)), 1.5f)
+            val stepX = size.width / (points.size - 1)
+            val path = androidx.compose.ui.graphics.Path().apply {
+                values.forEachIndexed { i, v -> if (i == 0) moveTo(0f, y(v)) else lineTo(i * stepX, y(v)) }
+            }
+            drawPath(path, line, style = Stroke(width = 2.5f))
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Text(de.findesk.util.Formats.date(points.first().first), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+            Text("min ${Formats.money(points.minOf { it.second })}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(de.findesk.util.Formats.date(points.last().first), style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}

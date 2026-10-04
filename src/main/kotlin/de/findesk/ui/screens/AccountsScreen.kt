@@ -1,5 +1,6 @@
 package de.findesk.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +20,7 @@ import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.Error
 import de.findesk.util.Formats
+import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
 import java.math.BigDecimal
 
@@ -84,11 +86,23 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     onTransactions = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = it.id)) },
                     onEditBalance = { editBalance = it },
                     onDeleteAccount = { confirmDeleteAccount = it },
+                    onOpenAccount = { vm.openDetail(it.id) },
                 )
             }
         }
     }
 
+    state.detail?.let { detail ->
+        AccountDetailDialog(
+            detail = detail,
+            onDays = { vm.openDetail(detail.account.id, it) },
+            onAllTransactions = {
+                vm.closeDetail()
+                onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = detail.account.id))
+            },
+            onClose = vm::closeDetail,
+        )
+    }
     editConnection?.let { bank ->
         ConnectionDialog(
             bank = bank,
@@ -164,6 +178,7 @@ private fun BankCard(
     onTransactions: (AccountItem) -> Unit,
     onEditBalance: (AccountItem) -> Unit,
     onDeleteAccount: (AccountItem) -> Unit,
+    onOpenAccount: (AccountItem) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
         Column(Modifier.padding(16.dp)) {
@@ -207,7 +222,7 @@ private fun BankCard(
             }
             accounts.forEach { account ->
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { onOpenAccount(account) }) {
                     Column(Modifier.weight(1f)) {
                         Text(accountTypeLabel(account.accountType), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                         Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -376,5 +391,54 @@ private fun ConnectionDialog(
             ) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, onAllTransactions: () -> Unit, onClose: () -> Unit) {
+    val a = detail.account
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("${a.bankName} · ${accountTypeLabel(a.accountType)}") },
+        text = {
+            Column(Modifier.width(760.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(Formats.iban(a.iban), style = MaterialTheme.typography.bodySmall)
+                        Text(Formats.money(a.balance, a.currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    }
+                    listOf(30, 90, 365).forEach { d ->
+                        FilterChip(selected = detail.days == d, onClick = { onDays(d) }, label = { Text(if (d == 365) "1 year" else "$d days") })
+                        Spacer(Modifier.width(6.dp))
+                    }
+                }
+                Text(
+                    "Last ${detail.days} days: in ${Formats.money(detail.incomeInPeriod)} · out ${Formats.money(detail.expensesInPeriod)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                BalanceLineChart(detail.history, Modifier.fillMaxWidth().height(220.dp))
+                Text("Recent bookings", style = MaterialTheme.typography.labelLarge)
+                if (detail.recent.isEmpty()) Text("None in this period", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                detail.recent.forEach { t ->
+                    Row(Modifier.fillMaxWidth()) {
+                        Text(Formats.date(t.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
+                        Text(t.description, style = MaterialTheme.typography.bodySmall, maxLines = 1, modifier = Modifier.weight(1f))
+                        Text(
+                            Formats.money(t.amount, t.currency, signed = true),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (t.isExpense) Error else de.findesk.ui.theme.Success,
+                        )
+                    }
+                }
+                Text(
+                    "History is reconstructed from the current balance and the bookings FinDesk knows about.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onAllTransactions) { Text("All transactions") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
     )
 }

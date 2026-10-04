@@ -14,6 +14,8 @@ import java.time.LocalDate
 
 data class ReportsState(
     val selectedYear: Int = LocalDate.now().year,
+    /** Non-null: report over this custom range instead of [selectedYear]. */
+    val customRange: Pair<LocalDate, LocalDate>? = null,
     val taxReport: ReportService.TaxReport? = null,
     val isLoading: Boolean = false,
     val isExporting: Boolean = false,
@@ -37,11 +39,26 @@ class ReportsViewModel(
         return launchSafely(onError) {
             val report = reportService.generateTaxReport(year)
             // Ignore stale results if the year changed meanwhile
-            _state.update { if (it.selectedYear == year) it.copy(taxReport = report, isLoading = false) else it }
+            _state.update { if (it.selectedYear == year && it.customRange == null) it.copy(taxReport = report, isLoading = false) else it }
         }
     }
 
-    fun updateYear(year: Int): Job = loadTaxReport(year)
+    fun updateYear(year: Int): Job {
+        _state.update { it.copy(customRange = null) }
+        return loadTaxReport(year)
+    }
+
+    fun setCustomRange(from: LocalDate, to: LocalDate): Job {
+        if (from.isAfter(to)) {
+            _state.update { it.copy(error = "Start date is after end date") }
+            return Job().apply { complete() }
+        }
+        _state.update { it.copy(customRange = from to to, isLoading = true, error = null) }
+        return launchSafely(onError) {
+            val report = reportService.generateRangeReport(from, to)
+            _state.update { if (it.customRange == from to to) it.copy(taxReport = report, isLoading = false) else it }
+        }
+    }
 
     fun exportToPdf(file: File): Job {
         _state.update { it.copy(isExporting = true, error = null) }
@@ -57,7 +74,8 @@ class ReportsViewModel(
     fun exportToCsv(file: File): Job {
         _state.update { it.copy(isExporting = true, error = null) }
         return launchSafely(onError) {
-            val ok = reportService.exportYearToCsv(_state.value.selectedYear, file)
+            val range = _state.value.customRange
+            val ok = if (range != null) reportService.exportRangeToCsv(range.first, range.second, file) else reportService.exportYearToCsv(_state.value.selectedYear, file)
             _state.update {
                 it.copy(isExporting = false, message = if (ok) "Saved ${file.name}" else null, error = if (ok) null else "CSV export failed")
             }
