@@ -141,6 +141,10 @@ Add your bank by BLZ. Name, BIC and FinTS server are filled in from the bundled 
 
 > The FinTS integration has been tested against simulated banks only. Try your first sync with care.
 
+### Keyboard Shortcuts
+
+`Ctrl`/`⌘` + `1`–`7` opens Dashboard, Accounts, Transactions, Payments, Documents, Reports and Settings; `Ctrl`/`⌘` + `,` opens Settings.
+
 ### Database Location
 The SQLite database is stored at:
 - **macOS/Linux**: `~/.findesk/findesk.db`

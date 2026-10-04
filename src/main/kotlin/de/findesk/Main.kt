@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -17,6 +22,7 @@ import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.NavigationState
 import de.findesk.ui.navigation.Screen
+import de.findesk.ui.navigation.shortcutScreen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.viewmodel.SettingsViewModel
@@ -25,8 +31,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 @Preview
-fun App() {
-    val navigationState = remember { NavigationState() }
+fun App(navigationState: NavigationState = remember { NavigationState() }) {
     val settings = remember { SettingsRepositoryImpl() }
     val scope = rememberCoroutineScope()
     var isDarkTheme by remember {
@@ -78,11 +83,17 @@ fun main() = application {
     DatabaseFactory.init()
 
     val windowState = rememberWindowState()
+    val navigationState = remember { NavigationState() }
     Window(
         onCloseRequest = ::exitApplication,
+        onPreviewKeyEvent = { event ->
+            val target = if (event.type == KeyEventType.KeyDown) shortcutScreen(event.key, event.isCtrlPressed || event.isMetaPressed) else null
+            if (target != null) navigationState.navigateTo(target)
+            target != null
+        },
         title = "FinDesk - Your Financial Workspace",
         state = windowState,
     ) {
-        App()
+        App(navigationState)
     }
 }

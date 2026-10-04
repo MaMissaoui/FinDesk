@@ -180,13 +180,14 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [ ] SQLCipher encryption for database
 - [ ] Plugin system
 - [ ] Multi-currency support
-- [ ] Import from other formats (CSV, QIF, OFX)
-- [ ] Budget planning and tracking
+- [x] Import CSV and CAMT.053
+  - [ ] QIF, OFX, MT940 files
+- [x] Budget tracking (monthly limits per category)
 - [x] Recurring transaction detection (weekly/monthly/quarterly/yearly; Reports "Recurring" tab with yearly cost)
 - [ ] Multi-profile support (personal/business)
 - [x] Backup and restore functionality (ZIP with consistent DB copy, documents, passports; restore applied at next start, previous data kept)
-- [ ] Dark mode toggle
-- [ ] Keyboard shortcuts
+- [x] Dark mode toggle (persisted)
+- [x] Keyboard shortcuts (Ctrl/Cmd+1..7, Ctrl/Cmd+,)
 - [ ] Accessibility improvements
 
 ---

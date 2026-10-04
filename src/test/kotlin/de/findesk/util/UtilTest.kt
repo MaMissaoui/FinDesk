@@ -37,3 +37,15 @@ class UtilTest {
         assertEquals("DE89 3704 0044 0532 0130 00", Formats.iban("DE89370400440532013000"))
     }
 }
+
+class ShortcutTest {
+    @org.junit.jupiter.api.Test
+    fun `ctrl or cmd with digits navigates in sidebar order`() {
+        val k = androidx.compose.ui.input.key.Key
+        org.junit.jupiter.api.Assertions.assertEquals(de.findesk.ui.navigation.Screen.DASHBOARD, de.findesk.ui.navigation.shortcutScreen(k.One, true))
+        org.junit.jupiter.api.Assertions.assertEquals(de.findesk.ui.navigation.Screen.SETTINGS, de.findesk.ui.navigation.shortcutScreen(k.Seven, true))
+        org.junit.jupiter.api.Assertions.assertEquals(de.findesk.ui.navigation.Screen.SETTINGS, de.findesk.ui.navigation.shortcutScreen(k.Comma, true))
+        org.junit.jupiter.api.Assertions.assertNull(de.findesk.ui.navigation.shortcutScreen(k.One, false), "plain digits are typing")
+        org.junit.jupiter.api.Assertions.assertNull(de.findesk.ui.navigation.shortcutScreen(k.Eight, true))
+    }
+}

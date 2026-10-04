@@ -33,3 +33,22 @@ class NavigationState {
         currentScreen = screen
     }
 }
+
+/**
+ * Global shortcuts: Ctrl/Cmd+1..7 open the screens in sidebar order, Ctrl/Cmd+, opens Settings.
+ * Returns the screen to open, or null if the key isn't a shortcut.
+ */
+fun shortcutScreen(key: androidx.compose.ui.input.key.Key, ctrlOrMeta: Boolean): Screen? {
+    if (!ctrlOrMeta) return null
+    if (key == androidx.compose.ui.input.key.Key.Comma) return Screen.SETTINGS
+    val digits = listOf(
+        androidx.compose.ui.input.key.Key.One,
+        androidx.compose.ui.input.key.Key.Two,
+        androidx.compose.ui.input.key.Key.Three,
+        androidx.compose.ui.input.key.Key.Four,
+        androidx.compose.ui.input.key.Key.Five,
+        androidx.compose.ui.input.key.Key.Six,
+        androidx.compose.ui.input.key.Key.Seven,
+    )
+    return digits.indexOf(key).takeIf { it >= 0 }?.let { Screen.entries.getOrNull(it) }
+}
