@@ -2,6 +2,8 @@ package de.findesk.repository
 
 import de.findesk.data.entity.Category
 import de.findesk.data.table.CategoriesTable
+import de.findesk.model.CategoryItem
+import de.findesk.model.toItem
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.math.BigDecimal
 
@@ -13,6 +15,7 @@ interface CategoryRepository {
     fun create(name: String, color: String = "#3BC7B0", budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean = false): Category
     fun update(id: Int, name: String? = null, color: String? = null, budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean? = null): Category?
     fun delete(id: Int): Boolean
+    fun findAllItems(): List<CategoryItem>
 }
 
 class CategoryRepositoryImpl : CategoryRepository {
@@ -63,5 +66,9 @@ class CategoryRepositoryImpl : CategoryRepository {
 
     override fun delete(id: Int): Boolean = transaction {
         Category.findById(id)?.delete() != null
+    }
+
+    override fun findAllItems(): List<CategoryItem> = transaction {
+        Category.all().orderBy(CategoriesTable.name to org.jetbrains.exposed.sql.SortOrder.ASC).map { it.toItem() }
     }
 }

@@ -1,57 +1,107 @@
 package de.findesk.viewmodel
 
-import de.findesk.data.entity.Transaction
+import de.findesk.document.ReportService
+import de.findesk.model.TransactionFilter
+import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.math.BigDecimal
 import java.time.LocalDate
-import java.time.LocalDateTime
+
+data class ChartSlice(
+    val label: String,
+    val amount: BigDecimal,
+    val color: String?,
+)
+
+data class MonthBar(
+    val year: Int,
+    val month: Int,
+    val income: BigDecimal,
+    val expenses: BigDecimal,
+)
 
 data class DashboardState(
     val totalBalance: BigDecimal = BigDecimal.ZERO,
     val monthlyIncome: BigDecimal = BigDecimal.ZERO,
     val monthlyExpenses: BigDecimal = BigDecimal.ZERO,
-    val pendingTasks: Int = 0,
-    val recentTransactions: List<Transaction> = emptyList(),
-    val expensesByCategory: Map<String, BigDecimal> = emptyMap(),
+    val uncategorizedCount: Int = 0,
+    val unlinkedDocumentCount: Int = 0,
+    val recentTransactions: List<TransactionItem> = emptyList(),
+    val expensesByCategory: List<ChartSlice> = emptyList(),
+    val taxDeductionsByCategory: List<ChartSlice> = emptyList(),
+    val lastMonths: List<MonthBar> = emptyList(),
+    val hasAccounts: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
-)
+) {
+    val pendingTasks: Int get() = uncategorizedCount + unlinkedDocumentCount
+}
 
 class DashboardViewModel(
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
-) {
+    private val documentRepository: DocumentRepository = DocumentRepositoryImpl(),
+    private val today: () -> LocalDate = { LocalDate.now() },
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(DashboardState())
     val state: StateFlow<DashboardState> = _state.asStateFlow()
 
-    fun loadDashboard() {
-        _state.value = _state.value.copy(isLoading = true, error = null)
-        try {
-            val now = LocalDate.now()
-            val totalBalance = accountRepository.getTotalBalance()
-            val monthlyIncome = transactionRepository.getMonthlyTotal(now.year, now.monthValue)
-            val monthlyExpenses = transactionRepository.getMonthlyTotal(now.year, now.monthValue)
-            val recentTransactions = transactionRepository.findRecent(10)
-            val expensesByCategory = transactionRepository.getMonthlyByCategory(now.year, now.monthValue)
+    fun loadDashboard(): Job {
+        _state.update { it.copy(isLoading = true, error = null) }
+        return launchSafely({ e -> _state.update { it.copy(isLoading = false, error = e.userMessage()) } }) {
+            val now = today()
+            val monthStart = now.withDayOfMonth(1)
+            val monthEnd = monthStart.plusMonths(1).minusDays(1)
+            val sixMonthsStart = monthStart.minusMonths(5)
+            val yearStart = now.withDayOfYear(1)
+
+            val accounts = accountRepository.findAllItems()
+            val recent = transactionRepository.findItems(limit = 8)
+            // One query covering both the 6-month chart and the year-to-date tax chart
+            val window = transactionRepository.findItems(
+                TransactionFilter(startDate = minOf(sixMonthsStart, yearStart), endDate = monthEnd),
+            )
+            val thisMonth = window.filter { !it.date.isBefore(monthStart) && !it.date.isAfter(monthEnd) }
+            val thisMonthExpenses = thisMonth.filter { it.isExpense }
+
+            val lastMonths = (0 until 6).map { i ->
+                val m = sixMonthsStart.plusMonths(i.toLong())
+                val txns = window.filter { it.date.year == m.year && it.date.monthValue == m.monthValue }
+                MonthBar(
+                    year = m.year,
+                    month = m.monthValue,
+                    income = txns.filter { it.amount.signum() > 0 }.sumOf { it.amount },
+                    expenses = txns.filter { it.isExpense }.sumOf { it.amount.abs() },
+                )
+            }
 
             _state.value = DashboardState(
-                totalBalance = totalBalance,
-                monthlyIncome = monthlyIncome,
-                monthlyExpenses = monthlyExpenses,
-                pendingTasks = 0,
-                recentTransactions = recentTransactions,
-                expensesByCategory = expensesByCategory,
+                totalBalance = accounts.fold(BigDecimal.ZERO) { acc, a -> acc + a.balance },
+                monthlyIncome = thisMonth.filter { it.amount.signum() > 0 }.sumOf { it.amount },
+                monthlyExpenses = thisMonthExpenses.sumOf { it.amount.abs() },
+                uncategorizedCount = thisMonth.count { it.categoryId == null },
+                unlinkedDocumentCount = documentRepository.findItems(unlinkedOnly = true).size,
+                recentTransactions = recent,
+                expensesByCategory = slices(thisMonthExpenses),
+                taxDeductionsByCategory = slices(window.filter { it.isExpense && it.isTaxRelevant && !it.date.isBefore(yearStart) }),
+                lastMonths = lastMonths,
+                hasAccounts = accounts.isNotEmpty(),
                 isLoading = false,
-            )
-        } catch (e: Exception) {
-            _state.value = _state.value.copy(
-                isLoading = false,
-                error = e.message ?: "Unknown error",
             )
         }
     }
+
+    private fun slices(expenses: List<TransactionItem>): List<ChartSlice> = expenses
+        .groupBy { it.categoryName ?: ReportService.UNCATEGORIZED }
+        .map { (name, txns) -> ChartSlice(name, txns.sumOf { it.amount.abs() }, txns.first().categoryColor) }
+        .sortedByDescending { it.amount }
 }

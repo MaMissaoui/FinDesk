@@ -1,17 +1,18 @@
 package de.findesk.document
 
-import de.findesk.data.entity.Category
-import de.findesk.data.entity.Transaction
+import de.findesk.model.Direction
+import de.findesk.model.TransactionFilter
+import de.findesk.model.TransactionItem
 import de.findesk.repository.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
-import java.time.YearMonth
 
 /**
  * Service for generating tax reports and financial analytics
@@ -19,70 +20,62 @@ import java.time.YearMonth
 class ReportService(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
-    private val accountRepository: AccountRepository = AccountRepositoryImpl(),
+    private val pdfExporter: PdfReportExporter = PdfReportExporter(),
 ) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    companion object {
+        const val UNCATEGORIZED = "Uncategorized"
+        private const val UTF8_BOM = 0xFEFF
+    }
 
     /**
      * Generate annual tax report
      */
     suspend fun generateTaxReport(year: Int): TaxReport = withContext(Dispatchers.IO) {
         _isLoading.value = true
-
         try {
-            val startDate = LocalDate.of(year, 1, 1)
-            val endDate = LocalDate.of(year, 12, 31)
-            val transactions = transactionRepository.findByDateRange(startDate, endDate)
-
-            // Separate income and expenses
-            val income = transactions.filter { it.amount > BigDecimal.ZERO }
-            val expenses = transactions.filter { it.amount < BigDecimal.ZERO }
-
-            // Calculate totals
-            val totalIncome = income.sumOf { it.amount }
-            val totalExpenses = expenses.sumOf { it.amount.abs() }
-
-            // Group expenses by category
-            val expensesByCategory = expenses
-                .groupBy { it.category?.name ?: "Uncategorized" }
-                .mapValues { (_, txns) -> txns.sumOf { it.amount.abs() } }
-
-            // Get tax-relevant transactions
-            val taxRelevantCategories = categoryRepository.findTaxRelevant().map { it.name }
-            val taxRelevantExpenses = expenses
-                .filter { it.category?.name in taxRelevantCategories }
-                .groupBy { it.category?.name ?: "Uncategorized" }
-                .mapValues { (_, txns) -> txns.sumOf { it.amount.abs() } }
-
-            // Monthly breakdown
-            val monthlyBreakdown = (1..12).map { month ->
-                val monthTxns = transactions.filter {
-                    it.date.monthValue == month && it.date.year == year
-                }
-                MonthlyData(
-                    month = month,
-                    income = monthTxns.filter { it.amount > BigDecimal.ZERO }.sumOf { it.amount },
-                    expenses = monthTxns.filter { it.amount < BigDecimal.ZERO }.sumOf { it.amount.abs() },
-                )
-            }
-
-            _isLoading.value = false
-
-            TaxReport(
-                year = year,
-                totalIncome = totalIncome,
-                totalExpenses = totalExpenses,
-                netIncome = totalIncome - totalExpenses,
-                expensesByCategory = expensesByCategory,
-                taxRelevantExpenses = taxRelevantExpenses,
-                monthlyBreakdown = monthlyBreakdown,
-                transactionCount = transactions.size,
+            val transactions = transactionRepository.findItems(
+                TransactionFilter(startDate = LocalDate.of(year, 1, 1), endDate = LocalDate.of(year, 12, 31)),
             )
-        } catch (e: Exception) {
+            buildTaxReport(year, transactions)
+        } finally {
             _isLoading.value = false
-            TaxReport.empty(year)
         }
+    }
+
+    internal fun buildTaxReport(year: Int, transactions: List<TransactionItem>): TaxReport {
+        val income = transactions.filter { it.amount.signum() > 0 }
+        val expenses = transactions.filter { it.isExpense }
+
+        val totalIncome = income.sumOf { it.amount }
+        val totalExpenses = expenses.sumOf { it.amount.abs() }
+
+        val taxRelevant = expenses.filter { it.isTaxRelevant }
+
+        val monthlyBreakdown = (1..12).map { month ->
+            val monthTxns = transactions.filter { it.date.monthValue == month && it.date.year == year }
+            MonthlyData(
+                month = month,
+                income = monthTxns.filter { it.amount.signum() > 0 }.sumOf { it.amount },
+                expenses = monthTxns.filter { it.isExpense }.sumOf { it.amount.abs() },
+            )
+        }
+
+        return TaxReport(
+            year = year,
+            totalIncome = totalIncome,
+            totalExpenses = totalExpenses,
+            netIncome = totalIncome - totalExpenses,
+            expensesByCategory = sumByCategory(expenses),
+            taxRelevantExpenses = sumByCategory(taxRelevant),
+            taxRelevantTransactions = taxRelevant,
+            monthlyBreakdown = monthlyBreakdown,
+            topVendors = topVendors(expenses),
+            transactionCount = transactions.size,
+            categoriesUsed = transactions.mapNotNull { it.categoryId }.distinct().size,
+        )
     }
 
     /**
@@ -91,26 +84,20 @@ class ReportService(
     suspend fun generateMonthlyReport(year: Int, month: Int): MonthlyReport = withContext(Dispatchers.IO) {
         val startDate = LocalDate.of(year, month, 1)
         val endDate = startDate.plusMonths(1).minusDays(1)
-        val transactions = transactionRepository.findByDateRange(startDate, endDate)
+        val transactions = transactionRepository.findItems(TransactionFilter(startDate = startDate, endDate = endDate))
 
-        val income = transactions.filter { it.amount > BigDecimal.ZERO }.sumOf { it.amount }
-        val expenses = transactions.filter { it.amount < BigDecimal.ZERO }.sumOf { it.amount.abs() }
+        val income = transactions.filter { it.amount.signum() > 0 }.sumOf { it.amount }
+        val expenseTxns = transactions.filter { it.isExpense }
+        val expenses = expenseTxns.sumOf { it.amount.abs() }
 
-        val byCategory = transactions
-            .filter { it.amount < BigDecimal.ZERO }
-            .groupBy { it.category?.name ?: "Uncategorized" }
-            .mapValues { (_, txns) -> txns.sumOf { it.amount.abs() } }
-            .toSortedMap()
-
-        val topExpenses = transactions
-            .filter { it.amount < BigDecimal.ZERO }
+        val topExpenses = expenseTxns
             .sortedBy { it.amount }
             .take(10)
             .map {
                 ExpenseItem(
-                    description = it.partnerName ?: it.purpose ?: "Unknown",
+                    description = it.description,
                     amount = it.amount.abs(),
-                    category = it.category?.name ?: "Uncategorized",
+                    category = it.categoryName ?: UNCATEGORIZED,
                     date = it.date,
                 )
             }
@@ -121,53 +108,47 @@ class ReportService(
             totalIncome = income,
             totalExpenses = expenses,
             netAmount = income - expenses,
-            byCategory = byCategory,
+            byCategory = sumByCategory(expenseTxns).toSortedMap(),
             topExpenses = topExpenses,
             transactionCount = transactions.size,
         )
     }
 
     /**
-     * Generate category spending trends
+     * Generate category spending trends over the last [months] months (including the current one)
      */
     suspend fun getCategoryTrends(
         categoryId: Int,
         months: Int = 12,
+        today: LocalDate = LocalDate.now(),
     ): CategoryTrend = withContext(Dispatchers.IO) {
-        val category = categoryRepository.findById(categoryId)
-        val now = LocalDate.now()
-        val monthlyData = mutableListOf<MonthlyAmount>()
+        val category = categoryRepository.findAllItems().firstOrNull { it.id == categoryId }
+        val firstMonth = today.withDayOfMonth(1).minusMonths((months - 1).toLong())
+        val transactions = transactionRepository.findItems(
+            TransactionFilter(startDate = firstMonth, endDate = today, categoryId = categoryId),
+        )
 
-        for (i in months - 1 downTo 0) {
-            val month = now.minusMonths(i.toLong())
-            val startDate = month.withDayOfMonth(1)
-            val endDate = startDate.plusMonths(1).minusDays(1)
-
-            val transactions = transactionRepository.findByDateRange(startDate, endDate)
-                .filter { it.category?.id?.value == categoryId }
-
-            val total = transactions.sumOf { it.amount.abs() }
-
-            monthlyData.add(
-                MonthlyAmount(
-                    year = month.year,
-                    month = month.monthValue,
-                    amount = total,
-                ),
+        val monthlyData = (0 until months).map { i ->
+            val month = firstMonth.plusMonths(i.toLong())
+            MonthlyAmount(
+                year = month.year,
+                month = month.monthValue,
+                amount = transactions
+                    .filter { it.date.year == month.year && it.date.monthValue == month.monthValue }
+                    .sumOf { it.amount.abs() },
             )
         }
 
-        // Calculate trend
         val amounts = monthlyData.map { it.amount }
         val average = if (amounts.isNotEmpty()) {
-            amounts.reduce { acc, amount -> acc + amount } / BigDecimal(amounts.size)
+            amounts.fold(BigDecimal.ZERO, BigDecimal::add).divide(BigDecimal(amounts.size), 2, RoundingMode.HALF_UP)
         } else {
             BigDecimal.ZERO
         }
 
         val latest = amounts.lastOrNull() ?: BigDecimal.ZERO
-        val trend = if (average > BigDecimal.ZERO) {
-            ((latest - average) / average * BigDecimal(100)).setScale(1, RoundingMode.HALF_UP)
+        val trend = if (average.signum() > 0) {
+            (latest - average).multiply(BigDecimal(100)).divide(average, 1, RoundingMode.HALF_UP)
         } else {
             BigDecimal.ZERO
         }
@@ -182,22 +163,11 @@ class ReportService(
     }
 
     /**
-     * Export report to PDF
+     * Export the tax report to a PDF file
      */
-    suspend fun exportToPdf(report: TaxReport, outputFile: java.io.File): Boolean = withContext(Dispatchers.IO) {
-        // TODO: Implement PDF export using Apache PDFBox or iText
-        // 1. Create PDF document
-        // 2. Add header with FinDesk branding
-        // 3. Add summary tables
-        // 4. Add charts
-        // 5. Save to file
-
+    suspend fun exportToPdf(report: TaxReport, outputFile: File): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Placeholder
-            outputFile.writeText("Tax Report ${report.year}\n\n")
-            outputFile.appendText("Total Income: €${report.totalIncome}\n")
-            outputFile.appendText("Total Expenses: €${report.totalExpenses}\n")
-            outputFile.appendText("Net Income: €${report.netIncome}\n")
+            pdfExporter.export(report, outputFile)
             true
         } catch (e: Exception) {
             false
@@ -205,16 +175,25 @@ class ReportService(
     }
 
     /**
-     * Export report to CSV
+     * Export transactions to CSV (RFC 4180 quoting, UTF-8 with BOM so Excel detects the encoding)
      */
-    suspend fun exportToCsv(transactions: List<Transaction>, outputFile: java.io.File): Boolean = withContext(Dispatchers.IO) {
+    suspend fun exportToCsv(transactions: List<TransactionItem>, outputFile: File): Boolean = withContext(Dispatchers.IO) {
         try {
-            outputFile.bufferedWriter().use { writer ->
-                writer.write("Date,Description,Category,Amount,Currency")
-                writer.newLine()
+            outputFile.bufferedWriter(Charsets.UTF_8).use { writer ->
+                writer.write(UTF8_BOM)
+                writer.write(CsvFormat.row("Date", "Partner", "Purpose", "Category", "Amount", "Currency", "Account"))
                 transactions.forEach { txn ->
-                    writer.write("${txn.date},\"${txn.partnerName ?: txn.purpose ?: ""}\",\"${txn.category?.name ?: ""}\",${txn.amount},${txn.currency}")
-                    writer.newLine()
+                    writer.write(
+                        CsvFormat.row(
+                            txn.date.toString(),
+                            CsvFormat.text(txn.partnerName.orEmpty()),
+                            CsvFormat.text(txn.purpose.orEmpty()),
+                            CsvFormat.text(txn.categoryName.orEmpty()),
+                            txn.amount.toPlainString(),
+                            txn.currency,
+                            txn.accountIban,
+                        ),
+                    )
                 }
             }
             true
@@ -222,6 +201,29 @@ class ReportService(
             false
         }
     }
+
+    /** Convenience for exporting a whole year from the reports screen. */
+    suspend fun exportYearToCsv(year: Int, outputFile: File): Boolean {
+        val transactions = withContext(Dispatchers.IO) {
+            transactionRepository.findItems(
+                TransactionFilter(startDate = LocalDate.of(year, 1, 1), endDate = LocalDate.of(year, 12, 31), direction = Direction.ALL),
+            )
+        }
+        return exportToCsv(transactions, outputFile)
+    }
+
+    private fun sumByCategory(transactions: List<TransactionItem>): Map<String, BigDecimal> = transactions
+        .groupBy { it.categoryName ?: UNCATEGORIZED }
+        .mapValues { (_, txns) -> txns.sumOf { it.amount.abs() } }
+        .entries
+        .sortedByDescending { it.value }
+        .associate { it.key to it.value }
+
+    private fun topVendors(expenses: List<TransactionItem>, limit: Int = 5): List<Pair<String, BigDecimal>> = expenses
+        .groupBy { it.description }
+        .map { (name, txns) -> name to txns.sumOf { it.amount.abs() } }
+        .sortedByDescending { it.second }
+        .take(limit)
 
     // Data classes for reports
     data class TaxReport(
@@ -231,9 +233,14 @@ class ReportService(
         val netIncome: BigDecimal,
         val expensesByCategory: Map<String, BigDecimal>,
         val taxRelevantExpenses: Map<String, BigDecimal>,
+        val taxRelevantTransactions: List<TransactionItem> = emptyList(),
         val monthlyBreakdown: List<MonthlyData>,
+        val topVendors: List<Pair<String, BigDecimal>> = emptyList(),
         val transactionCount: Int,
+        val categoriesUsed: Int = 0,
     ) {
+        val taxRelevantTotal: BigDecimal get() = taxRelevantExpenses.values.fold(BigDecimal.ZERO, BigDecimal::add)
+
         companion object {
             fun empty(year: Int) = TaxReport(
                 year = year,
@@ -263,7 +270,9 @@ class ReportService(
         val month: Int,
         val income: BigDecimal,
         val expenses: BigDecimal,
-    )
+    ) {
+        val net: BigDecimal get() = income - expenses
+    }
 
     data class ExpenseItem(
         val description: String,
@@ -285,4 +294,17 @@ class ReportService(
         val month: Int,
         val amount: BigDecimal,
     )
+}
+
+internal object CsvFormat {
+    /** Neutralises spreadsheet formula injection (=, +, -, @) in free-text fields from bank data. */
+    fun text(field: String): String = if (field.isNotEmpty() && field[0] in "=+-@\t\r") "'$field" else field
+
+    fun row(vararg fields: String): String = fields.joinToString(",") { escape(it) } + "\r\n"
+
+    fun escape(field: String): String = if (field.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+        "\"" + field.replace("\"", "\"\"") + "\""
+    } else {
+        field
+    }
 }

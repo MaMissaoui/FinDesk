@@ -1,6 +1,12 @@
 package de.findesk.repository
 
 import de.findesk.data.entity.BankAccess
+import de.findesk.data.table.AccountsTable
+import de.findesk.data.table.BankAccessTable
+import de.findesk.model.BankAccessItem
+import de.findesk.model.toItem
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.LocalDateTime
 
@@ -12,6 +18,10 @@ interface BankAccessRepository {
     fun update(id: Int, bankName: String? = null, tanMethod: String? = null): BankAccess?
     fun delete(id: Int): Boolean
     fun updateLastSync(id: Int): BankAccess?
+    fun findAllItems(): List<BankAccessItem>
+
+    /** Deletes the bank access together with its accounts and their transactions. */
+    fun deleteWithAccounts(id: Int): Boolean
 }
 
 class BankAccessRepositoryImpl : BankAccessRepository {
@@ -52,5 +62,17 @@ class BankAccessRepositoryImpl : BankAccessRepository {
         BankAccess.findById(id)?.apply {
             lastSync = LocalDateTime.now()
         }
+    }
+
+    override fun findAllItems(): List<BankAccessItem> = transaction {
+        BankAccess.all().map { it.toItem() }
+    }
+
+    override fun deleteWithAccounts(id: Int): Boolean = transaction {
+        AccountsTable.select(AccountsTable.id)
+            .where { AccountsTable.bankAccessId eq id }
+            .map { it[AccountsTable.id].value }
+            .forEach { deleteAccountCascade(it) }
+        BankAccessTable.deleteWhere { BankAccessTable.id eq id } > 0
     }
 }

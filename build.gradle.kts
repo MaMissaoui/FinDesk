@@ -30,6 +30,12 @@ dependencies {
     // SQLite JDBC
     implementation("org.xerial:sqlite-jdbc:3.47.1.0")
 
+    // PDF text extraction and report export
+    implementation("org.apache.pdfbox:pdfbox:3.0.8")
+
+    // OCR (needs a native Tesseract install, e.g. `brew install tesseract tesseract-lang`)
+    implementation("net.sourceforge.tess4j:tess4j:5.20.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 

@@ -203,11 +203,7 @@ class FinTSClient(
         amount: BigDecimal,
         partnerName: String?,
         purpose: String?,
-    ): String {
-        val input = "$date|$amount|$partnerName|$purpose"
-        val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray())
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
+    ): String = transactionHash(date, amount, partnerName, purpose)
 
     /**
      * Get available TAN methods for a bank
@@ -228,4 +224,13 @@ class FinTSClient(
         val status: String,
         val tanRequired: Boolean = false,
     )
+
+    companion object {
+        /** SHA-256 over the fields that identify a booking; used for duplicate detection. */
+        fun transactionHash(date: LocalDate, amount: BigDecimal, partnerName: String?, purpose: String?): String {
+            val input = "$date|${amount.stripTrailingZeros().toPlainString()}|${partnerName.orEmpty()}|${purpose.orEmpty()}"
+            val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
+            return bytes.joinToString("") { "%02x".format(it) }
+        }
+    }
 }

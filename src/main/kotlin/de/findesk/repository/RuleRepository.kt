@@ -3,6 +3,8 @@ package de.findesk.repository
 import de.findesk.data.entity.Category
 import de.findesk.data.entity.Rule
 import de.findesk.data.table.RulesTable
+import de.findesk.model.RuleItem
+import de.findesk.model.toItem
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
 
@@ -16,6 +18,7 @@ interface RuleRepository {
     fun update(id: Int, pattern: String? = null, categoryId: Int? = null, priority: Int? = null, autoApply: Boolean? = null): Rule?
     fun delete(id: Int): Boolean
     fun matchTransaction(purpose: String?, partnerName: String?): Category?
+    fun findAllItems(): List<RuleItem>
 }
 
 class RuleRepositoryImpl : RuleRepository {
@@ -80,9 +83,19 @@ class RuleRepositoryImpl : RuleRepository {
 
     override fun matchTransaction(purpose: String?, partnerName: String?): Category? = transaction {
         val rules = findAutoApplyRules()
-        val textToMatch = "$purpose $partnerName".lowercase()
-        rules.firstOrNull { rule ->
-            rule.pattern.toRegex(RegexOption.IGNORE_CASE).containsMatchIn(textToMatch)
-        }?.category
+        val textToMatch = listOfNotNull(purpose, partnerName).joinToString(" ")
+        if (textToMatch.isBlank()) return@transaction null
+        rules.firstOrNull { rule -> ruleMatches(rule.pattern, textToMatch) }?.category
     }
+
+    override fun findAllItems(): List<RuleItem> = transaction {
+        Rule.all().orderBy(RulesTable.priority to SortOrder.DESC).map { it.toItem() }
+    }
+}
+
+/** Case-insensitive regex match; an invalid regex falls back to a plain substring match instead of throwing. */
+internal fun ruleMatches(pattern: String, text: String): Boolean = try {
+    pattern.toRegex(RegexOption.IGNORE_CASE).containsMatchIn(text)
+} catch (e: java.util.regex.PatternSyntaxException) {
+    text.contains(pattern, ignoreCase = true)
 }

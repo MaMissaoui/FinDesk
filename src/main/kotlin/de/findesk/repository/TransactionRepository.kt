@@ -3,9 +3,18 @@ package de.findesk.repository
 import de.findesk.data.entity.Account
 import de.findesk.data.entity.Category
 import de.findesk.data.entity.Transaction
+import de.findesk.data.table.CategoriesTable
+import de.findesk.data.table.DocumentsTable
 import de.findesk.data.table.TransactionsTable
+import de.findesk.model.Direction
+import de.findesk.model.TransactionFilter
+import de.findesk.model.TransactionItem
+import de.findesk.model.toItem
+import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -37,6 +46,9 @@ interface TransactionRepository {
     fun findByHash(hash: String): Transaction?
     fun getMonthlyTotal(year: Int, month: Int): BigDecimal
     fun getMonthlyByCategory(year: Int, month: Int): Map<String, BigDecimal>
+
+    /** Filtered, newest-first snapshot safe to use outside a transaction. */
+    fun findItems(filter: TransactionFilter = TransactionFilter(), limit: Int? = null): List<TransactionItem>
 }
 
 class TransactionRepositoryImpl : TransactionRepository {
@@ -75,7 +87,7 @@ class TransactionRepositoryImpl : TransactionRepository {
     override fun searchByText(searchText: String): List<Transaction> = transaction {
         val pattern = "%$searchText%"
         Transaction.find {
-            (TransactionsTable.partnerName like pattern)
+            (TransactionsTable.partnerName like pattern) or (TransactionsTable.purpose like pattern)
         }.orderBy(TransactionsTable.date to SortOrder.DESC).toList()
     }
 
@@ -148,5 +160,48 @@ class TransactionRepositoryImpl : TransactionRepository {
             (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate)
         }.groupBy { it.category?.name ?: "Uncategorized" }
             .mapValues { (_, transactions) -> transactions.sumOf { it.amount } }
+    }
+
+    override fun findItems(filter: TransactionFilter, limit: Int?): List<TransactionItem> = transaction {
+        val conditions = with(SqlExpressionBuilder) {
+            buildList<Op<Boolean>> {
+                filter.startDate?.let { add(TransactionsTable.date greaterEq it) }
+                filter.endDate?.let { add(TransactionsTable.date lessEq it) }
+                filter.accountId?.let { add(TransactionsTable.accountId eq it) }
+                filter.categoryId?.let { add(TransactionsTable.categoryId eq it) }
+                if (filter.uncategorizedOnly) add(TransactionsTable.categoryId.isNull())
+                if (filter.taxRelevantOnly) {
+                    add(
+                        TransactionsTable.categoryId inSubQuery
+                            CategoriesTable.select(CategoriesTable.id).where { CategoriesTable.isTaxRelevant eq true },
+                    )
+                }
+                when (filter.direction) {
+                    Direction.INCOME -> add(TransactionsTable.amount greater BigDecimal.ZERO)
+                    Direction.EXPENSES -> add(TransactionsTable.amount less BigDecimal.ZERO)
+                    Direction.ALL -> Unit
+                }
+                filter.text?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    val pattern = "%$it%"
+                    add((TransactionsTable.partnerName like pattern) or (TransactionsTable.purpose like pattern))
+                }
+            }
+        }
+        val where = conditions.reduceOrNull { a, b -> a and b }
+        val query = (if (where != null) Transaction.find(where) else Transaction.all())
+            .orderBy(TransactionsTable.date to SortOrder.DESC, TransactionsTable.id to SortOrder.DESC)
+        val transactions = (if (limit != null) query.limit(limit) else query).toList()
+
+        val ids = transactions.map { it.id }
+        val docCounts = if (ids.isEmpty()) {
+            emptyMap()
+        } else {
+            DocumentsTable.select(DocumentsTable.linkedTransactionId)
+                .where { DocumentsTable.linkedTransactionId inList ids }
+                .mapNotNull { it[DocumentsTable.linkedTransactionId]?.value }
+                .groupingBy { it }
+                .eachCount()
+        }
+        transactions.map { it.toItem(docCounts[it.id.value] ?: 0) }
     }
 }
