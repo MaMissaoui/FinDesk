@@ -28,30 +28,33 @@ class PdfReportExporter {
             writer.gap(12f)
 
             writer.heading("Summary")
-            writer.row("Total income", Formats.money(report.totalIncome))
-            writer.row("Total expenses", Formats.money(report.totalExpenses))
-            writer.row("Net income", Formats.money(report.netIncome))
-            writer.row("Tax-relevant expenses", Formats.money(report.taxRelevantTotal))
+            writer.row("Total income", Formats.money(report.totalIncome, report.currency))
+            writer.row("Total expenses", Formats.money(report.totalExpenses, report.currency))
+            writer.row("Net income", Formats.money(report.netIncome, report.currency))
+            writer.row("Tax-relevant expenses", Formats.money(report.taxRelevantTotal, report.currency))
             writer.row("Transactions", report.transactionCount.toString())
+            if (report.otherCurrencyBookings > 0) {
+                writer.text("All amounts in ${report.currency}. ${report.otherCurrencyBookings} booking(s) in other currencies are not included.", regular, 9f)
+            }
             writer.gap(10f)
 
             writer.heading("Tax-relevant expenses by category")
             if (report.taxRelevantExpenses.isEmpty()) {
                 writer.text("No categories are marked as tax-relevant.", regular, 10f)
             }
-            report.taxRelevantExpenses.forEach { (category, amount) -> writer.row(category, Formats.money(amount)) }
+            report.taxRelevantExpenses.forEach { (category, amount) -> writer.row(category, Formats.money(amount, report.currency)) }
             writer.gap(10f)
 
             writer.heading("Monthly breakdown")
             writer.row("Month", "Income / Expenses / Net", font = bold)
             report.monthlyBreakdown.forEach {
                 val name = Month.of(it.month).getDisplayName(TextStyle.FULL, Locale.ENGLISH) + if (report.isCalendarYear) "" else " ${it.year}"
-                writer.row(name, "${Formats.money(it.income)} / ${Formats.money(it.expenses)} / ${Formats.money(it.net)}")
+                writer.row(name, "${Formats.money(it.income, report.currency)} / ${Formats.money(it.expenses, report.currency)} / ${Formats.money(it.net, report.currency)}")
             }
             writer.gap(10f)
 
             writer.heading("Expenses by category")
-            report.expensesByCategory.forEach { (category, amount) -> writer.row(category, Formats.money(amount)) }
+            report.expensesByCategory.forEach { (category, amount) -> writer.row(category, Formats.money(amount, report.currency)) }
 
             if (report.taxRelevantTransactions.isNotEmpty()) {
                 writer.gap(10f)
@@ -59,7 +62,7 @@ class PdfReportExporter {
                 report.taxRelevantTransactions.sortedBy { it.date }.forEach {
                     writer.row(
                         "${Formats.date(it.date)}  ${it.description.take(55)}  (${it.categoryName.orEmpty()})",
-                        Formats.money(it.amount.abs()),
+                        Formats.money(it.amount.abs(), report.currency),
                     )
                 }
             }

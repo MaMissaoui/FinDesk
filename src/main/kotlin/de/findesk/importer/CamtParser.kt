@@ -55,7 +55,7 @@ object CamtParser {
         val date = date(child("BookgDt")) ?: date(child("ValDt")) ?: throw IllegalArgumentException("no booking date")
         val valueDate = date(child("ValDt"))
         val amtEl = child("Amt") ?: throw IllegalArgumentException("no amount")
-        val currency = amtEl.getAttribute("Ccy").ifEmpty { "EUR" }
+        val currency = amtEl.getAttribute("Ccy").ifEmpty { null }
         val debit = child("CdtDbtInd")?.textContent?.trim() == "DBIT"
         val entryRef = child("AcctSvcrRef")?.textContent?.trim()
 
@@ -75,7 +75,7 @@ object CamtParser {
         date: LocalDate,
         valueDate: LocalDate?,
         amount: BigDecimal,
-        currency: String,
+        currency: String?,
         tx: Element?,
         debit: Boolean,
         reference: String?,

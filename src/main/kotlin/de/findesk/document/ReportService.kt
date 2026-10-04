@@ -4,6 +4,7 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import de.findesk.util.Currencies
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,7 @@ class ReportService(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
     private val pdfExporter: PdfReportExporter = PdfReportExporter(),
+    private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
 ) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -39,7 +41,7 @@ class ReportService(
             val transactions = transactionRepository.findItems(
                 TransactionFilter(startDate = LocalDate.of(year, 1, 1), endDate = LocalDate.of(year, 12, 31)),
             )
-            buildTaxReport(year, transactions)
+            buildTaxReport(year, transactions, Currencies.primary(settingsRepository))
         } finally {
             _isLoading.value = false
         }
@@ -50,15 +52,17 @@ class ReportService(
         require(!from.isAfter(to)) { "Start date is after end date" }
         _isLoading.value = true
         try {
-            buildReport(from, to, transactionRepository.findItems(TransactionFilter(startDate = from, endDate = to)))
+            buildReport(from, to, transactionRepository.findItems(TransactionFilter(startDate = from, endDate = to)), Currencies.primary(settingsRepository))
         } finally {
             _isLoading.value = false
         }
     }
 
-    internal fun buildTaxReport(year: Int, transactions: List<TransactionItem>): TaxReport = buildReport(LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), transactions)
+    internal fun buildTaxReport(year: Int, transactions: List<TransactionItem>, currency: String = Currencies.DEFAULT): TaxReport = buildReport(LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), transactions, currency)
 
-    internal fun buildReport(from: LocalDate, to: LocalDate, transactions: List<TransactionItem>): TaxReport {
+    /** Totals cover bookings in [currency] only; the others are counted so the report can say they're missing. */
+    internal fun buildReport(from: LocalDate, to: LocalDate, all: List<TransactionItem>, currency: String = Currencies.DEFAULT): TaxReport {
+        val (transactions, otherCurrency) = all.partition { it.currency == currency }
         val income = transactions.filter { it.amount.signum() > 0 }
         val expenses = transactions.filter { it.isExpense }
 
@@ -92,6 +96,8 @@ class ReportService(
             topVendors = topVendors(expenses),
             transactionCount = transactions.size,
             categoriesUsed = transactions.mapNotNull { it.categoryId }.distinct().size,
+            currency = currency,
+            otherCurrencyBookings = otherCurrency.size,
         )
     }
 
@@ -101,7 +107,7 @@ class ReportService(
     suspend fun generateMonthlyReport(year: Int, month: Int): MonthlyReport = withContext(Dispatchers.IO) {
         val startDate = LocalDate.of(year, month, 1)
         val endDate = startDate.plusMonths(1).minusDays(1)
-        val transactions = transactionRepository.findItems(TransactionFilter(startDate = startDate, endDate = endDate))
+        val transactions = transactionRepository.findItems(TransactionFilter(startDate = startDate, endDate = endDate, currency = Currencies.primary(settingsRepository)))
 
         val income = transactions.filter { it.amount.signum() > 0 }.sumOf { it.amount }
         val expenseTxns = transactions.filter { it.isExpense }
@@ -142,7 +148,7 @@ class ReportService(
         val category = categoryRepository.findAllItems().firstOrNull { it.id == categoryId }
         val firstMonth = today.withDayOfMonth(1).minusMonths((months - 1).toLong())
         val transactions = transactionRepository.findItems(
-            TransactionFilter(startDate = firstMonth, endDate = today, categoryId = categoryId),
+            TransactionFilter(startDate = firstMonth, endDate = today, categoryId = categoryId, currency = Currencies.primary(settingsRepository)),
         )
 
         val monthlyData = (0 until months).map { i ->
@@ -257,6 +263,10 @@ class ReportService(
         val topVendors: List<Pair<String, BigDecimal>> = emptyList(),
         val transactionCount: Int,
         val categoriesUsed: Int = 0,
+        /** Currency of every amount in the report. */
+        val currency: String = Currencies.DEFAULT,
+        /** Bookings in the period that are in another currency and therefore not included. */
+        val otherCurrencyBookings: Int = 0,
     ) {
         val taxRelevantTotal: BigDecimal get() = taxRelevantExpenses.values.fold(BigDecimal.ZERO, BigDecimal::add)
 

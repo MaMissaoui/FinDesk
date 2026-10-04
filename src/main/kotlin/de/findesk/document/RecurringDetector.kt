@@ -35,6 +35,7 @@ object RecurringDetector {
         val nextDate: LocalDate,
         val occurrences: Int,
         val categoryName: String?,
+        val currency: String = "EUR",
     ) {
         val isIncome: Boolean get() = typicalAmount.signum() > 0
         val yearlyAmount: BigDecimal get() = typicalAmount.multiply(BigDecimal(cadence.perYear))
@@ -56,13 +57,13 @@ object RecurringDetector {
     /** Bookings in the next [days] days, earliest first. */
     fun upcoming(recurring: List<RecurringPayment>, today: LocalDate = LocalDate.now(), days: Long = 30): List<RecurringPayment> = recurring.filter { !it.nextDate.isAfter(today.plusDays(days)) }
 
-    /** Same counterparty and direction. Partner names are normalised ("NETFLIX.COM 1234" ~ "Netflix.com"). */
+    /** Same counterparty, direction and currency. Partner names are normalised ("NETFLIX.COM 1234" ~ "Netflix.com"). */
     private fun key(t: TransactionItem): String {
         val name = (t.partnerName ?: t.purpose ?: "").lowercase()
             .replace(Regex("\\d+"), " ") // reference numbers, dates
             .replace(Regex("[^\\p{L} ]"), " ")
             .split(' ').filter { it.length > 1 }.take(3).joinToString(" ")
-        return if (name.isBlank()) "" else "$name|${t.amount.signum()}"
+        return if (name.isBlank()) "" else "$name|${t.amount.signum()}|${t.currency}"
     }
 
     private fun analyse(group: List<TransactionItem>, today: LocalDate): RecurringPayment? {
@@ -96,6 +97,7 @@ object RecurringDetector {
             nextDate = next,
             occurrences = byDate.size,
             categoryName = last.categoryName,
+            currency = last.currency,
         )
     }
 }

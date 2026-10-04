@@ -6,6 +6,7 @@ import de.findesk.banking.BankingService
 import de.findesk.model.AccountItem
 import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
+import de.findesk.util.Currencies
 import de.findesk.util.Iban
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,8 +37,10 @@ data class AccountsState(
     val syncStep: String? = null,
     val error: String? = null,
     val message: String? = null,
+    val primaryCurrency: String = Currencies.DEFAULT,
 ) {
-    val totalBalance: BigDecimal get() = accounts.fold(BigDecimal.ZERO) { acc, a -> acc + a.balance }
+    /** Balances per currency, primary first; different currencies are never added up. */
+    val totals: Map<String, BigDecimal> get() = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
 }
 
 class AccountsViewModel(
@@ -46,6 +49,7 @@ class AccountsViewModel(
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val bankingService: BankingService = BankingService(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
+    private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
     private val today: () -> java.time.LocalDate = { java.time.LocalDate.now() },
     val bankingInteraction: UiBankingInteraction = UiBankingInteraction(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
@@ -63,7 +67,7 @@ class AccountsViewModel(
     private fun refresh() {
         val accounts = accountRepository.findAllItems()
         val bankAccesses = bankAccessRepository.findAllItems()
-        _state.update { it.copy(accounts = accounts, bankAccesses = bankAccesses, isLoading = false) }
+        _state.update { it.copy(accounts = accounts, bankAccesses = bankAccesses, isLoading = false, primaryCurrency = Currencies.primary(settingsRepository)) }
     }
 
     /** Validates input; returns an error message or null. Exposed for the dialog's inline validation. */

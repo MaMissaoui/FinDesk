@@ -4,6 +4,7 @@ import de.findesk.document.ReportService
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import de.findesk.util.Currencies
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,7 +42,11 @@ data class BudgetStatus(
 }
 
 data class DashboardState(
+    /** Currency of every total and chart below; other currencies are only listed in [otherBalances]. */
+    val currency: String = Currencies.DEFAULT,
     val totalBalance: BigDecimal = BigDecimal.ZERO,
+    /** Balances of accounts in other currencies, per currency (never added to [totalBalance]). */
+    val otherBalances: Map<String, BigDecimal> = emptyMap(),
     val monthlyIncome: BigDecimal = BigDecimal.ZERO,
     val monthlyExpenses: BigDecimal = BigDecimal.ZERO,
     val uncategorizedCount: Int = 0,
@@ -67,6 +72,7 @@ class DashboardViewModel(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val documentRepository: DocumentRepository = DocumentRepositoryImpl(),
     private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
+    private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
     private val today: () -> LocalDate = { LocalDate.now() },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
@@ -82,11 +88,13 @@ class DashboardViewModel(
             val sixMonthsStart = monthStart.minusMonths(5)
             val yearStart = now.withDayOfYear(1)
 
+            val currency = Currencies.primary(settingsRepository)
             val accounts = accountRepository.findAllItems()
+            val balances = Currencies.totals(accounts, currency, { it.currency }, { it.balance })
             val recent = transactionRepository.findItems(limit = 8)
             // One query covering both the 6-month chart and the year-to-date tax chart
             val window = transactionRepository.findItems(
-                TransactionFilter(startDate = minOf(sixMonthsStart, yearStart), endDate = monthEnd),
+                TransactionFilter(startDate = minOf(sixMonthsStart, yearStart), endDate = monthEnd, currency = currency),
             )
             val thisMonth = window.filter { !it.date.isBefore(monthStart) && !it.date.isAfter(monthEnd) }
             val thisMonthExpenses = thisMonth.filter { it.isExpense }
@@ -103,10 +111,13 @@ class DashboardViewModel(
             }
 
             _state.value = DashboardState(
-                totalBalance = accounts.fold(BigDecimal.ZERO) { acc, a -> acc + a.balance },
+                currency = currency,
+                totalBalance = balances[currency] ?: BigDecimal.ZERO,
+                otherBalances = balances - currency,
                 monthlyIncome = thisMonth.filter { it.amount.signum() > 0 }.sumOf { it.amount },
                 monthlyExpenses = thisMonthExpenses.sumOf { it.amount.abs() },
-                uncategorizedCount = thisMonth.count { it.categoryId == null },
+                // All currencies: the card opens the uncategorized list, which isn't limited to one currency
+                uncategorizedCount = transactionRepository.findItems(TransactionFilter(startDate = monthStart, endDate = monthEnd, uncategorizedOnly = true)).size,
                 unlinkedDocumentCount = documentRepository.findItems(unlinkedOnly = true).size,
                 recentTransactions = recent,
                 expensesByCategory = slices(thisMonthExpenses),

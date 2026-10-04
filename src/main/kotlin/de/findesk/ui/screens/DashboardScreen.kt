@@ -25,6 +25,7 @@ import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
+import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BudgetStatus
 import de.findesk.viewmodel.DashboardViewModel
@@ -60,9 +61,16 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
 
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TotalBalance], Formats.money(state.totalBalance), Icons.Default.AccountBox, PrimaryBlue, Modifier.weight(1f))
-                StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
-                StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(
+                    s[StringKey.TotalBalance],
+                    Formats.money(state.totalBalance, state.currency),
+                    Icons.Default.AccountBox,
+                    PrimaryBlue,
+                    Modifier.weight(1f),
+                    subtitle = state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
+                )
+                StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome, state.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
+                StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses, state.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
                 StatCard(
                     s[StringKey.PendingTasks],
                     state.pendingTasks.toString(),
@@ -89,11 +97,11 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     if (state.expensesByCategory.isEmpty()) {
                         Text(s[StringKey.NoExpensesThisMonth], color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        DonutChart(state.expensesByCategory, s[StringKey.ExpensesByCategory])
+                        DonutChart(state.expensesByCategory, s[StringKey.ExpensesByCategory], currency = state.currency)
                     }
                 }
                 SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(1f).fillMaxHeight()) {
-                    IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxSize())
+                    IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxSize(), currency = state.currency)
                 }
             }
         }
@@ -113,7 +121,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                                 )
                             }
                             Text(
-                                (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, signed = true),
+                                (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, r.currency, signed = true),
                                 fontWeight = FontWeight.SemiBold,
                                 color = amountColor(!r.isIncome),
                             )
@@ -126,7 +134,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         if (state.budgets.isNotEmpty()) {
             item {
                 SectionCard(s[StringKey.BudgetsThisMonth], Modifier.fillMaxWidth()) {
-                    state.budgets.forEach { b -> BudgetRow(b, state.monthProgress) }
+                    state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
                 }
             }
         }
@@ -139,7 +147,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    DonutChart(state.taxDeductionsByCategory, s[StringKey.TaxDeductibleYtd])
+                    DonutChart(state.taxDeductionsByCategory, s[StringKey.TaxDeductibleYtd], currency = state.currency)
                 }
             }
         }
@@ -186,7 +194,7 @@ private fun RecentTransactionRow(txn: TransactionItem) {
 }
 
 @Composable
-private fun BudgetRow(b: BudgetStatus, monthProgress: Float) {
+private fun BudgetRow(b: BudgetStatus, monthProgress: Float, currency: String) {
     val s = strings()
     // Over budget: red. Spending faster than the month is passing: amber.
     val color = when {
@@ -199,7 +207,7 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float) {
         Row(Modifier.fillMaxWidth()) {
             Text(b.categoryName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Text(
-                s.format(StringKey.SpentOfLimit, Formats.money(b.spent), Formats.money(b.limit)),
+                s.format(StringKey.SpentOfLimit, Formats.money(b.spent, currency), Formats.money(b.limit, currency)),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = if (b.isOver) overBudgetTextColor else MaterialTheme.colorScheme.onSurface,
@@ -208,7 +216,7 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float) {
         Spacer(Modifier.height(4.dp))
         LinearProgressIndicator(progress = { b.ratio.coerceIn(0f, 1f) }, color = color, modifier = Modifier.fillMaxWidth())
         Text(
-            if (b.isOver) s.format(StringKey.OverBudget, Formats.money(b.spent - b.limit)) else s.format(StringKey.LeftBudget, Formats.money(b.remaining)),
+            if (b.isOver) s.format(StringKey.OverBudget, Formats.money(b.spent - b.limit, currency)) else s.format(StringKey.LeftBudget, Formats.money(b.remaining, currency)),
             style = MaterialTheme.typography.bodySmall,
             color = if (b.isOver) overBudgetTextColor else MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -11,6 +11,7 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import de.findesk.util.Currencies
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -72,8 +73,9 @@ data class TransactionsState(
     val direction: Direction = Direction.ALL,
     val categoryFilter: CategoryFilter = CategoryFilter.Any,
     val accountId: Int? = null,
-    val totalIncome: BigDecimal = BigDecimal.ZERO,
-    val totalExpenses: BigDecimal = BigDecimal.ZERO,
+    /** Per currency: the list may mix accounts in different currencies, whose amounts can't be added. */
+    val totalIncome: Map<String, BigDecimal> = emptyMap(),
+    val totalExpenses: Map<String, BigDecimal> = emptyMap(),
     val importPreview: ImportPreview? = null,
     val minAmount: BigDecimal? = null,
     val maxAmount: BigDecimal? = null,
@@ -147,8 +149,8 @@ class TransactionsViewModel(
                 transactions = transactions,
                 categories = categories,
                 accounts = accounts,
-                totalIncome = transactions.filter { t -> t.amount.signum() > 0 }.sumOf { t -> t.amount },
-                totalExpenses = transactions.filter { t -> t.isExpense }.sumOf { t -> t.amount.abs() },
+                totalIncome = Currencies.totals(transactions.filter { t -> t.amount.signum() > 0 }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount }),
+                totalExpenses = Currencies.totals(transactions.filter { t -> t.isExpense }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount.abs() }),
                 isLoading = false,
             )
         }

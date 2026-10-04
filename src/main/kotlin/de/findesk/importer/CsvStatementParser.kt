@@ -103,7 +103,7 @@ object CsvStatementParser {
             date = date,
             valueDate = parseDate(cell(m.valueDate)),
             amount = amount,
-            currency = cell(m.currency)?.uppercase()?.takeIf { it.length == 3 } ?: "EUR",
+            currency = cell(m.currency)?.uppercase()?.takeIf { it.length == 3 },
             partnerName = (if (amount.signum() > 0 && m.payer != null) cell(m.payer) else null) ?: cell(m.partner),
             partnerIban = iban,
             purpose = cell(m.purpose)?.replace(Regex("\\s+"), " "),

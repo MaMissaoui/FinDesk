@@ -24,13 +24,17 @@ class StatementImportService(
         val balanceUpdated: BigDecimal?,
         /** Same account, date and amount as an existing booking from another source (sync, manual entry). */
         val probableDuplicates: Int = 0,
+        /** Bookings in another currency than the account; never mixed in, since amounts can't be converted. */
+        val wrongCurrency: Int = 0,
+        val currency: String = "EUR",
     ) {
         fun summary(): String = buildString {
             append("Imported $imported transaction(s)")
             if (categorized > 0) append(", $categorized auto-categorized")
             if (duplicates > 0) append(", $duplicates already known")
             if (probableDuplicates > 0) append(", $probableDuplicates probable duplicate(s) of existing bookings skipped")
-            balanceUpdated?.let { append(". Balance set to ${de.findesk.util.Formats.money(it)}") }
+            if (wrongCurrency > 0) append(", $wrongCurrency in another currency than the account skipped")
+            balanceUpdated?.let { append(". Balance set to ${de.findesk.util.Formats.money(it, currency)}") }
         }
     }
 
@@ -72,10 +76,11 @@ class StatementImportService(
     suspend fun import(accountId: Int, statement: ParsedStatement, updateBalance: Boolean = true): ImportReport = withContext(Dispatchers.IO) {
         val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: throw IllegalArgumentException("Account not found")
         // Decided before inserting anything, so the balance check and dedup see the account as it was
-        val balanceAllowed = balanceUpdateAllowed(accountId, statement)
+        val (bookings, wrongCurrency) = statement.bookings.partition { it.currency == null || it.currency == account.currency }
+        val balanceAllowed = balanceUpdateAllowed(accountId, statement.copy(bookings = bookings))
         val plan = de.findesk.repository.BookingDedup.plan(
             accountId,
-            hashes(account.iban, statement.bookings).map { (b, h) -> de.findesk.repository.BookingDedup.Candidate(b, b.date, b.amount, h) },
+            hashes(account.iban, bookings).map { (b, h) -> de.findesk.repository.BookingDedup.Candidate(b, b.date, b.amount, h) },
             transactionRepository,
         )
         var imported = 0
@@ -88,7 +93,7 @@ class StatementImportService(
                 accountId = accountId,
                 date = booking.date,
                 amount = booking.amount,
-                currency = booking.currency,
+                currency = account.currency,
                 partnerName = booking.partnerName?.take(255),
                 purpose = booking.purpose,
                 categoryId = category?.id?.value,
@@ -99,7 +104,7 @@ class StatementImportService(
         }
 
         // Newest booking with a balance; within a day the file order is the booking order
-        val latestBalance = statement.bookings.withIndex()
+        val latestBalance = bookings.withIndex()
             .filter { it.value.balanceAfter != null }
             .maxWithOrNull(compareBy({ it.value.date }, { it.index }))
             ?.value?.balanceAfter
@@ -113,9 +118,10 @@ class StatementImportService(
         auditLogRepository.log(
             "IMPORT_STATEMENT",
             "user",
-            "${statement.format.label} into …${account.iban.takeLast(4)}: $imported new, ${plan.exactDuplicates} known, ${plan.probableDuplicates} probable duplicates",
+            "${statement.format.label} into …${account.iban.takeLast(4)}: $imported new, ${plan.exactDuplicates} known, ${plan.probableDuplicates} probable duplicates" +
+                if (wrongCurrency.isNotEmpty()) ", ${wrongCurrency.size} in another currency skipped" else "",
         )
-        ImportReport(imported, plan.exactDuplicates, categorized, newBalance, plan.probableDuplicates)
+        ImportReport(imported, plan.exactDuplicates, categorized, newBalance, plan.probableDuplicates, wrongCurrency.size, account.currency)
     }
 
     /**

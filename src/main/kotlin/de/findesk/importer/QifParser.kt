@@ -93,7 +93,7 @@ object QifParser {
             date = date,
             valueDate = null,
             amount = amount,
-            currency = "EUR",
+            currency = null, // QIF has no currency field
             partnerName = fields['P']?.trim()?.ifEmpty { null },
             purpose = fields['M']?.trim()?.replace(Regex("\\s+"), " ")?.ifEmpty { null },
             bankReference = null,

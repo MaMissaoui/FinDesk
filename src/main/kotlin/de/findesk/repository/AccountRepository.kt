@@ -32,7 +32,9 @@ interface AccountRepository {
     fun updateBalance(id: Int, balance: BigDecimal): Account?
     fun update(id: Int, iban: String? = null, accountType: String? = null): Account?
     fun delete(id: Int): Boolean
-    fun getTotalBalance(): BigDecimal
+
+    /** Sum of the balances of accounts in [currency]; balances in different currencies can't be added. */
+    fun getTotalBalance(currency: String = "EUR"): BigDecimal
     fun findAllItems(): List<AccountItem>
 
     /** Deletes the account, its transactions, and unlinks documents attached to them. */
@@ -98,8 +100,8 @@ class AccountRepositoryImpl : AccountRepository {
         Account.findById(id)?.delete() != null
     }
 
-    override fun getTotalBalance(): BigDecimal = transaction {
-        Account.all().sumOf { it.balance }
+    override fun getTotalBalance(currency: String): BigDecimal = transaction {
+        Account.find { AccountsTable.currency eq currency }.sumOf { it.balance }
     }
 
     override fun findAllItems(): List<AccountItem> = transaction {

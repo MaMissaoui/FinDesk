@@ -102,4 +102,6 @@ data class TransactionFilter(
     /** Absolute amount bounds (match income and expenses alike). */
     val minAmount: BigDecimal? = null,
     val maxAmount: BigDecimal? = null,
+    /** Only bookings in this currency; totals must never add up different currencies. */
+    val currency: String? = null,
 )

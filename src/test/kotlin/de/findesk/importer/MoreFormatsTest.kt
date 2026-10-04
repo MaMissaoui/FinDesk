@@ -279,7 +279,7 @@ class OfxParserTest {
         assertEquals(BigDecimal("-45.67"), s.amount)
         assertEquals("REWE Markt GmbH", s.partnerName)
         assertEquals("REWE SAGT DANKE 1234", s.purpose)
-        assertEquals("EUR", s.currency)
+        assertEquals("EUR", s.currency, "from CURDEF")
 
         assertEquals(sgml.bookings.map { it.amount }, xml.bookings.map { it.amount })
         assertEquals(sgml.bookings.map { it.partnerName }, xml.bookings.map { it.partnerName })

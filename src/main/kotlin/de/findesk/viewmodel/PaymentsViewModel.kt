@@ -46,7 +46,7 @@ class PaymentsViewModel(
     private fun refresh() {
         _state.update {
             it.copy(
-                accounts = accountRepository.findAllItems(),
+                accounts = accountRepository.findAllItems().filter { it.currency == "EUR" }, // SEPA is EUR only
                 recentTransfers = auditLogRepository.findByAction("TRANSFER").sortedByDescending { e -> e.timestamp }.take(20)
                     .map { e -> AuditEntry(e.timestamp, e.action, e.details) },
             )

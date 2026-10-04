@@ -206,6 +206,8 @@ class BankingService(
         try {
             val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
                 ?: return BankingResult.Error("NOT_FOUND", "Account not found")
+            // SEPA credit transfers are EUR only; the order amount is in EUR, so another account currency would be wrong
+            if (account.currency != "EUR") return BankingResult.Error("CURRENCY", "SEPA transfers can only be sent from EUR accounts (this account is in ${account.currency})")
             val normalized = order.copy(recipientIban = Iban.normalize(order.recipientIban), recipientName = order.recipientName.trim())
             val result = finTSClient.initiateTransfer(account.bankAccessId, interaction, account.iban, normalized)
             withContext(Dispatchers.IO) {

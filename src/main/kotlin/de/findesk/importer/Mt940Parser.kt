@@ -32,7 +32,7 @@ object Mt940Parser {
 
         statements.forEach { stmt ->
             accountIban = accountIban ?: extractIban(stmt)
-            val currency = extractCurrency(stmt) ?: "EUR"
+            val currency = extractCurrency(stmt)
             val tags = parseTags(stmt)
 
             var i = 0
@@ -151,7 +151,7 @@ object Mt940Parser {
         return Balance(amount.multiply(sign), currency)
     }
 
-    private fun parseRecord(text: String, infoText: String?, currency: String): ImportedBooking {
+    private fun parseRecord(text: String, infoText: String?, currency: String?): ImportedBooking {
         // :61: may continue onto a second line with supplementary details; only the first line matters.
         val line = text.substringBefore('\n').trim()
         // :61: YYMMDD[MMDD]CD|D|RC|RD[funds] amount Ncode+reference

@@ -179,7 +179,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 ## Future Enhancements (Post v1.0)
 - [ ] SQLCipher encryption for database
 - [ ] Plugin system
-- [ ] Multi-currency support
+- [x] Multi-currency support (no conversion: overviews total the primary currency from Settings, others shown side by side; import skips bookings in a different currency than the account; SEPA only from EUR accounts)
 - [x] Import CSV and CAMT.053
   - [x] QIF, OFX, MT940 files (hand-written parsers, same import pipeline and dedup as CSV/CAMT)
 - [x] Budget tracking (monthly limits per category)

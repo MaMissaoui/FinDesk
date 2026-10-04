@@ -63,9 +63,9 @@ fun PaymentsScreen() {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(s[StringKey.From], style = MaterialTheme.typography.labelLarge)
                     DropdownSelector(
-                        label = from?.let { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance)})" } ?: s[StringKey.ChooseAccount],
+                        label = from?.let { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance, it.currency)})" } ?: s[StringKey.ChooseAccount],
                         options = state.accounts,
-                        optionLabel = { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance)})" },
+                        optionLabel = { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance, it.currency)})" },
                         onSelect = { from = it },
                     )
                     OutlinedTextField(name, { name = it.take(BankingService.MAX_NAME_LENGTH) }, label = { Text(s[StringKey.RecipientName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())

@@ -173,6 +173,7 @@ class TransactionRepositoryImpl : TransactionRepository {
                 filter.endDate?.let { add(TransactionsTable.date lessEq it) }
                 filter.accountId?.let { add(TransactionsTable.accountId eq it) }
                 filter.categoryId?.let { add(TransactionsTable.categoryId eq it) }
+                filter.currency?.let { add(TransactionsTable.currency eq it) }
                 if (filter.uncategorizedOnly) add(TransactionsTable.categoryId.isNull())
                 if (filter.taxRelevantOnly) {
                     add(

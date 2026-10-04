@@ -76,6 +76,19 @@ fun SettingsScreen(
                         onSelect = { onLanguageChange(it) },
                     )
                 }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(s[StringKey.PrimaryCurrency])
+                        Text(s[StringKey.PrimaryCurrencyHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    DropdownSelector(
+                        label = state.primaryCurrency,
+                        options = state.currencyOptions,
+                        optionLabel = { it },
+                        onSelect = { vm.setPrimaryCurrency(it) },
+                    )
+                }
             }
         }
 
@@ -108,7 +121,7 @@ fun SettingsScreen(
                             Spacer(Modifier.width(8.dp))
                         }
                         c.budgetLimit?.let {
-                            Text(s.format(StringKey.BudgetAmount, Formats.money(it)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.width(8.dp))
                         }
                         IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }

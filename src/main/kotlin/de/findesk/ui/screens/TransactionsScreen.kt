@@ -32,6 +32,7 @@ import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.theme.amountColor
+import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.CategoryFilter
 import de.findesk.viewmodel.ImportPreview
@@ -134,7 +135,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
             AmountRangeInputs(state.minAmount, state.maxAmount, s) { min, max -> vm.updateAmountRange(min, max) }
             Spacer(Modifier.weight(1f))
             Text(
-                s.format(StringKey.TransactionsSummary, state.transactions.size, Formats.money(state.totalIncome), Formats.money(state.totalExpenses)),
+                s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -453,6 +454,14 @@ private fun ImportDialog(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+                val wrongCurrency = account?.let { a -> st.bookings.count { it.currency != null && it.currency != a.currency } } ?: 0
+                if (wrongCurrency > 0) {
+                    Text(
+                        s.format(StringKey.WrongCurrencySkipped, wrongCurrency, account!!.currency),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
 
                 if (csv != null) {
                     Text(s[StringKey.Columns], style = MaterialTheme.typography.labelLarge)
@@ -493,7 +502,7 @@ private fun ImportDialog(
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
-                                Formats.money(b.amount, b.currency, signed = true),
+                                Formats.money(b.amount, b.currency ?: account?.currency ?: "EUR", signed = true),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = amountColor(b.amount.signum() < 0),
                             )

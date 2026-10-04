@@ -24,6 +24,7 @@ import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
+import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.ReportsViewModel
 import java.math.BigDecimal
@@ -112,7 +113,8 @@ fun ReportsScreen() {
         }
         if (report == null) return@Column
         if (report.transactionCount == 0) {
-            EmptyState(Icons.Default.Info, s.format(StringKey.NoTransactionsIn, report.title), s[StringKey.ReportsBuiltFrom])
+            val hint = if (report.otherCurrencyBookings > 0) s.format(StringKey.OtherCurrenciesExcluded, report.currency, report.otherCurrencyBookings) else s[StringKey.ReportsBuiltFrom]
+            EmptyState(Icons.Default.Info, s.format(StringKey.NoTransactionsIn, report.title), hint)
             return@Column
         }
         when (selectedTab) {
@@ -127,12 +129,21 @@ fun ReportsScreen() {
 private fun TaxSummaryTab(report: ReportService.TaxReport) {
     val s = strings()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (report.otherCurrencyBookings > 0) {
+            item {
+                Text(
+                    s.format(StringKey.OtherCurrenciesExcluded, report.currency, report.otherCurrencyBookings),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
-                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
-                StatCard(s[StringKey.NetIncome], Formats.money(report.netIncome), Icons.Default.AccountBox, PrimaryBlue, Modifier.weight(1f))
-                StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal), Icons.Default.Info, Warning, Modifier.weight(1f))
+                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
+                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(s[StringKey.NetIncome], Formats.money(report.netIncome, report.currency), Icons.Default.AccountBox, PrimaryBlue, Modifier.weight(1f))
+                StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), Icons.Default.Info, Warning, Modifier.weight(1f))
             }
         }
         item {
@@ -143,7 +154,7 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                report.taxRelevantExpenses.forEach { (category, amount) -> AmountRow(category, amount) }
+                report.taxRelevantExpenses.forEach { (category, amount) -> AmountRow(category, amount, report.currency) }
             }
         }
         item {
@@ -158,10 +169,10 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     StatItem(s[StringKey.StatTransactions], report.transactionCount.toString())
                     StatItem(s[StringKey.CategoriesUsed], report.categoriesUsed.toString())
-                    StatItem(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly))
+                    StatItem(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency))
                     StatItem(
                         s[StringKey.HighestMonth],
-                        highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses)}" } ?: "—",
+                        highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses, report.currency)}" } ?: "—",
                     )
                 }
             }
@@ -189,10 +200,10 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
             itemsIndexed(report.monthlyBreakdown) { _, m ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Text(monthName(m.month, TextStyle.FULL, s) + if (report.isCalendarYear) "" else " ${m.year}", modifier = Modifier.weight(1f))
-                    Text(Formats.money(m.income), color = amountColor(false), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-                    Text(Formats.money(m.expenses), color = amountColor(true), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(Formats.money(m.income, report.currency), color = amountColor(false), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(Formats.money(m.expenses, report.currency), color = amountColor(true), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                     Text(
-                        Formats.money(m.net, signed = true),
+                        Formats.money(m.net, report.currency, signed = true),
                         fontWeight = FontWeight.SemiBold,
                         color = amountColor(m.net.signum() < 0),
                         modifier = Modifier.weight(1f),
@@ -215,7 +226,7 @@ private fun CategoryAnalysisTab(report: ReportService.TaxReport) {
                 report.expensesByCategory.entries.forEachIndexed { i, (category, amount) ->
                     val share = amount.toFloat() / total.toFloat()
                     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                        AmountRow(category, amount)
+                        AmountRow(category, amount, report.currency)
                         LinearProgressIndicator(
                             progress = { share },
                             modifier = Modifier.fillMaxWidth(),
@@ -232,7 +243,7 @@ private fun CategoryAnalysisTab(report: ReportService.TaxReport) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${index + 1}.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
                         Text(vendor, modifier = Modifier.weight(1f))
-                        Text(Formats.money(amount), fontWeight = FontWeight.SemiBold)
+                        Text(Formats.money(amount, report.currency), fontWeight = FontWeight.SemiBold)
                     }
                     if (index < report.topVendors.size - 1) HorizontalDivider()
                 }
@@ -242,10 +253,10 @@ private fun CategoryAnalysisTab(report: ReportService.TaxReport) {
 }
 
 @Composable
-private fun AmountRow(label: String, amount: BigDecimal) {
+private fun AmountRow(label: String, amount: BigDecimal, currency: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(Formats.money(amount), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -304,14 +315,14 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
         return
     }
     val payments = recurring.filter { !it.isIncome }
-    val yearlyCost = payments.fold(BigDecimal.ZERO) { a, r -> a + r.yearlyAmount.abs() }
+    val yearlyCost = Currencies.totals(payments, Currencies.DEFAULT, { it.currency }, { it.yearlyAmount.abs() })
     val s = strings()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.RecurringPayments], payments.size.toString(), Icons.Default.Refresh, PrimaryBlue, Modifier.weight(1f))
-                StatCard(s[StringKey.CostPerYear], Formats.money(yearlyCost), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
-                StatCard(s[StringKey.PerMonth], Formats.money(yearlyCost.divide(BigDecimal(12), 2, RoundingMode.HALF_UP)), Icons.Default.DateRange, Warning, Modifier.weight(1f))
+                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, Currencies.DEFAULT), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, Currencies.DEFAULT), Icons.Default.DateRange, Warning, Modifier.weight(1f))
             }
         }
         item {
@@ -334,8 +345,8 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
                         }
                         Text(s.cadence(r.cadence), modifier = Modifier.weight(1f))
                         Text(Formats.date(r.nextDate), modifier = Modifier.weight(1f))
-                        Text((if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, signed = true), color = amountColor(!r.isIncome), modifier = Modifier.weight(1f))
-                        Text(Formats.money(r.yearlyAmount.abs()), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text((if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, r.currency, signed = true), color = amountColor(!r.isIncome), modifier = Modifier.weight(1f))
+                        Text(Formats.money(r.yearlyAmount.abs(), r.currency), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     }
                     HorizontalDivider()
                 }

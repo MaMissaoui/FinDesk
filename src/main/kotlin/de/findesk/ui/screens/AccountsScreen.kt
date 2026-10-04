@@ -25,6 +25,7 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
+import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
@@ -58,7 +59,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     modifier = Modifier.semantics { heading() },
                 )
                 Text(
-                    s.format(StringKey.AccountsTotal, Formats.money(state.totalBalance), state.accounts.size),
+                    s.format(StringKey.AccountsTotal, Currencies.format(state.totals, state.primaryCurrency), state.accounts.size),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -140,8 +141,8 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             bank = bank,
             validate = vm::validateAccount,
             onDismiss = { addAccountFor = null },
-            onConfirm = { iban, type, balance ->
-                vm.addAccount(bank.id, iban, type, balance)
+            onConfirm = { iban, type, balance, currency ->
+                vm.addAccount(bank.id, iban, type, balance, currency)
                 addAccountFor = null
             },
         )
@@ -329,10 +330,11 @@ private fun AddAccountDialog(
     bank: BankAccessItem,
     validate: (String) -> String?,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, BigDecimal) -> Unit,
+    onConfirm: (String, String, BigDecimal, String) -> Unit,
 ) {
     var iban by remember { mutableStateOf("") }
     var type by remember { mutableStateOf(ACCOUNT_TYPES.first()) }
+    var currency by remember { mutableStateOf(Currencies.DEFAULT) }
     var balance by remember { mutableStateOf("0,00") }
     var touched by remember { mutableStateOf(false) }
     val parsedBalance = Formats.parseAmount(balance)
@@ -351,14 +353,20 @@ private fun AddAccountDialog(
                     optionLabel = { s.accountType(it) },
                     onSelect = { type = it },
                 )
-                OutlinedTextField(balance, { balance = it }, label = { Text(s[StringKey.CurrentBalanceEuro]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                DropdownSelector(
+                    label = s.format(StringKey.CurrencyIs, currency),
+                    options = Currencies.COMMON,
+                    optionLabel = { it },
+                    onSelect = { currency = it },
+                )
+                OutlinedTextField(balance, { balance = it }, label = { Text(s.format(StringKey.CurrentBalanceIn, currency)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
             Button(onClick = {
                 touched = true
-                if (error == null) onConfirm(iban, type, parsedBalance!!)
+                if (error == null) onConfirm(iban, type, parsedBalance!!, currency)
             }) { Text(s[StringKey.Add]) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
@@ -379,7 +387,7 @@ private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm
                 OutlinedTextField(
                     text,
                     { text = it },
-                    label = { Text(s[StringKey.BalanceEuro]) },
+                    label = { Text(s.format(StringKey.CurrentBalanceIn, account.currency)) },
                     singleLine = true,
                     isError = parsed == null,
                     supportingText = { if (parsed == null) Text(s[StringKey.EnterValidBalance]) },
@@ -454,11 +462,11 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                     }
                 }
                 Text(
-                    s.format(StringKey.LastDaysSummary, detail.days, Formats.money(detail.incomeInPeriod), Formats.money(detail.expensesInPeriod)),
+                    s.format(StringKey.LastDaysSummary, detail.days, Formats.money(detail.incomeInPeriod, a.currency), Formats.money(detail.expensesInPeriod, a.currency)),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                BalanceLineChart(detail.history, modifier = Modifier.fillMaxWidth().height(220.dp))
+                BalanceLineChart(detail.history, modifier = Modifier.fillMaxWidth().height(220.dp), currency = a.currency)
                 Text(s[StringKey.RecentBookings], style = MaterialTheme.typography.labelLarge)
                 if (detail.recent.isEmpty()) Text(s[StringKey.NoneInPeriod], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 detail.recent.forEach { t ->

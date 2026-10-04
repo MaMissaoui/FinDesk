@@ -8,7 +8,8 @@ data class ImportedBooking(
     val date: LocalDate,
     val valueDate: LocalDate? = null,
     val amount: BigDecimal,
-    val currency: String = "EUR",
+    /** ISO code, or null when the file doesn't say (the booking then takes the account's currency). */
+    val currency: String? = null,
     val partnerName: String? = null,
     val partnerIban: String? = null,
     val purpose: String? = null,

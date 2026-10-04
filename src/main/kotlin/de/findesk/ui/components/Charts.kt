@@ -33,7 +33,7 @@ import java.util.Locale
 
 /** Donut chart with a legend; slices beyond [maxSlices] are folded into "Other". */
 @Composable
-fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Modifier, maxSlices: Int = 6) {
+fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Modifier, maxSlices: Int = 6, currency: String = "EUR") {
     val shown = if (slices.size > maxSlices) {
         slices.take(maxSlices - 1) + ChartSlice("Other", slices.drop(maxSlices - 1).fold(BigDecimal.ZERO) { a, s -> a + s.amount }, "#9E9E9E")
     } else {
@@ -42,7 +42,7 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
     val total = shown.fold(BigDecimal.ZERO) { a, s -> a + s.amount }.toFloat()
     val colors = shown.map { categoryColor(it.color, it.label) }
     val track = MaterialTheme.colorScheme.surfaceVariant
-    val description = buildDonutDescription(title, shown, strings())
+    val description = buildDonutDescription(title, shown, currency, strings())
 
     Row(modifier = modifier.semantics { contentDescription = description }, verticalAlignment = Alignment.CenterVertically) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
@@ -62,7 +62,7 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
                 }
             }
             Text(
-                Formats.money(BigDecimal(total.toDouble())),
+                Formats.money(shown.fold(BigDecimal.ZERO) { a, x -> a + x.amount }, currency),
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
             )
@@ -74,7 +74,7 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
                     Box(Modifier.size(10.dp).background(colors[i], CircleShape))
                     Spacer(Modifier.width(8.dp))
                     Text(slice.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1)
-                    Text(Formats.money(slice.amount), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                    Text(Formats.money(slice.amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -83,10 +83,10 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
 
 /** Grouped income/expense bars per month. */
 @Composable
-fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier = Modifier) {
+fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier = Modifier, currency: String = "EUR") {
     val max = months.flatMap { listOf(it.income, it.expenses) }.maxOrNull()?.toFloat()?.takeIf { it > 0f } ?: 1f
     val grid = MaterialTheme.colorScheme.outlineVariant
-    val description = buildBarsDescription(title, months, strings())
+    val description = buildBarsDescription(title, months, currency, strings())
 
     Column(modifier.semantics { contentDescription = description }) {
         Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -133,6 +133,7 @@ fun BalanceLineChart(
     points: List<Pair<java.time.LocalDate, BigDecimal>>,
     title: String = strings()[StringKey.BalanceHistory],
     modifier: Modifier = Modifier,
+    currency: String = "EUR",
 ) {
     val s = strings()
     if (points.size < 2) {
@@ -146,11 +147,11 @@ fun BalanceLineChart(
     val line = MaterialTheme.colorScheme.primary
     val zero = MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
     val grid = MaterialTheme.colorScheme.outlineVariant
-    val description = buildLineDescription(title, points, s)
+    val description = buildLineDescription(title, points, currency, s)
 
     Column(modifier.semantics { contentDescription = description }) {
         Row(Modifier.fillMaxWidth()) {
-            Text(Formats.money(points.maxOf { it.second }), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+            Text(Formats.money(points.maxOf { it.second }, currency), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
             Text(s[StringKey.Max], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Canvas(Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp)) {
@@ -165,33 +166,33 @@ fun BalanceLineChart(
         }
         Row(Modifier.fillMaxWidth()) {
             Text(Formats.date(points.first().first), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-            Text(s.format(StringKey.MinAmount, Formats.money(points.minOf { it.second })), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(s.format(StringKey.MinAmount, Formats.money(points.minOf { it.second }, currency)), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Text(Formats.date(points.last().first), style = MaterialTheme.typography.labelSmall)
         }
     }
 }
 
-private fun buildBarsDescription(title: String, months: List<MonthBar>, s: Strings): String {
+private fun buildBarsDescription(title: String, months: List<MonthBar>, currency: String, s: Strings): String {
     if (months.isEmpty()) return "$title: ${s[StringKey.NotEnoughData]}"
     val parts = months.take(5).map {
-        "${Month.of(it.month).getDisplayName(TextStyle.SHORT, s.language.locale)} ${Formats.money(it.income)} / ${Formats.money(it.expenses)}"
+        "${Month.of(it.month).getDisplayName(TextStyle.SHORT, s.language.locale)} ${Formats.money(it.income, currency)} / ${Formats.money(it.expenses, currency)}"
     }
     val more = months.size - 5
     val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""
     return "$title: ${parts.joinToString(", ")}$suffix"
 }
 
-private fun buildDonutDescription(title: String, slices: List<ChartSlice>, s: Strings): String {
+private fun buildDonutDescription(title: String, slices: List<ChartSlice>, currency: String, s: Strings): String {
     if (slices.isEmpty()) return "$title: ${s[StringKey.NotEnoughData]}"
-    val parts = slices.take(5).map { "${it.label} ${Formats.money(it.amount)}" }
+    val parts = slices.take(5).map { "${it.label} ${Formats.money(it.amount, currency)}" }
     val more = slices.size - 5
     val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""
-    return "$title: ${parts.joinToString(", ")}$suffix · ${Formats.money(slices.fold(BigDecimal.ZERO) { a, x -> a + x.amount })}"
+    return "$title: ${parts.joinToString(", ")}$suffix · ${Formats.money(slices.fold(BigDecimal.ZERO) { a, x -> a + x.amount }, currency)}"
 }
 
-private fun buildLineDescription(title: String, points: List<Pair<java.time.LocalDate, BigDecimal>>, s: Strings): String {
+private fun buildLineDescription(title: String, points: List<Pair<java.time.LocalDate, BigDecimal>>, currency: String, s: Strings): String {
     if (points.size < 2) return "$title: ${s[StringKey.NotEnoughData]}"
     val min = points.minOf { it.second }
     val max = points.maxOf { it.second }
-    return "$title: ${Formats.date(points.first().first)} – ${Formats.date(points.last().first)} · ${s.format(StringKey.MinAmount, Formats.money(min))} · ${s[StringKey.Max]} ${Formats.money(max)}"
+    return "$title: ${Formats.date(points.first().first)} – ${Formats.date(points.last().first)} · ${s.format(StringKey.MinAmount, Formats.money(min, currency))} · ${s[StringKey.Max]} ${Formats.money(max, currency)}"
 }

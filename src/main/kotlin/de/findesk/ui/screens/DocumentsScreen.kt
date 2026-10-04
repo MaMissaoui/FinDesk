@@ -247,7 +247,7 @@ private fun DocumentDetail(
                 )
                 if (pickerQuery.isNotBlank()) {
                     state.linkCandidates
-                        .filter { it.description.contains(pickerQuery, true) || it.purpose.orEmpty().contains(pickerQuery, true) || Formats.money(it.amount).contains(pickerQuery) }
+                        .filter { it.description.contains(pickerQuery, true) || it.purpose.orEmpty().contains(pickerQuery, true) || Formats.money(it.amount, it.currency).contains(pickerQuery) }
                         .take(8)
                         .forEach { LinkCandidateRow(it, null) { onLink(it.id) } }
                 }

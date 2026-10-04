@@ -4,6 +4,7 @@ import de.findesk.document.DocumentService
 import de.findesk.model.CategoryItem
 import de.findesk.model.RuleItem
 import de.findesk.repository.*
+import de.findesk.util.Currencies
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,6 +24,9 @@ data class SettingsState(
     val rules: List<RuleItem> = emptyList(),
     val auditLog: List<AuditEntry> = emptyList(),
     val darkTheme: Boolean = false,
+    val primaryCurrency: String = Currencies.DEFAULT,
+    /** Choices for the primary currency: common ones plus any an account uses. */
+    val currencyOptions: List<String> = Currencies.COMMON,
     val dataDirectory: String = "",
     val documentsDirectory: String = "",
     val isOcrAvailable: Boolean = false,
@@ -43,6 +47,7 @@ class SettingsViewModel(
     private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
+    private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val dataDirectory: String = de.findesk.util.AppPaths.dataDir.absolutePath,
     private val isOcrAvailable: Boolean = false,
     private val backupService: de.findesk.data.backup.BackupService = de.findesk.data.backup.BackupService(java.io.File(dataDirectory)),
@@ -70,6 +75,8 @@ class SettingsViewModel(
                 rules = ruleRepository.findAllItems(),
                 auditLog = auditLogRepository.findRecent(100).map { e -> AuditEntry(e.timestamp, e.action, e.details) },
                 darkTheme = settingsRepository.getValue(KEY_DARK_THEME) == "true",
+                primaryCurrency = Currencies.primary(settingsRepository),
+                currencyOptions = (Currencies.COMMON + accountRepository.findAllItems().map { a -> a.currency }).distinct(),
                 dataDirectory = dataDirectory,
                 documentsDirectory = DocumentService.defaultDocumentsDirectory().absolutePath,
                 isOcrAvailable = isOcrAvailable,
@@ -83,6 +90,13 @@ class SettingsViewModel(
     fun setDarkTheme(enabled: Boolean): Job = launchSafely(onError) {
         settingsRepository.setValue(KEY_DARK_THEME, enabled.toString())
         _state.update { it.copy(darkTheme = enabled) }
+    }
+
+    fun setPrimaryCurrency(code: String): Job = launchSafely(onError) {
+        require(code.length == 3) { "Not a currency code: $code" }
+        settingsRepository.setValue(Currencies.KEY_PRIMARY, code)
+        auditLogRepository.log("SET_PRIMARY_CURRENCY", "user", code)
+        _state.update { it.copy(primaryCurrency = code) }
     }
 
     fun validateCategory(name: String, color: String, excludeId: Int? = null): String? = when {

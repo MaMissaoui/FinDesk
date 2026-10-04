@@ -62,7 +62,7 @@ object OfxParser {
         return null
     }
 
-    private fun extractSgmlCurrency(text: String): String = extractSgmlLeaf(text, "CURDEF")?.trim()?.uppercase()?.takeIf { it.length == 3 } ?: "EUR"
+    private fun extractSgmlCurrency(text: String): String? = extractSgmlLeaf(text, "CURDEF")?.trim()?.uppercase()?.takeIf { it.length == 3 }
 
     private fun extractSgmlTransactions(text: String): List<String> {
         val result = mutableListOf<String>()
@@ -76,7 +76,7 @@ object OfxParser {
         return result
     }
 
-    private fun parseSgmlTransaction(block: String, currency: String): ImportedBooking {
+    private fun parseSgmlTransaction(block: String, currency: String?): ImportedBooking {
         val amountText = extractSgmlLeaf(block, "TRNAMT") ?: throw IllegalArgumentException("missing amount")
         val amount = parseOfxAmount(amountText) ?: throw IllegalArgumentException("invalid amount '$amountText'")
         val dateText = extractSgmlLeaf(block, "DTPOSTED") ?: throw IllegalArgumentException("missing date")
@@ -134,7 +134,7 @@ object OfxParser {
         return ParsedStatement(StatementFormat.OFX, bookings, accountIban = accountIban, skipped = skipped)
     }
 
-    private fun parseXmlTransaction(el: Element, currency: String): ImportedBooking {
+    private fun parseXmlTransaction(el: Element, currency: String?): ImportedBooking {
         val amountText = el.child("TRNAMT")?.textContent?.trim()
             ?: throw IllegalArgumentException("missing amount")
         val amount = parseOfxAmount(amountText) ?: throw IllegalArgumentException("invalid amount '$amountText'")
@@ -166,9 +166,8 @@ object OfxParser {
         return null
     }
 
-    private fun findCurrency(root: Element): String = root.child("CURDEF")?.textContent?.trim()?.uppercase()?.takeIf { it.length == 3 }
+    private fun findCurrency(root: Element): String? = root.child("CURDEF")?.textContent?.trim()?.uppercase()?.takeIf { it.length == 3 }
         ?: root.descendants("CURDEF").firstOrNull()?.textContent?.trim()?.uppercase()?.takeIf { it.length == 3 }
-        ?: "EUR"
 
     private fun isSgml(text: String): Boolean {
         // OFX 1.x uses a header block and leaf elements without closing tags.

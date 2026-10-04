@@ -239,6 +239,17 @@ class BankingSyncTest {
     }
 
     @Test
+    fun `transfers are refused from accounts that are not in EUR`() = runBlocking {
+        val usd = data.accountRepo.create(bankId, "DE89370400440532013000", balance = BigDecimal("900.00"), currency = "USD").id.value
+        val order = TransferOrder("Max Mustermann", "DE44500105175407324931", null, BigDecimal("25.00"), "Miete")
+
+        val result = service.initiateTransfer(usd, order, ScriptedInteraction(), confirmed = true)
+
+        assertEquals("CURRENCY", (result as BankingResult.Error).code)
+        assertTrue(gateway.transfers.isEmpty(), "a SEPA order in EUR must not leave a USD account")
+    }
+
+    @Test
     fun `passport passphrase is generated once and kept`() {
         val client = FinTSClient(gateway = gateway, passportDir = File(tmp, "p"))
         val bank = data.bankAccessRepo.findItem(bankId)!!
