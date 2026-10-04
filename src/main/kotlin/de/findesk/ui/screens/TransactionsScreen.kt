@@ -17,6 +17,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.Strings
+import de.findesk.i18n.strings
 import de.findesk.importer.CsvMapping
 import de.findesk.importer.StatementImportService
 import de.findesk.model.AccountItem
@@ -41,6 +44,7 @@ import java.time.format.DateTimeParseException
 fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
     val vm = rememberViewModel { TransactionsViewModel() }
     val state by vm.state.collectAsState()
+    val s = strings()
     LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly) }
 
     var showAdd by remember { mutableStateOf(false) }
@@ -48,37 +52,37 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Transactions", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(s[StringKey.Transactions], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             OutlinedButton(
                 enabled = state.accounts.isNotEmpty(),
                 onClick = {
-                    FileDialogs.openFiles("Import bank statement (CSV, CAMT XML/ZIP)", StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
+                    FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
                 },
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Import")
+                Text(s[StringKey.Import])
             }
             Spacer(Modifier.width(8.dp))
             OutlinedButton(onClick = { vm.autoCategorizeTransactions() }) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Auto-categorize")
+                Text(s[StringKey.AutoCategorize])
             }
             Spacer(Modifier.width(8.dp))
             OutlinedButton(
-                onClick = { FileDialogs.saveFile("Export transactions", "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
+                onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
                 enabled = state.transactions.isNotEmpty(),
             ) {
                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Export CSV")
+                Text(s[StringKey.ExportCsv])
             }
             Spacer(Modifier.width(8.dp))
             Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
-                Text("Add")
+                Text(s[StringKey.Add])
             }
         }
 
@@ -89,23 +93,23 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
             OutlinedTextField(
                 value = state.searchQuery,
                 onValueChange = { vm.updateSearchQuery(it) },
-                placeholder = { Text("Search partner or purpose…") },
+                placeholder = { Text(s[StringKey.SearchPartnerPurpose]) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
             )
-            DropdownSelector(state.period.label, Period.entries, { it.label }, { vm.updatePeriod(it) }, leadingIcon = Icons.Default.DateRange)
+            DropdownSelector(s.period(state.period), Period.entries, { s.period(it) }, { vm.updatePeriod(it) }, leadingIcon = Icons.Default.DateRange)
             DropdownSelector(
-                label = categoryFilterLabel(state.categoryFilter, state.categories),
+                label = categoryFilterLabel(state.categoryFilter, state.categories, s),
                 options = listOf<CategoryFilter>(CategoryFilter.Any, CategoryFilter.None) + state.categories.map { CategoryFilter.Only(it.id) },
-                optionLabel = { categoryFilterLabel(it, state.categories) },
+                optionLabel = { categoryFilterLabel(it, state.categories, s) },
                 onSelect = { vm.updateCategoryFilter(it) },
             )
             if (state.accounts.size > 1 || state.accountId != null) {
                 DropdownSelector(
-                    label = state.accounts.firstOrNull { it.id == state.accountId }?.let { "…" + it.iban.takeLast(4) } ?: "All accounts",
+                    label = state.accounts.firstOrNull { it.id == state.accountId }?.let { "…" + it.iban.takeLast(4) } ?: s[StringKey.AllAccounts],
                     options = listOf<AccountItem?>(null) + state.accounts,
-                    optionLabel = { it?.let { a -> "${a.bankName} ${Formats.iban(a.iban)}" } ?: "All accounts" },
+                    optionLabel = { it?.let { a -> "${a.bankName} ${Formats.iban(a.iban)}" } ?: s[StringKey.AllAccounts] },
                     onSelect = { vm.updateAccountFilter(it?.id) },
                 )
             }
@@ -116,14 +120,14 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
                 FilterChip(
                     selected = state.direction == d,
                     onClick = { vm.updateDirection(d) },
-                    label = { Text(d.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                    label = { Text(s.direction(d)) },
                 )
             }
             Spacer(Modifier.width(8.dp))
-            AmountRangeInputs(state.minAmount, state.maxAmount) { min, max -> vm.updateAmountRange(min, max) }
+            AmountRangeInputs(state.minAmount, state.maxAmount, s) { min, max -> vm.updateAmountRange(min, max) }
             Spacer(Modifier.weight(1f))
             Text(
-                "${state.transactions.size} transactions · in ${Formats.money(state.totalIncome)} · out ${Formats.money(state.totalExpenses)}",
+                s.format(StringKey.TransactionsSummary, state.transactions.size, Formats.money(state.totalIncome), Formats.money(state.totalExpenses)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -134,18 +138,18 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
             Column {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    HeaderCell("Date", 1f)
-                    HeaderCell("Description", 3f)
-                    HeaderCell("Category", 1.4f)
-                    HeaderCell("Amount", 1.2f, TextAlign.End)
+                    HeaderCell(s[StringKey.ColDate], 1f)
+                    HeaderCell(s[StringKey.ColDescription], 3f)
+                    HeaderCell(s[StringKey.ColCategory], 1.4f)
+                    HeaderCell(s[StringKey.ColAmount], 1.2f, TextAlign.End)
                     Spacer(Modifier.width(40.dp))
                 }
                 HorizontalDivider()
                 if (!state.isLoading && state.transactions.isEmpty()) {
                     EmptyState(
                         Icons.Default.List,
-                        "No transactions",
-                        if (state.accounts.isEmpty()) "Add an account first, then add transactions." else "Nothing matches the current filters.",
+                        s[StringKey.NoTransactions],
+                        if (state.accounts.isEmpty()) s[StringKey.AddAccountFirstThen] else s[StringKey.NothingMatches],
                     )
                 }
                 LazyColumn {
@@ -173,7 +177,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
             suggestedPattern = vm.rulePatternFor(txn),
             onCategory = { vm.updateTransactionCategory(txn.id, it) },
             onAttach = {
-                val files = FileDialogs.openFiles("Attach receipt", de.findesk.document.DocumentService.SUPPORTED_EXTENSIONS)
+                val files = FileDialogs.openFiles(s[StringKey.AttachReceipt], de.findesk.document.DocumentService.SUPPORTED_EXTENSIONS)
                 if (files.isNotEmpty()) vm.attachDocuments(txn.id, files)
             },
             onCreateRule = { pattern, categoryId -> vm.createRule(pattern, categoryId) },
@@ -188,7 +192,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
             onAccount = vm::selectImportAccount,
             onRemap = { vm.remapImport(it) },
             onCancel = vm::cancelImport,
-            onImport = { vm.confirmImport(it) },
+            onImport = { vm.confirmImport(it && preview.balanceUpdateAllowed) },
         )
     }
     if (showAdd) {
@@ -205,7 +209,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
     }
     confirmDelete?.let { txn ->
         ConfirmDialog(
-            title = "Delete transaction?",
+            title = s[StringKey.DeleteTransactionTitle],
             text = "${Formats.date(txn.date)} ${txn.description} ${Formats.money(txn.amount, txn.currency)}",
             onConfirm = { vm.deleteTransaction(txn.id) },
             onDismiss = { confirmDelete = null },
@@ -213,10 +217,10 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
     }
 }
 
-private fun categoryFilterLabel(filter: CategoryFilter, categories: List<CategoryItem>): String = when (filter) {
-    CategoryFilter.Any -> "All categories"
-    CategoryFilter.None -> "Uncategorized"
-    is CategoryFilter.Only -> categories.firstOrNull { it.id == filter.categoryId }?.name ?: "Category"
+private fun categoryFilterLabel(filter: CategoryFilter, categories: List<CategoryItem>, s: Strings): String = when (filter) {
+    CategoryFilter.Any -> s[StringKey.AllCategories]
+    CategoryFilter.None -> s[StringKey.Uncategorized]
+    is CategoryFilter.Only -> categories.firstOrNull { it.id == filter.categoryId }?.name ?: s[StringKey.NoTransactions]
 }
 
 @Composable
@@ -240,6 +244,7 @@ private fun TransactionRow(
 ) {
     var categoryMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf(false) }
+    val s = strings()
 
     Row(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 10.dp),
@@ -251,7 +256,7 @@ private fun TransactionRow(
                 Text(txn.description, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (txn.documentCount > 0) {
                     Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Default.Email, contentDescription = "${txn.documentCount} document(s)", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.Email, contentDescription = s.format(StringKey.DocumentsCount, txn.documentCount), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                 }
             }
             val secondary = if (txn.partnerName != null) txn.purpose else null
@@ -262,13 +267,13 @@ private fun TransactionRow(
         Box(Modifier.weight(1.4f)) {
             CategoryBadge(txn.categoryName, txn.categoryColor, Modifier.clickable { categoryMenu = true })
             DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
-                DropdownMenuItem(text = { Text("Uncategorized") }, onClick = {
+                DropdownMenuItem(text = { Text(s[StringKey.Uncategorized]) }, onClick = {
                     categoryMenu = false
                     onCategory(null)
                 })
                 categories.forEach { c ->
                     DropdownMenuItem(
-                        text = { Text(c.name + if (c.isTaxRelevant) "  (tax)" else "") },
+                        text = { Text(c.name + if (c.isTaxRelevant) "  (${s[StringKey.Tax]})" else "") },
                         onClick = {
                             categoryMenu = false
                             onCategory(c.id)
@@ -287,10 +292,10 @@ private fun TransactionRow(
         )
         Box(Modifier.width(40.dp), contentAlignment = Alignment.CenterEnd) {
             IconButton(onClick = { rowMenu = true }, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.MoreVert, contentDescription = "More", modifier = Modifier.size(18.dp))
+                Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(18.dp))
             }
             DropdownMenu(expanded = rowMenu, onDismissRequest = { rowMenu = false }) {
-                DropdownMenuItem(text = { Text("Delete") }, onClick = {
+                DropdownMenuItem(text = { Text(s[StringKey.Delete]) }, onClick = {
                     rowMenu = false
                     onDelete()
                 })
@@ -315,6 +320,7 @@ private fun AddTransactionDialog(
     var partner by remember { mutableStateOf("") }
     var purpose by remember { mutableStateOf("") }
     var category by remember { mutableStateOf<CategoryItem?>(null) }
+    val s = strings()
 
     val date = try {
         LocalDate.parse(dateText.trim(), dateFormat)
@@ -326,7 +332,7 @@ private fun AddTransactionDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add transaction") },
+        title = { Text(s[StringKey.AddTransaction]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.width(420.dp)) {
                 DropdownSelector(
@@ -336,19 +342,19 @@ private fun AddTransactionDialog(
                     onSelect = { account = it },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = isExpense, onClick = { isExpense = true }, label = { Text("Expense") })
-                    FilterChip(selected = !isExpense, onClick = { isExpense = false }, label = { Text("Income") })
+                    FilterChip(selected = isExpense, onClick = { isExpense = true }, label = { Text(s[StringKey.Expense]) })
+                    FilterChip(selected = !isExpense, onClick = { isExpense = false }, label = { Text(s[StringKey.Income]) })
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(dateText, { dateText = it }, label = { Text("Date (dd.mm.yyyy)") }, singleLine = true, isError = date == null, modifier = Modifier.weight(1f))
-                    OutlinedTextField(amountText, { amountText = it }, label = { Text("Amount (€)") }, singleLine = true, isError = amountText.isNotEmpty() && amount == null, modifier = Modifier.weight(1f))
+                    OutlinedTextField(dateText, { dateText = it }, label = { Text(s[StringKey.DateFormat]) }, singleLine = true, isError = date == null, modifier = Modifier.weight(1f))
+                    OutlinedTextField(amountText, { amountText = it }, label = { Text(s[StringKey.AmountEuro]) }, singleLine = true, isError = amountText.isNotEmpty() && amount == null, modifier = Modifier.weight(1f))
                 }
-                OutlinedTextField(partner, { partner = it }, label = { Text("Partner / payee") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(purpose, { purpose = it }, label = { Text("Purpose") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(partner, { partner = it }, label = { Text(s[StringKey.PartnerPayee]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(purpose, { purpose = it }, label = { Text(s[StringKey.Purpose]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 DropdownSelector(
-                    label = category?.name ?: "Category: auto (rules)",
+                    label = category?.name ?: s[StringKey.CategoryAuto],
                     options = listOf<CategoryItem?>(null) + categories,
-                    optionLabel = { it?.name ?: "Auto (rules)" },
+                    optionLabel = { it?.name ?: s[StringKey.AutoRules] },
                     onSelect = { category = it },
                 )
             }
@@ -357,9 +363,9 @@ private fun AddTransactionDialog(
             Button(enabled = valid, onClick = {
                 val signed = if (isExpense) amount!!.negate() else amount!!
                 onConfirm(account.id, date!!, signed, partner, purpose, category?.id)
-            }) { Text("Add") }
+            }) { Text(s[StringKey.Add]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -375,26 +381,28 @@ private fun ImportDialog(
 ) {
     val st = preview.statement
     val hasBalances = st.bookings.any { it.balanceAfter != null }
-    var updateBalance by remember(preview.file) { mutableStateOf(hasBalances) }
+    var updateBalance by remember(preview.file, preview.accountId, preview.balanceUpdateAllowed) { mutableStateOf(preview.balanceUpdateAllowed) }
     val account = accounts.firstOrNull { it.id == preview.accountId }
+    val s = strings()
 
     AlertDialog(
         onDismissRequest = { if (!importing) onCancel() },
-        title = { Text("Import ${preview.file.name}") },
+        title = { Text(s.format(StringKey.ImportFile, preview.file.name)) },
         text = {
             Column(Modifier.width(720.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 val csv = st.csv
+                val delimLabel = csv?.let { if (it.delimiter == '\t') s[StringKey.TabDelimiter] else "'${it.delimiter}'" } ?: ""
                 Text(
-                    "${st.format.label}" + (csv?.let { " · ${it.charsetName} · delimiter '${if (it.delimiter == '\t') "tab" else it.delimiter.toString()}'" } ?: "") +
-                        " · ${st.bookings.size} booking(s)" +
-                        (if (st.pendingSkipped > 0) " · ${st.pendingSkipped} pending left out" else "") +
-                        (if (st.skipped.isNotEmpty()) " · ${st.skipped.size} unreadable" else ""),
+                    "${st.format.label}" + (csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
+                        " · ${s.format(StringKey.BookingCount, st.bookings.size)}" +
+                        (if (st.pendingSkipped > 0) " · ${s.format(StringKey.PendingLeftOut, st.pendingSkipped)}" else "") +
+                        (if (st.skipped.isNotEmpty()) " · ${s.format(StringKey.UnreadableCount, st.skipped.size)}" else ""),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Into account: ", fontWeight = FontWeight.Medium)
+                    Text(s[StringKey.IntoAccount], fontWeight = FontWeight.Medium)
                     DropdownSelector(
-                        label = account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: "Choose account",
+                        label = account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: s[StringKey.ChooseAccount],
                         options = accounts,
                         optionLabel = { "${it.bankName} ${Formats.iban(it.iban)}" },
                         onSelect = { onAccount(it.id) },
@@ -402,31 +410,31 @@ private fun ImportDialog(
                 }
                 if (st.accountIban != null && account != null && st.accountIban != account.iban) {
                     Text(
-                        "The file belongs to ${Formats.iban(st.accountIban)}, not the selected account.",
+                        s.format(StringKey.FileBelongsTo, Formats.iban(st.accountIban)),
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
 
                 if (csv != null) {
-                    Text("Columns", style = MaterialTheme.typography.labelLarge)
+                    Text(s[StringKey.Columns], style = MaterialTheme.typography.labelLarge)
                     val m = csv.mapping
-                    val fields: List<Triple<String, Int?, (Int?) -> CsvMapping>> = listOf(
-                        Triple("Date", m.date) { i -> m.copy(date = i) },
-                        Triple("Amount", m.amount) { i -> m.copy(amount = i, debit = if (i != null) null else m.debit, credit = if (i != null) null else m.credit) },
-                        Triple("Debit", m.debit) { i -> m.copy(debit = i, amount = if (i != null) null else m.amount) },
-                        Triple("Credit", m.credit) { i -> m.copy(credit = i, amount = if (i != null) null else m.amount) },
-                        Triple("Partner", m.partner) { i -> m.copy(partner = i) },
-                        Triple("Purpose", m.purpose) { i -> m.copy(purpose = i) },
-                        Triple("Balance", m.balance) { i -> m.copy(balance = i) },
+                    val fields: List<Triple<StringKey, Int?, (Int?) -> CsvMapping>> = listOf(
+                        Triple(StringKey.ColDate, m.date) { i -> m.copy(date = i) },
+                        Triple(StringKey.ColAmount, m.amount) { i -> m.copy(amount = i, debit = if (i != null) null else m.debit, credit = if (i != null) null else m.credit) },
+                        Triple(StringKey.ColDebit, m.debit) { i -> m.copy(debit = i, amount = if (i != null) null else m.amount) },
+                        Triple(StringKey.ColCredit, m.credit) { i -> m.copy(credit = i, amount = if (i != null) null else m.amount) },
+                        Triple(StringKey.ColPartner, m.partner) { i -> m.copy(partner = i) },
+                        Triple(StringKey.ColPurpose, m.purpose) { i -> m.copy(purpose = i) },
+                        Triple(StringKey.ColBalance, m.balance) { i -> m.copy(balance = i) },
                     )
                     fields.chunked(4).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { (label, index, update) ->
+                            row.forEach { (labelKey, index, update) ->
                                 DropdownSelector(
-                                    label = "$label: ${index?.let { csv.headers.getOrNull(it) } ?: "—"}",
+                                    label = "${s[labelKey]}: ${index?.let { csv.headers.getOrNull(it) } ?: "—"}",
                                     options = listOf<Int?>(null) + csv.headers.indices.toList(),
-                                    optionLabel = { i -> i?.let { csv.headers[it].ifBlank { "Column ${it + 1}" } } ?: "— none —" },
+                                    optionLabel = { i -> i?.let { csv.headers[it].ifBlank { s.format(StringKey.ColumnN, it + 1) } } ?: s[StringKey.NoneDash] },
                                     onSelect = { onRemap(update(it)) },
                                 )
                             }
@@ -435,7 +443,7 @@ private fun ImportDialog(
                 }
 
                 if (st.bookings.isNotEmpty()) {
-                    Text("Preview", style = MaterialTheme.typography.labelLarge)
+                    Text(s[StringKey.Preview], style = MaterialTheme.typography.labelLarge)
                     st.bookings.take(8).forEach { b ->
                         Row(Modifier.fillMaxWidth()) {
                             Text(Formats.date(b.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
@@ -453,18 +461,24 @@ private fun ImportDialog(
                             )
                         }
                     }
-                    if (st.bookings.size > 8) Text("… and ${st.bookings.size - 8} more", style = MaterialTheme.typography.bodySmall)
+                    if (st.bookings.size > 8) Text(s.format(StringKey.AndMore, st.bookings.size - 8), style = MaterialTheme.typography.bodySmall)
                 }
                 st.skipped.take(5).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
 
-                if (hasBalances) {
+                if (hasBalances && preview.balanceUpdateAllowed) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = updateBalance, onCheckedChange = { updateBalance = it })
-                        Text("Set the account balance from the newest booking in the file")
+                        Text(s[StringKey.SetAccountBalance])
                     }
+                } else if (hasBalances && account != null) {
+                    Text(
+                        s[StringKey.NewerBookingsUnchanged],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Text(
-                    "Bookings already imported are recognised and skipped.",
+                    s[StringKey.BookingsSkippedHint],
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -472,15 +486,15 @@ private fun ImportDialog(
         },
         confirmButton = {
             Button(enabled = !importing && account != null && st.bookings.isNotEmpty(), onClick = { onImport(updateBalance) }) {
-                Text(if (importing) "Importing…" else "Import ${st.bookings.size}")
+                Text(if (importing) s[StringKey.Importing] else s.format(StringKey.ImportCount, st.bookings.size))
             }
         },
-        dismissButton = { TextButton(enabled = !importing, onClick = onCancel) { Text("Cancel") } },
+        dismissButton = { TextButton(enabled = !importing, onClick = onCancel) { Text(s[StringKey.Cancel]) } },
     )
 }
 
 @Composable
-private fun AmountRangeInputs(min: BigDecimal?, max: BigDecimal?, onChange: (BigDecimal?, BigDecimal?) -> Unit) {
+private fun AmountRangeInputs(min: BigDecimal?, max: BigDecimal?, s: Strings, onChange: (BigDecimal?, BigDecimal?) -> Unit) {
     var minText by remember { mutableStateOf(min?.toPlainString().orEmpty()) }
     var maxText by remember { mutableStateOf(max?.toPlainString().orEmpty()) }
     fun apply() = onChange(Formats.parseAmount(minText)?.abs(), Formats.parseAmount(maxText)?.abs())
@@ -490,7 +504,7 @@ private fun AmountRangeInputs(min: BigDecimal?, max: BigDecimal?, onChange: (Big
             minText = it
             if (it.isBlank() || Formats.parseAmount(it) != null) apply()
         },
-        placeholder = { Text("min €") },
+        placeholder = { Text(s[StringKey.MinEuro]) },
         singleLine = true,
         modifier = Modifier.width(100.dp),
     )
@@ -501,7 +515,7 @@ private fun AmountRangeInputs(min: BigDecimal?, max: BigDecimal?, onChange: (Big
             maxText = it
             if (it.isBlank() || Formats.parseAmount(it) != null) apply()
         },
-        placeholder = { Text("max €") },
+        placeholder = { Text(s[StringKey.MaxEuro]) },
         singleLine = true,
         modifier = Modifier.width(100.dp),
     )
@@ -522,6 +536,7 @@ private fun TransactionDetailDialog(
     var pattern by remember(txn.id) { mutableStateOf(suggestedPattern) }
     var ruleCategory by remember(txn.id) { mutableStateOf(categories.firstOrNull { it.id == txn.categoryId }) }
     val patternValid = pattern.isNotBlank() && runCatching { Regex(pattern) }.isSuccess
+    val s = strings()
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -534,59 +549,59 @@ private fun TransactionDetailDialog(
                     fontWeight = FontWeight.Bold,
                     color = if (txn.isExpense) Error else Success,
                 )
-                DetailRow("Date", Formats.date(txn.date))
-                DetailRow("Account", account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: Formats.iban(txn.accountIban))
-                txn.partnerName?.let { DetailRow("Partner", it) }
-                txn.purpose?.let { DetailRow("Purpose", it) }
+                DetailRow(s[StringKey.DetailDate], Formats.date(txn.date))
+                DetailRow(s[StringKey.DetailAccount], account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: Formats.iban(txn.accountIban))
+                txn.partnerName?.let { DetailRow(s[StringKey.DetailPartner], it) }
+                txn.purpose?.let { DetailRow(s[StringKey.DetailPurpose], it) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Category", fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+                    Text(s[StringKey.DetailCategory], fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
                     DropdownSelector(
-                        label = txn.categoryName ?: "Uncategorized",
+                        label = txn.categoryName ?: s[StringKey.Uncategorized],
                         options = listOf<CategoryItem?>(null) + categories,
-                        optionLabel = { it?.let { c -> c.name + if (c.isTaxRelevant) " (tax)" else "" } ?: "Uncategorized" },
+                        optionLabel = { it?.let { c -> c.name + if (c.isTaxRelevant) " (${s[StringKey.Tax]})" else "" } ?: s[StringKey.Uncategorized] },
                         onSelect = { onCategory(it?.id) },
                     )
                     if (txn.isTaxRelevant) {
                         Spacer(Modifier.width(8.dp))
-                        CategoryBadge("tax-relevant", "#F59E0B")
+                        CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
                     }
                 }
 
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Documents", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onAttach) { Text("Attach receipt…") }
+                    Text(s[StringKey.LinkedTransaction], style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onAttach) { Text(s[StringKey.AttachReceiptEllipsis]) }
                 }
-                if (documents.isEmpty()) Text("No documents linked", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (documents.isEmpty()) Text(s[StringKey.NoDocumentsLinked], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 documents.forEach { d ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(d.fileName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         TextButton(onClick = {
                             val f = java.io.File(d.filePath)
                             if (f.exists() && java.awt.Desktop.isDesktopSupported()) Thread { java.awt.Desktop.getDesktop().open(f) }.start()
-                        }) { Text("Open") }
+                        }) { Text(s[StringKey.Open]) }
                     }
                 }
 
                 if (categories.isNotEmpty()) {
                     HorizontalDivider()
-                    Text("Categorize similar bookings automatically", style = MaterialTheme.typography.labelLarge)
+                    Text(s[StringKey.CategorizeSimilar], style = MaterialTheme.typography.labelLarge)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             pattern,
                             { pattern = it },
-                            label = { Text("Pattern (regex)") },
+                            label = { Text(s[StringKey.PatternRegex]) },
                             singleLine = true,
                             isError = !patternValid,
                             modifier = Modifier.weight(1f),
                         )
-                        DropdownSelector(ruleCategory?.name ?: "Category", categories, { it.name }, { ruleCategory = it })
-                        Button(enabled = patternValid && ruleCategory != null, onClick = { onCreateRule(pattern, ruleCategory!!.id) }) { Text("Create rule") }
+                        DropdownSelector(ruleCategory?.name ?: s[StringKey.DetailCategory], categories, { it.name }, { ruleCategory = it })
+                        Button(enabled = patternValid && ruleCategory != null, onClick = { onCreateRule(pattern, ruleCategory!!.id) }) { Text(s[StringKey.CreateRule]) }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onClose) { Text(s[StringKey.Close]) } },
     )
 }
 

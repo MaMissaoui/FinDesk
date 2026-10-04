@@ -22,11 +22,14 @@ class StatementImportService(
         val duplicates: Int,
         val categorized: Int,
         val balanceUpdated: BigDecimal?,
+        /** Same account, date and amount as an existing booking from another source (sync, manual entry). */
+        val probableDuplicates: Int = 0,
     ) {
         fun summary(): String = buildString {
             append("Imported $imported transaction(s)")
             if (categorized > 0) append(", $categorized auto-categorized")
             if (duplicates > 0) append(", $duplicates already known")
+            if (probableDuplicates > 0) append(", $probableDuplicates probable duplicate(s) of existing bookings skipped")
             balanceUpdated?.let { append(". Balance set to ${de.findesk.util.Formats.money(it)}") }
         }
     }
@@ -57,14 +60,18 @@ class StatementImportService(
      */
     suspend fun import(accountId: Int, statement: ParsedStatement, updateBalance: Boolean = true): ImportReport = withContext(Dispatchers.IO) {
         val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: throw IllegalArgumentException("Account not found")
+        // Decided before inserting anything, so the balance check and dedup see the account as it was
+        val balanceAllowed = balanceUpdateAllowed(accountId, statement)
+        val plan = de.findesk.repository.BookingDedup.plan(
+            accountId,
+            hashes(account.iban, statement.bookings).map { (b, h) -> de.findesk.repository.BookingDedup.Candidate(b, b.date, b.amount, h) },
+            transactionRepository,
+        )
         var imported = 0
-        var duplicates = 0
         var categorized = 0
-        hashes(account.iban, statement.bookings).forEach { (booking, hash) ->
-            if (transactionRepository.findByHash(hash) != null) {
-                duplicates++
-                return@forEach
-            }
+        plan.toImport.forEach { candidate ->
+            val booking = candidate.item
+            val hash = candidate.hash
             val category = ruleRepository.matchTransaction(booking.purpose, booking.partnerName)
             transactionRepository.create(
                 accountId = accountId,
@@ -85,7 +92,7 @@ class StatementImportService(
             .filter { it.value.balanceAfter != null }
             .maxWithOrNull(compareBy({ it.value.date }, { it.index }))
             ?.value?.balanceAfter
-        val newBalance = if (updateBalance && latestBalance != null) {
+        val newBalance = if (updateBalance && balanceAllowed && latestBalance != null) {
             accountRepository.updateBalance(accountId, latestBalance)
             latestBalance
         } else {
@@ -95,9 +102,20 @@ class StatementImportService(
         auditLogRepository.log(
             "IMPORT_STATEMENT",
             "user",
-            "${statement.format.label} into …${account.iban.takeLast(4)}: $imported new, $duplicates known",
+            "${statement.format.label} into …${account.iban.takeLast(4)}: $imported new, ${plan.exactDuplicates} known, ${plan.probableDuplicates} probable duplicates",
         )
-        ImportReport(imported, duplicates, categorized, newBalance)
+        ImportReport(imported, plan.exactDuplicates, categorized, newBalance, plan.probableDuplicates)
+    }
+
+    /**
+     * The file's running balance may only replace the account balance if the file is at least as recent as the
+     * account's newest booking; back-filling an old statement must not reset today's balance.
+     */
+    fun balanceUpdateAllowed(accountId: Int, statement: ParsedStatement): Boolean {
+        if (statement.bookings.none { it.balanceAfter != null }) return false
+        val fileNewest = statement.bookings.maxOf { it.date }
+        val accountNewest = transactionRepository.findItems(de.findesk.model.TransactionFilter(accountId = accountId), limit = 1).firstOrNull()?.date
+        return accountNewest == null || !fileNewest.isBefore(accountNewest)
     }
 
     /**

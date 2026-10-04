@@ -67,6 +67,7 @@ compose.desktop {
             // macOS
             macOS {
                 bundleID = "de.findesk.app"
+                iconFile.set(project.file("src/main/resources/icon-512.png"))
                 targetFormats(TargetFormat.Dmg)
             }
 
@@ -77,6 +78,7 @@ compose.desktop {
                 menu = true
                 menuGroup = "FinDesk"
                 shortcut = true
+                iconFile.set(project.file("src/main/resources/icon-512.png"))
                 targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             }
 
@@ -86,6 +88,7 @@ compose.desktop {
                 menuGroup = "Office"
                 appCategory = "Office"
                 packageName = "findesk"
+                iconFile.set(project.file("src/main/resources/icon-512.png"))
                 targetFormats(TargetFormat.Deb, TargetFormat.Rpm)
             }
         }
@@ -94,6 +97,7 @@ compose.desktop {
         jvmArgs += listOf(
             "-Xmx1024m",
             "-Dfile.encoding=UTF-8",
+            "-Xdock:name=FinDesk",
         )
     }
 }

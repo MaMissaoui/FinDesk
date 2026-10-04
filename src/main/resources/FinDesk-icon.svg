@@ -1,0 +1,45 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1E40AF"/>
+    </linearGradient>
+    <linearGradient id="chartGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#34D399"/>
+      <stop offset="100%" stop-color="#6EE7B7"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#00000033"/>
+    </filter>
+  </defs>
+
+  <!-- Background square with iOS-style rounded corners -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+
+  <!-- Subtle inner glow -->
+  <rect x="4" y="4" width="504" height="504" rx="108" fill="none" stroke="#ffffff15" stroke-width="2"/>
+
+  <!-- Letter F -->
+  <g filter="url(#shadow)">
+    <!-- F vertical stem -->
+    <rect x="160" y="120" width="52" height="272" rx="10" fill="#FFFFFF"/>
+    <!-- F top bar -->
+    <rect x="160" y="120" width="200" height="52" rx="10" fill="#FFFFFF"/>
+    <!-- F middle bar -->
+    <rect x="160" y="224" width="160" height="40" rx="8" fill="#FFFFFF" opacity="0.85"/>
+  </g>
+
+  <!-- Rising chart line from F's middle bar -->
+  <polyline points="300,256 340,210 370,228 400,170 420,180"
+            fill="none"
+            stroke="url(#chartGrad)"
+            stroke-width="10"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+
+  <!-- Chart endpoint dot -->
+  <circle cx="420" cy="180" r="12" fill="#6EE7B7"/>
+
+  <!-- Small up-arrow at chart peak -->
+  <polygon points="420,152 410,172 430,172" fill="#6EE7B7"/>
+</svg>

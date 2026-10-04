@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.Success
 import de.findesk.util.Formats
@@ -124,7 +126,7 @@ private fun Legend(color: Color, label: String) {
 @Composable
 fun BalanceLineChart(points: List<Pair<java.time.LocalDate, BigDecimal>>, modifier: Modifier = Modifier) {
     if (points.size < 2) {
-        Text("Not enough data", modifier = modifier, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(strings()[StringKey.NotEnoughData], modifier = modifier, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val values = points.map { it.second.toFloat() }
@@ -138,7 +140,7 @@ fun BalanceLineChart(points: List<Pair<java.time.LocalDate, BigDecimal>>, modifi
     Column(modifier) {
         Row(Modifier.fillMaxWidth()) {
             Text(Formats.money(points.maxOf { it.second }), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-            Text("max", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(strings()[StringKey.Max], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Canvas(Modifier.fillMaxWidth().weight(1f).padding(vertical = 4.dp)) {
             fun y(v: Float) = size.height - (v - min) / span * size.height
@@ -152,7 +154,7 @@ fun BalanceLineChart(points: List<Pair<java.time.LocalDate, BigDecimal>>, modifi
         }
         Row(Modifier.fillMaxWidth()) {
             Text(de.findesk.util.Formats.date(points.first().first), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-            Text("min ${Formats.money(points.minOf { it.second })}", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(strings().format(StringKey.MinAmount, Formats.money(points.minOf { it.second })), style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Text(de.findesk.util.Formats.date(points.last().first), style = MaterialTheme.typography.labelSmall)
         }
     }

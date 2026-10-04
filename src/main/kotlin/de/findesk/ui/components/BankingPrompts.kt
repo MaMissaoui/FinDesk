@@ -12,6 +12,8 @@ import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 import de.findesk.viewmodel.BankingPrompt
 import de.findesk.viewmodel.UiBankingInteraction
 
@@ -20,25 +22,26 @@ import de.findesk.viewmodel.UiBankingInteraction
 fun BankingPromptHost(interaction: UiBankingInteraction) {
     val prompt by interaction.prompt.collectAsState()
     val info by interaction.info.collectAsState()
+    val s = strings()
 
     when (val p = prompt) {
         null -> Unit
 
         is BankingPrompt.Pin -> SecretDialog(
-            title = "PIN for ${p.bankName}",
-            text = "Online banking PIN for user ${p.userId}. FinDesk does not store it.",
-            label = "PIN",
+            title = s.format(StringKey.PinFor, p.bankName),
+            text = s.format(StringKey.PinExplanation, p.userId),
+            label = s[StringKey.Pin],
             onAnswer = interaction::answer,
         )
 
         is BankingPrompt.ChooseTanMethod -> ChoiceDialog(
-            title = "Choose TAN procedure",
+            title = s[StringKey.ChooseTanProcedure],
             options = p.options.map { it.id to it.name },
             onAnswer = interaction::answer,
         )
 
         is BankingPrompt.ChooseTanMedium -> ChoiceDialog(
-            title = "Choose TAN medium",
+            title = s[StringKey.ChooseTanMedium],
             options = p.options.map { it to it },
             onAnswer = interaction::answer,
         )
@@ -48,36 +51,36 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
                 p.challenge.image?.let { runCatching { org.jetbrains.skia.Image.makeFromEncoded(it).toComposeImageBitmap() }.getOrNull() }
             }
             SecretDialog(
-                title = "TAN required",
-                text = p.challenge.message.ifBlank { "Enter the TAN shown by your TAN procedure." },
+                title = s[StringKey.TanRequired],
+                text = p.challenge.message.ifBlank { s[StringKey.TanDefaultMessage] },
                 label = "TAN",
                 masked = false,
                 onAnswer = interaction::answer,
             ) {
                 p.challenge.flickerCode?.let { FlickerCodeView(it, Modifier.align(Alignment.CenterHorizontally)) }
                 if (bitmap != null) {
-                    Image(bitmap, contentDescription = "TAN challenge", modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally))
+                    Image(bitmap, contentDescription = s[StringKey.TanChallenge], modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally))
                 }
             }
         }
 
         is BankingPrompt.Decoupled -> AlertDialog(
             onDismissRequest = {},
-            title = { Text("Confirm in your banking app") },
+            title = { Text(s[StringKey.ConfirmInBankingApp]) },
             text = { Text(p.message) },
-            confirmButton = { Button(onClick = { interaction.answer("ok") }) { Text("I confirmed it") } },
-            dismissButton = { TextButton(onClick = { interaction.answer(null) }) { Text("Cancel") } },
+            confirmButton = { Button(onClick = { interaction.answer("ok") }) { Text(s[StringKey.IConfirmedIt]) } },
+            dismissButton = { TextButton(onClick = { interaction.answer(null) }) { Text(s[StringKey.Cancel]) } },
         )
 
         is BankingPrompt.ConfirmPayee -> AlertDialog(
             onDismissRequest = {},
-            title = { Text("Check the recipient") },
+            title = { Text(s[StringKey.CheckRecipient]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Your bank compared the recipient name with the account holder:", fontWeight = FontWeight.Medium)
+                    Text(s[StringKey.BankComparedName], fontWeight = FontWeight.Medium)
                     Text(p.message)
                     Text(
-                        "If the name doesn't match, the money may go to someone else and may not be recoverable.",
+                        s[StringKey.NameMismatchWarning],
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
@@ -87,18 +90,18 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
                 Button(
                     onClick = { interaction.answer("ok") },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) { Text("Send anyway") }
+                ) { Text(s[StringKey.SendAnyway]) }
             },
-            dismissButton = { Button(onClick = { interaction.answer(null) }) { Text("Cancel transfer") } },
+            dismissButton = { Button(onClick = { interaction.answer(null) }) { Text(s[StringKey.CancelTransfer]) } },
         )
     }
 
     info?.let { message ->
         AlertDialog(
             onDismissRequest = interaction::clearInfo,
-            title = { Text("Message from your bank") },
+            title = { Text(s[StringKey.MessageFromBank]) },
             text = { Text(message) },
-            confirmButton = { TextButton(onClick = interaction::clearInfo) { Text("OK") } },
+            confirmButton = { TextButton(onClick = interaction::clearInfo) { Text(s[StringKey.Ok]) } },
         )
     }
 }
@@ -131,8 +134,8 @@ private fun SecretDialog(
                 )
             }
         },
-        confirmButton = { Button(enabled = value.isNotEmpty(), onClick = { onAnswer(value) }) { Text("OK") } },
-        dismissButton = { TextButton(onClick = { onAnswer(null) }) { Text("Cancel") } },
+        confirmButton = { Button(enabled = value.isNotEmpty(), onClick = { onAnswer(value) }) { Text(strings()[StringKey.Ok]) } },
+        dismissButton = { TextButton(onClick = { onAnswer(null) }) { Text(strings()[StringKey.Cancel]) } },
     )
 }
 
@@ -150,6 +153,6 @@ private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, onA
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = { onAnswer(null) }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = { onAnswer(null) }) { Text(strings()[StringKey.Cancel]) } },
     )
 }

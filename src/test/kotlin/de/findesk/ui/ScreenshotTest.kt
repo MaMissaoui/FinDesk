@@ -5,10 +5,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import de.findesk.data.database.DatabaseFactory
+import de.findesk.i18n.AppLanguage
+import de.findesk.i18n.LocalStrings
+import de.findesk.i18n.Translations
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.Screen
@@ -61,25 +65,37 @@ class ScreenshotTest {
 
     @Composable
     private fun Frame(screen: Screen, dark: Boolean) {
-        FinDeskTheme(darkTheme = dark) {
-            Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                Sidebar(currentScreen = screen, onScreenSelected = {})
-                Column(Modifier.fillMaxSize()) {
-                    TopBar(title = screen.title, isDarkTheme = dark, onThemeToggle = {})
-                    HorizontalDivider()
-                    Box(Modifier.fillMaxSize()) {
-                        when (screen) {
-                            Screen.DASHBOARD -> DashboardScreen()
-                            Screen.ACCOUNTS -> AccountsScreen()
-                            Screen.TRANSACTIONS -> TransactionsScreen()
-                            Screen.PAYMENTS -> PaymentsScreen()
-                            Screen.DOCUMENTS -> DocumentsScreen()
-                            Screen.REPORTS -> ReportsScreen()
-                            Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {})
+        CompositionLocalProvider(LocalStrings provides Translations.of(AppLanguage.EN)) {
+            FinDeskTheme(darkTheme = dark) {
+                Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                    Sidebar(currentScreen = screen, onScreenSelected = {})
+                    Column(Modifier.fillMaxSize()) {
+                        TopBar(title = stringsFor(screen), isDarkTheme = dark, onThemeToggle = {})
+                        HorizontalDivider()
+                        Box(Modifier.fillMaxSize()) {
+                            when (screen) {
+                                Screen.DASHBOARD -> DashboardScreen()
+                                Screen.ACCOUNTS -> AccountsScreen()
+                                Screen.TRANSACTIONS -> TransactionsScreen()
+                                Screen.PAYMENTS -> PaymentsScreen()
+                                Screen.DOCUMENTS -> DocumentsScreen()
+                                Screen.REPORTS -> ReportsScreen()
+                                Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {}, language = AppLanguage.EN, onLanguageChange = {})
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    private fun stringsFor(screen: Screen): String = when (screen) {
+        Screen.DASHBOARD -> "Dashboard"
+        Screen.ACCOUNTS -> "Accounts"
+        Screen.TRANSACTIONS -> "Transactions"
+        Screen.PAYMENTS -> "Payments"
+        Screen.DOCUMENTS -> "Documents"
+        Screen.REPORTS -> "Reports/Tax"
+        Screen.SETTINGS -> "Settings"
     }
 }

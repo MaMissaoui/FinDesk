@@ -13,6 +13,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.Success
 import de.findesk.viewmodel.BaseViewModel
@@ -63,7 +65,7 @@ fun MessageBanner(message: String?, error: String?, onDismiss: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Close, contentDescription = strings()[StringKey.Dismiss], modifier = Modifier.size(16.dp))
             }
         }
     }
@@ -136,7 +138,7 @@ fun categoryColor(hex: String?, fallbackKey: String? = null): Color {
 
 @Composable
 fun CategoryBadge(name: String?, colorHex: String?, modifier: Modifier = Modifier) {
-    val label = name ?: "Uncategorized"
+    val label = name ?: strings()[StringKey.Uncategorized]
     val color = if (name == null) MaterialTheme.colorScheme.onSurfaceVariant else categoryColor(colorHex, name)
     Surface(modifier = modifier, shape = RoundedCornerShape(4.dp), color = color.copy(alpha = 0.12f)) {
         Text(
@@ -150,7 +152,8 @@ fun CategoryBadge(name: String?, colorHex: String?, modifier: Modifier = Modifie
 }
 
 @Composable
-fun ConfirmDialog(title: String, text: String, confirmLabel: String = "Delete", onConfirm: () -> Unit, onDismiss: () -> Unit) {
+fun ConfirmDialog(title: String, text: String, confirmLabel: String? = null, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val s = strings()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -162,9 +165,9 @@ fun ConfirmDialog(title: String, text: String, confirmLabel: String = "Delete", 
                     onDismiss()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-            ) { Text(confirmLabel) }
+            ) { Text(confirmLabel ?: s[StringKey.Delete]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 

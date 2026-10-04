@@ -56,6 +56,41 @@ class BackupServiceTest {
         assertTrue(File(previous, BackupService.DB_NAME).exists())
     }
 
+    @Test
+    fun `documents still work after restoring into a different data directory`() {
+        val oldDir = File(tmp, "old-home").apply { mkdirs() }
+        val newDir = File(tmp, "new-home").apply { mkdirs() }
+        val previous = System.getProperty("findesk.home")
+        try {
+            System.setProperty("findesk.home", oldDir.absolutePath)
+            DatabaseFactory.init(oldDir.absolutePath)
+            val oldDocs = File(oldDir, "documents").apply { mkdirs() }
+            val stored = File(oldDocs, "1234-uuid_receipt.png").apply { writeText("png") }
+            TestData().documentRepo.create("receipt.png", stored.absolutePath, "image/png")
+            val backup = File(tmp, "move.zip")
+            BackupService(oldDir).createBackup(backup)
+            oldDir.deleteRecursively() // e.g. a new machine
+
+            System.setProperty("findesk.home", newDir.absolutePath)
+            BackupService(newDir).stageRestore(backup)
+            DatabaseFactory.init(newDir.absolutePath)
+
+            val doc = TestData().documentRepo.findItems().single()
+            assertTrue(File(doc.filePath).exists(), "resolved to ${doc.filePath}")
+            assertTrue(doc.filePath.startsWith(newDir.canonicalPath) || doc.filePath.startsWith(newDir.absolutePath))
+            assertNotNull(de.findesk.document.DocumentPreview.render(File(doc.filePath)) ?: Unit)
+
+            val service = de.findesk.document.DocumentService(
+                ocrService = de.findesk.document.OcrService(engine = null),
+                documentsDir = File(newDir, "documents"),
+            )
+            kotlinx.coroutines.runBlocking { assertTrue(service.deleteDocument(doc.id)) }
+            assertFalse(File(doc.filePath).exists(), "file deleted from the new location")
+        } finally {
+            if (previous == null) System.clearProperty("findesk.home") else System.setProperty("findesk.home", previous)
+        }
+    }
+
     private fun zip(file: File, entries: Map<String, String>) = file.also {
         ZipOutputStream(FileOutputStream(it)).use { z ->
             entries.forEach { (name, content) ->

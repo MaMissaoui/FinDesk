@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.document.DocumentService
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 import de.findesk.model.DocumentItem
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
@@ -36,6 +38,7 @@ import java.io.File
 fun DocumentsScreen() {
     val vm = rememberViewModel { DocumentsViewModel() }
     val state by vm.state.collectAsState()
+    val s = strings()
     LaunchedEffect(Unit) { vm.loadDocuments() }
 
     var confirmDelete by remember { mutableStateOf<DocumentItem?>(null) }
@@ -43,10 +46,10 @@ fun DocumentsScreen() {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Documents", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text(s[StringKey.NavDocuments], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                 if (!state.isOcrAvailable) {
                     Text(
-                        "OCR for images and scanned PDFs needs Tesseract (brew install tesseract tesseract-lang). PDFs with text work without it.",
+                        s[StringKey.OcrNeedsTesseract],
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -59,13 +62,13 @@ fun DocumentsScreen() {
             Button(
                 enabled = !state.isUploading,
                 onClick = {
-                    val files = FileDialogs.openFiles("Upload documents", DocumentService.SUPPORTED_EXTENSIONS)
+                    val files = FileDialogs.openFiles(s[StringKey.UploadDocuments], DocumentService.SUPPORTED_EXTENSIONS)
                     if (files.isNotEmpty()) vm.uploadDocuments(files)
                 },
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Upload")
+                Text(s[StringKey.Upload])
             }
         }
 
@@ -75,7 +78,7 @@ fun DocumentsScreen() {
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = { vm.searchDocuments(it) },
-            placeholder = { Text("Search documents by name or text content…") },
+            placeholder = { Text(s[StringKey.SearchDocuments]) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
@@ -83,7 +86,7 @@ fun DocumentsScreen() {
         Spacer(Modifier.height(12.dp))
         TabRow(selectedTabIndex = state.tab.ordinal) {
             DocumentTab.entries.forEach { tab ->
-                Tab(selected = state.tab == tab, onClick = { vm.selectTab(tab) }, text = { Text(tab.label) })
+                Tab(selected = state.tab == tab, onClick = { vm.selectTab(tab) }, text = { Text(s.documentTab(tab)) })
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -93,8 +96,8 @@ fun DocumentsScreen() {
                 if (!state.isLoading && state.documents.isEmpty()) {
                     EmptyState(
                         Icons.Default.Email,
-                        if (state.searchQuery.isBlank()) "No documents" else "No matches",
-                        if (state.searchQuery.isBlank()) "Upload receipts, invoices and statements (PDF, JPG, PNG, TIFF)." else "Try another search term.",
+                        if (state.searchQuery.isBlank()) s[StringKey.NoDocuments] else s[StringKey.NoMatches],
+                        if (state.searchQuery.isBlank()) s[StringKey.UploadHint] else s[StringKey.TryAnotherSearch],
                     )
                 }
                 LazyColumn {
@@ -121,8 +124,8 @@ fun DocumentsScreen() {
 
     confirmDelete?.let { doc ->
         ConfirmDialog(
-            title = "Delete document?",
-            text = "${doc.fileName} and its stored copy will be deleted.",
+            title = s[StringKey.DeleteDocumentTitle],
+            text = s.format(StringKey.DeleteDocumentText, doc.fileName),
             onConfirm = { vm.deleteDocument(doc.id) },
             onDismiss = { confirmDelete = null },
         )
@@ -131,6 +134,7 @@ fun DocumentsScreen() {
 
 @Composable
 private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Unit) {
+    val s = strings()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -149,7 +153,7 @@ private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Uni
         Column(Modifier.weight(1f)) {
             Text(doc.fileName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                Formats.dateTime(doc.uploadDate) + " · " + (doc.linkedTransactionLabel ?: "not linked"),
+                Formats.dateTime(doc.uploadDate) + " · " + (doc.linkedTransactionLabel ?: s[StringKey.NotLinked]),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (doc.linkedTransactionLabel != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -157,9 +161,9 @@ private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Uni
             )
         }
         if (doc.hasOcr) {
-            Icon(Icons.Default.CheckCircle, contentDescription = "Text extracted", tint = Success, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.CheckCircle, contentDescription = s[StringKey.TextExtracted], tint = Success, modifier = Modifier.size(16.dp))
         } else {
-            Icon(Icons.Default.Clear, contentDescription = "No text", tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.Clear, contentDescription = s[StringKey.NoText], tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -176,17 +180,18 @@ private fun DocumentDetail(
     onDelete: () -> Unit,
 ) {
     var pickerQuery by remember(doc.id) { mutableStateOf("") }
+    val s = strings()
 
     Card(modifier = modifier, shape = RoundedCornerShape(12.dp)) {
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(doc.fileName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = s[StringKey.Close]) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { openExternally(File(doc.filePath)) }) { Text("Open") }
-                OutlinedButton(onClick = onReprocess) { Text("Re-extract text") }
-                OutlinedButton(onClick = onDelete) { Text("Delete") }
+                OutlinedButton(onClick = { openExternally(File(doc.filePath)) }) { Text(s[StringKey.Open]) }
+                OutlinedButton(onClick = onReprocess) { Text(s[StringKey.ReExtractText]) }
+                OutlinedButton(onClick = onDelete) { Text(s[StringKey.Delete]) }
             }
 
             val preview by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, doc.id) {
@@ -197,27 +202,27 @@ private fun DocumentDetail(
             preview?.let {
                 androidx.compose.foundation.Image(
                     bitmap = it,
-                    contentDescription = "Preview of ${doc.fileName}",
+                    contentDescription = s.format(StringKey.PreviewOf, doc.fileName),
                     modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).clickable { openExternally(File(doc.filePath)) },
                     contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                 )
             }
 
-            Text("Linked transaction", style = MaterialTheme.typography.labelLarge)
+            Text(s[StringKey.LinkedTransaction], style = MaterialTheme.typography.labelLarge)
             if (doc.linkedTransactionLabel != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(doc.linkedTransactionLabel, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
-                    TextButton(onClick = onUnlink) { Text("Unlink") }
+                    TextButton(onClick = onUnlink) { Text(s[StringKey.Unlink]) }
                 }
             } else {
                 if (state.suggestions.isNotEmpty()) {
-                    Text("Suggested matches (amount and date from the document)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    state.suggestions.forEach { s -> LinkCandidateRow(s.transaction, "${(s.score * 100).toInt()}%") { onLink(s.transaction.id) } }
+                    Text(s[StringKey.SuggestedMatches], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    state.suggestions.forEach { s2 -> LinkCandidateRow(s2.transaction, s.format(StringKey.MatchPercent, "${(s2.score * 100).toInt()}%")) { onLink(s2.transaction.id) } }
                 }
                 OutlinedTextField(
                     value = pickerQuery,
                     onValueChange = { pickerQuery = it },
-                    placeholder = { Text("Find a transaction to link…") },
+                    placeholder = { Text(s[StringKey.FindTransactionToLink]) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -230,12 +235,12 @@ private fun DocumentDetail(
             }
 
             Text(
-                "Extracted text" + (doc.ocrConfidence?.let { " (confidence ${it.toInt()}%)" } ?: ""),
+                s[StringKey.ExtractedText] + (doc.ocrConfidence?.let { s.format(StringKey.ExtractedTextConfidence, it.toInt()) } ?: ""),
                 style = MaterialTheme.typography.labelLarge,
             )
             Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 Text(
-                    state.selectedOcrText ?: "No text extracted.",
+                    state.selectedOcrText ?: s[StringKey.NoTextExtracted],
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -251,12 +256,12 @@ private fun LinkCandidateRow(txn: TransactionItem, badge: String?, onLink: () ->
         Column(Modifier.weight(1f)) {
             Text(txn.description, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${Formats.date(txn.date)} · ${Formats.money(txn.amount, txn.currency)}" + (badge?.let { " · match $it" } ?: ""),
+                "${Formats.date(txn.date)} · ${Formats.money(txn.amount, txn.currency)}" + (badge?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onLink) { Text("Link") }
+        TextButton(onClick = onLink) { Text(strings()[StringKey.Link]) }
     }
 }
 

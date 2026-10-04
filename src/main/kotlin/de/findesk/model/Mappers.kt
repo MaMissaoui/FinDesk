@@ -65,7 +65,7 @@ fun Document.toItem(hasOcr: Boolean, ocrConfidence: java.math.BigDecimal?): Docu
     return DocumentItem(
         id = id.value,
         fileName = fileName,
-        filePath = filePath,
+        filePath = de.findesk.util.AppPaths.resolveDocument(filePath).absolutePath,
         mimeType = mimeType,
         uploadDate = uploadDate,
         linkedTransactionId = txn?.id?.value,

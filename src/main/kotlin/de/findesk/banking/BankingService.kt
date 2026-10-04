@@ -148,16 +148,17 @@ class BankingService(
         accountId: Int,
         finTSTransactions: List<FinTSTransaction>,
     ): ImportResult = withContext(Dispatchers.IO) {
+        val plan = de.findesk.repository.BookingDedup.plan(
+            accountId,
+            finTSTransactions.map { de.findesk.repository.BookingDedup.Candidate(it, it.date, it.amount, FinTSClient.importHash(it)) },
+            transactionRepository,
+        )
         var imported = 0
-        var duplicates = 0
         var categorized = 0
 
-        finTSTransactions.forEach { t ->
-            val hash = FinTSClient.importHash(t)
-            if (transactionRepository.findByHash(hash) != null) {
-                duplicates++
-                return@forEach
-            }
+        plan.toImport.forEach { candidate ->
+            val t = candidate.item
+            val hash = candidate.hash
             val category = ruleRepository.matchTransaction(purpose = t.purpose, partnerName = t.partnerName)
             transactionRepository.create(
                 accountId = accountId,
@@ -173,7 +174,7 @@ class BankingService(
             if (category != null) categorized++
         }
 
-        ImportResult(imported = imported, duplicates = duplicates, categorized = categorized)
+        ImportResult(imported = imported, duplicates = plan.exactDuplicates + plan.probableDuplicates, categorized = categorized)
     }
 
     /** Validates a transfer before anything is sent; returns an error message or null. */

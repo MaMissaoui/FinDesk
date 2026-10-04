@@ -59,6 +59,8 @@ data class ImportPreview(
     val file: File,
     val statement: ParsedStatement,
     val accountId: Int?,
+    /** The file's balance may replace the account balance (file not older than the account's newest booking). */
+    val balanceUpdateAllowed: Boolean = false,
 )
 
 data class TransactionsState(
@@ -307,14 +309,20 @@ class TransactionsViewModel(
         val statement = importService.read(file, mapping)
         val accountId = importService.matchAccount(statement) ?: _state.value.importPreview?.accountId
             ?: _state.value.accountId ?: _state.value.accounts.singleOrNull()?.id
-        _state.update { it.copy(importPreview = ImportPreview(file, statement, accountId), error = null) }
+        val allowed = accountId?.let { importService.balanceUpdateAllowed(it, statement) } ?: false
+        _state.update { it.copy(importPreview = ImportPreview(file, statement, accountId, allowed), error = null) }
     }
 
     /** Re-reads the CSV with a user-adjusted column mapping. */
     fun remapImport(mapping: CsvMapping): Job = _state.value.importPreview?.let { openImport(it.file, mapping) } ?: Job().apply { complete() }
 
-    fun selectImportAccount(accountId: Int) {
-        _state.update { s -> s.copy(importPreview = s.importPreview?.copy(accountId = accountId)) }
+    fun selectImportAccount(accountId: Int): Job {
+        _state.update { s -> s.copy(importPreview = s.importPreview?.copy(accountId = accountId, balanceUpdateAllowed = false)) }
+        return launchSafely(onError) {
+            val preview = _state.value.importPreview ?: return@launchSafely
+            val allowed = importService.balanceUpdateAllowed(accountId, preview.statement)
+            _state.update { s -> s.copy(importPreview = s.importPreview?.takeIf { it.accountId == accountId }?.copy(balanceUpdateAllowed = allowed) ?: s.importPreview) }
+        }
     }
 
     fun cancelImport() {

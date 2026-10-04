@@ -13,6 +13,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankingService
 import de.findesk.banking.TransferOrder
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
 import de.findesk.ui.components.*
 import de.findesk.util.Formats
@@ -23,6 +25,7 @@ import de.findesk.viewmodel.PaymentsViewModel
 fun PaymentsScreen() {
     val vm = rememberViewModel { PaymentsViewModel() }
     val state by vm.state.collectAsState()
+    val s = strings()
     LaunchedEffect(Unit) { vm.load() }
     BankingPromptHost(vm.bankingInteraction)
 
@@ -40,38 +43,38 @@ fun PaymentsScreen() {
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(Modifier.weight(3f).verticalScroll(rememberScrollState())) {
-            Text("SEPA Transfer", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(s[StringKey.SepaTransfer], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
             MessageBanner(state.message, state.error, vm::clearMessages)
 
             if (state.accounts.isEmpty()) {
-                EmptyState(Icons.Default.Send, "No accounts", "Add and sync a bank account first.")
+                EmptyState(Icons.Default.Send, s[StringKey.NoAccounts], s[StringKey.AddAndSyncFirst])
                 return@Column
             }
 
             Card {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("From", style = MaterialTheme.typography.labelLarge)
+                    Text(s[StringKey.From], style = MaterialTheme.typography.labelLarge)
                     DropdownSelector(
-                        label = from?.let { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance)})" } ?: "Choose account",
+                        label = from?.let { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance)})" } ?: s[StringKey.ChooseAccount],
                         options = state.accounts,
                         optionLabel = { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance)})" },
                         onSelect = { from = it },
                     )
-                    OutlinedTextField(name, { name = it.take(BankingService.MAX_NAME_LENGTH) }, label = { Text("Recipient name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(name, { name = it.take(BankingService.MAX_NAME_LENGTH) }, label = { Text(s[StringKey.RecipientName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(
                         iban,
                         { iban = it.uppercase() },
-                        label = { Text("Recipient IBAN") },
+                        label = { Text(s[StringKey.RecipientIban]) },
                         isError = iban.isNotBlank() && !ibanOk,
-                        supportingText = { if (iban.isNotBlank() && !ibanOk) Text("IBAN is not valid") },
+                        supportingText = { if (iban.isNotBlank() && !ibanOk) Text(s[StringKey.IbanNotValid]) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
                         bic,
                         { bic = it.uppercase() },
-                        label = { Text("BIC (optional)") },
+                        label = { Text(s[StringKey.BicOptional]) },
                         placeholder = { suggestedBic?.let { Text(it) } },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -79,7 +82,7 @@ fun PaymentsScreen() {
                     OutlinedTextField(
                         amount,
                         { amount = it },
-                        label = { Text("Amount (€)") },
+                        label = { Text(s[StringKey.AmountEuro]) },
                         isError = amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -87,7 +90,7 @@ fun PaymentsScreen() {
                     OutlinedTextField(
                         purpose,
                         { purpose = it.take(BankingService.MAX_PURPOSE_LENGTH) },
-                        label = { Text("Purpose (Verwendungszweck)") },
+                        label = { Text(s[StringKey.PurposeVerwendungszweck]) },
                         supportingText = { Text("${purpose.length}/${BankingService.MAX_PURPOSE_LENGTH}") },
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -99,13 +102,13 @@ fun PaymentsScreen() {
                                 TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose),
                             )
                         },
-                    ) { Text("Review transfer") }
+                    ) { Text(s[StringKey.ReviewTransfer]) }
                 }
             }
         }
 
-        SectionCard("Recent transfers", Modifier.weight(2f)) {
-            if (state.recentTransfers.isEmpty()) Text("None yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SectionCard(s[StringKey.RecentTransfersLabel], Modifier.weight(2f)) {
+            if (state.recentTransfers.isEmpty()) Text(s[StringKey.NoneYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
             state.recentTransfers.forEach { e ->
                 Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall)
@@ -118,33 +121,33 @@ fun PaymentsScreen() {
         var acknowledged by remember(order) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { if (!state.isSending) vm.cancelReview() },
-            title = { Text("Confirm transfer") },
+            title = { Text(s[StringKey.ConfirmTransfer]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
-                    ReviewRow("From", "${account.bankName} ${Formats.iban(account.iban)}")
-                    ReviewRow("To", order.recipientName)
-                    ReviewRow("IBAN", Formats.iban(Iban.normalize(order.recipientIban)))
-                    order.recipientBic?.let { ReviewRow("BIC", it) }
-                    ReviewRow("Amount", Formats.money(order.amount))
-                    ReviewRow("Purpose", order.purpose.ifBlank { "—" })
+                    ReviewRow(s[StringKey.From], "${account.bankName} ${Formats.iban(account.iban)}")
+                    ReviewRow(s[StringKey.To], order.recipientName)
+                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)))
+                    order.recipientBic?.let { ReviewRow(s[StringKey.ColBalance].let { "BIC" }, it) }
+                    ReviewRow(s[StringKey.AmountEuro], Formats.money(order.amount))
+                    ReviewRow(s[StringKey.Purpose], order.purpose.ifBlank { "—" })
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
-                        Text("I checked the recipient and amount. This sends real money.")
+                        Text(s[StringKey.TransferAcknowledgement])
                     }
                     if (state.isSending) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
-                            Text("Waiting for the bank…")
+                            Text(s[StringKey.WaitingForBank])
                         }
                     }
                 }
             },
             confirmButton = {
-                Button(enabled = acknowledged && !state.isSending, onClick = { vm.confirmAndSend() }) { Text("Confirm & send") }
+                Button(enabled = acknowledged && !state.isSending, onClick = { vm.confirmAndSend() }) { Text(s[StringKey.ConfirmAndSend]) }
             },
-            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelReview) { Text("Back") } },
+            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelReview) { Text(s[StringKey.Back]) } },
         )
     }
 }

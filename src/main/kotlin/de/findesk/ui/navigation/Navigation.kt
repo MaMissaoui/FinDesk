@@ -6,15 +6,28 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.Strings
 
-enum class Screen(val title: String, val icon: ImageVector) {
-    DASHBOARD("Dashboard", Icons.Default.Home),
-    ACCOUNTS("Accounts", Icons.Default.AccountBox),
-    TRANSACTIONS("Transactions", Icons.Default.List),
-    PAYMENTS("Payments", Icons.Default.ShoppingCart),
-    DOCUMENTS("Documents", Icons.Default.Menu),
-    REPORTS("Reports/Tax", Icons.Default.Info),
-    SETTINGS("Settings", Icons.Default.Settings),
+enum class Screen(val icon: ImageVector) {
+    DASHBOARD(Icons.Default.Home),
+    ACCOUNTS(Icons.Default.AccountBox),
+    TRANSACTIONS(Icons.Default.List),
+    PAYMENTS(Icons.Default.ShoppingCart),
+    DOCUMENTS(Icons.Default.Menu),
+    REPORTS(Icons.Default.Info),
+    SETTINGS(Icons.Default.Settings),
+    ;
+
+    fun title(s: Strings): String = when (this) {
+        DASHBOARD -> s[StringKey.NavDashboard]
+        ACCOUNTS -> s[StringKey.NavAccounts]
+        TRANSACTIONS -> s[StringKey.NavTransactions]
+        PAYMENTS -> s[StringKey.NavPayments]
+        DOCUMENTS -> s[StringKey.NavDocuments]
+        REPORTS -> s[StringKey.NavReports]
+        SETTINGS -> s[StringKey.NavSettings]
+    }
 }
 
 /** Optional context passed when navigating, e.g. "show transactions of this account". */

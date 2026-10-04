@@ -1,5 +1,6 @@
 package de.findesk.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,11 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.findesk.i18n.strings
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.PrimaryBlue
-import de.findesk.ui.theme.PrimaryBlueLight
 
 @Composable
 fun Sidebar(
@@ -31,13 +33,23 @@ fun Sidebar(
             .padding(16.dp),
     ) {
         // App Logo/Title
-        Text(
-            text = "FinDesk",
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.padding(bottom = 32.dp),
-        )
+        ) {
+            Image(
+                painter = painterResource("icon-64.png"),
+                contentDescription = "FinDesk Logo",
+                modifier = Modifier.size(40.dp),
+            )
+            Text(
+                text = "FinDesk",
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+            )
+        }
 
         // Navigation Items
         Screen.entries.forEach { screen ->
@@ -82,12 +94,12 @@ private fun SidebarItem(
     ) {
         Icon(
             imageVector = screen.icon,
-            contentDescription = screen.title,
+            contentDescription = screen.title(strings()),
             tint = contentColor,
             modifier = Modifier.size(24.dp),
         )
         Text(
-            text = screen.title,
+            text = screen.title(strings()),
             style = MaterialTheme.typography.bodyLarge,
             color = contentColor,
             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,

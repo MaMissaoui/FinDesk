@@ -15,6 +15,7 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.or
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -49,6 +50,9 @@ interface TransactionRepository {
 
     /** Filtered, newest-first snapshot safe to use outside a transaction. */
     fun findItems(filter: TransactionFilter = TransactionFilter(), limit: Int? = null): List<TransactionItem>
+
+    /** Number of bookings on [accountId] with this booking date and amount (for cross-source duplicate checks). */
+    fun countSameBooking(accountId: Int, date: LocalDate, amount: BigDecimal): Int
 }
 
 class TransactionRepositoryImpl : TransactionRepository {
@@ -209,5 +213,11 @@ class TransactionRepositoryImpl : TransactionRepository {
                 .eachCount()
         }
         transactions.map { it.toItem(docCounts[it.id.value] ?: 0) }
+    }
+
+    override fun countSameBooking(accountId: Int, date: LocalDate, amount: BigDecimal): Int = transaction {
+        TransactionsTable.selectAll().where {
+            (TransactionsTable.accountId eq accountId) and (TransactionsTable.date eq date) and (TransactionsTable.amount eq amount)
+        }.count().toInt()
     }
 }

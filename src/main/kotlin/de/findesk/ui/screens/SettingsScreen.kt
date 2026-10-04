@@ -14,6 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.document.TesseractOcrEngine
+import de.findesk.i18n.AppLanguage
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 import de.findesk.model.CategoryItem
 import de.findesk.model.RuleItem
 import de.findesk.ui.components.*
@@ -25,9 +28,15 @@ import de.findesk.viewmodel.SettingsViewModel
 import java.math.BigDecimal
 
 @Composable
-fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
+fun SettingsScreen(
+    darkTheme: Boolean,
+    onDarkThemeChange: (Boolean) -> Unit,
+    language: AppLanguage,
+    onLanguageChange: (AppLanguage) -> Unit,
+) {
     val vm = rememberViewModel { SettingsViewModel(isOcrAvailable = TesseractOcrEngine.createOrNull() != null) }
     val state by vm.state.collectAsState()
+    val s = strings()
     LaunchedEffect(Unit) { vm.load() }
 
     var editCategory by remember { mutableStateOf<CategoryItem?>(null) }
@@ -38,28 +47,38 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(s[StringKey.NavSettings], style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             MessageBanner(state.message, state.error, vm::clearMessages)
         }
 
         item {
-            SectionCard("Appearance", Modifier.fillMaxWidth()) {
+            SectionCard(s[StringKey.Appearance], Modifier.fillMaxWidth()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Dark theme", modifier = Modifier.weight(1f))
+                    Text(s[StringKey.DarkTheme], modifier = Modifier.weight(1f))
                     Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s[StringKey.Language], modifier = Modifier.weight(1f))
+                    DropdownSelector(
+                        label = language.nativeName,
+                        options = AppLanguage.entries,
+                        optionLabel = { option -> option.nativeName },
+                        onSelect = { onLanguageChange(it) },
+                    )
                 }
             }
         }
 
         item {
             SectionCard(
-                "Categories",
+                s[StringKey.Categories],
                 Modifier.fillMaxWidth(),
-                actions = { TextButton(onClick = { newCategory = true }) { Text("Add category") } },
+                actions = { TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) } },
             ) {
                 if (state.categories.isEmpty()) {
-                    Text("No categories yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 state.categories.forEach { c ->
                     Row(Modifier.fillMaxWidth().clickable { editCategory = c }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -67,14 +86,14 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
                         Spacer(Modifier.width(12.dp))
                         Text(c.name, modifier = Modifier.weight(1f))
                         if (c.isTaxRelevant) {
-                            CategoryBadge("tax-relevant", "#F59E0B")
+                            CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
                             Spacer(Modifier.width(8.dp))
                         }
                         c.budgetLimit?.let {
-                            Text("Budget ${Formats.money(it)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(s.format(StringKey.BudgetAmount, Formats.money(it)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.width(8.dp))
                         }
-                        IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
+                        IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                     }
                     HorizontalDivider()
                 }
@@ -83,12 +102,12 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
 
         item {
             SectionCard(
-                "Auto-categorization rules",
+                s[StringKey.AutoCategorizationRules],
                 Modifier.fillMaxWidth(),
-                actions = { TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text("Add rule") } },
+                actions = { TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) } },
             ) {
                 Text(
-                    "A rule's pattern is a case-insensitive regular expression matched against partner name and purpose. Higher priority wins.",
+                    s[StringKey.RulesHint],
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -97,8 +116,8 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
                     Row(Modifier.fillMaxWidth().clickable { editRule = r }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                         Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
-                        Text("prio ${r.priority}" + if (!r.autoApply) " · manual" else "", style = MaterialTheme.typography.bodySmall)
-                        IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = "Delete") }
+                        Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
+                        IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                     }
                     HorizontalDivider()
                 }
@@ -106,9 +125,9 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
         }
 
         item {
-            SectionCard("Data & OCR", Modifier.fillMaxWidth()) {
-                InfoRow("Database", state.dataDirectory + "/findesk.db")
-                InfoRow("Documents", state.documentsDirectory)
+            SectionCard(s[StringKey.DataAndOcr], Modifier.fillMaxWidth()) {
+                InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db")
+                InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
                     Icon(
                         if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
@@ -119,9 +138,9 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
                     Spacer(Modifier.width(8.dp))
                     Text(
                         if (state.isOcrAvailable) {
-                            "Tesseract OCR available (German + English)"
+                            s[StringKey.TesseractAvailable]
                         } else {
-                            "Tesseract not found. Install with: brew install tesseract tesseract-lang"
+                            s[StringKey.TesseractMissing]
                         },
                     )
                 }
@@ -129,20 +148,20 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
         }
 
         item {
-            SectionCard("Backup & restore", Modifier.fillMaxWidth()) {
+            SectionCard(s[StringKey.BackupAndRestore], Modifier.fillMaxWidth()) {
                 Text(
-                    "A backup contains the database, all stored documents and the online-banking connection files.",
+                    s[StringKey.BackupHint],
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(enabled = !state.isBusy, onClick = {
-                        FileDialogs.saveFile("Save backup", "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
-                    }) { Text("Create backup") }
+                        FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
+                    }) { Text(s[StringKey.CreateBackup]) }
                     OutlinedButton(enabled = !state.isBusy && !state.hasPendingRestore, onClick = {
-                        FileDialogs.openFiles("Restore backup", setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
-                    }) { Text("Restore from backup…") }
+                        FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
+                    }) { Text(s[StringKey.RestoreFromBackup]) }
                     if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 }
                 if (state.hasPendingRestore) {
@@ -150,19 +169,19 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("A restore is waiting. Restart FinDesk to apply it.", modifier = Modifier.weight(1f))
-                        TextButton(onClick = { vm.cancelPendingRestore() }) { Text("Cancel restore") }
+                        Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
+                        TextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
                     }
                 }
                 state.restoredFrom?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text("Backup restored at this start. Your previous data is in $it", style = MaterialTheme.typography.bodySmall)
+                    Text(s.format(StringKey.BackupRestoredAt, it), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
 
         item {
-            SectionCard("Audit log (latest 100)", Modifier.fillMaxWidth()) {
+            SectionCard(s[StringKey.AuditLogLatest], Modifier.fillMaxWidth()) {
                 state.auditLog.forEach { e ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(140.dp))
@@ -208,21 +227,21 @@ fun SettingsScreen(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
     state.restoreCandidate?.let { (file, info) ->
         AlertDialog(
             onDismissRequest = vm::cancelRestoreChoice,
-            title = { Text("Restore ${file.name}?") },
+            title = { Text(s.format(StringKey.RestoreFileTitle, file.name)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Created ${info.created.take(16).replace('T', ' ')} · ${info.transactions} transactions · ${info.documents} documents")
-                    Text("On the next start, all current data is replaced by this backup. The current data is moved to a pre-restore folder, not deleted.")
+                    Text(s.format(StringKey.RestoreCreated, info.created.take(16).replace('T', ' '), info.transactions, info.documents))
+                    Text(s[StringKey.RestoreExplanation])
                 }
             },
-            confirmButton = { Button(onClick = { vm.confirmRestore() }) { Text("Prepare restore") } },
-            dismissButton = { TextButton(onClick = vm::cancelRestoreChoice) { Text("Cancel") } },
+            confirmButton = { Button(onClick = { vm.confirmRestore() }) { Text(s[StringKey.PrepareRestore]) } },
+            dismissButton = { TextButton(onClick = vm::cancelRestoreChoice) { Text(s[StringKey.Cancel]) } },
         )
     }
     confirmDeleteCategory?.let { c ->
         ConfirmDialog(
-            title = "Delete category ${c.name}?",
-            text = "Its transactions become uncategorized and its rules are deleted.",
+            title = s.format(StringKey.DeleteCategoryTitle, c.name),
+            text = s[StringKey.DeleteCategoryText],
             onConfirm = { vm.deleteCategory(c.id) },
             onDismiss = { confirmDeleteCategory = null },
         )
@@ -254,14 +273,15 @@ private fun CategoryDialog(
     var budget by remember { mutableStateOf(existing?.budgetLimit?.toPlainString()?.replace('.', ',').orEmpty()) }
     var tax by remember { mutableStateOf(existing?.isTaxRelevant ?: false) }
     val parsedBudget = budget.takeIf { it.isNotBlank() }?.let { Formats.parseAmount(it) }
-    val error = validate(name, color) ?: if (budget.isNotBlank() && parsedBudget == null) "Budget is not a number" else null
+    val s = strings()
+    val error = validate(name, color) ?: if (budget.isNotBlank() && parsedBudget == null) s[StringKey.BudgetNotANumber] else null
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "Add category" else "Edit category") },
+        title = { Text(if (existing == null) s[StringKey.AddCategory] else s[StringKey.EditCategory]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
+                OutlinedTextField(name, { name = it }, label = { Text(s[StringKey.Name]) }, singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     CategoryColors.indices.forEach { i ->
                         val hex = colorHex(i)
@@ -272,16 +292,16 @@ private fun CategoryDialog(
                         )
                     }
                 }
-                OutlinedTextField(budget, { budget = it }, label = { Text("Monthly budget (€, optional)") }, singleLine = true)
+                OutlinedTextField(budget, { budget = it }, label = { Text(s[StringKey.MonthlyBudgetOptional]) }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = tax, onCheckedChange = { tax = it })
-                    Text("Tax-relevant (Werbungskosten, Sonderausgaben, …)")
+                    Text(s[StringKey.TaxRelevantHint])
                 }
                 if (error != null && name.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(name, color, parsedBudget, tax) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(name, color, parsedBudget, tax) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -298,23 +318,24 @@ private fun RuleDialog(
     var priority by remember { mutableStateOf((existing?.priority ?: 0).toString()) }
     var autoApply by remember { mutableStateOf(existing?.autoApply ?: true) }
     val error = validate(pattern) ?: if (priority.toIntOrNull() == null) "Priority must be a whole number" else null
+    val s = strings()
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "Add rule" else "Edit rule") },
+        title = { Text(if (existing == null) s[StringKey.AddRule] else s[StringKey.EditRule]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(pattern, { pattern = it }, label = { Text("Pattern (e.g. rewe|edeka|aldi)") }, singleLine = true)
+                OutlinedTextField(pattern, { pattern = it }, label = { Text(s[StringKey.PatternExample]) }, singleLine = true)
                 DropdownSelector("Category: ${category.name}", categories, { it.name }, { category = it })
-                OutlinedTextField(priority, { priority = it }, label = { Text("Priority") }, singleLine = true)
+                OutlinedTextField(priority, { priority = it }, label = { Text(s[StringKey.Priority]) }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = autoApply, onCheckedChange = { autoApply = it })
-                    Text("Apply automatically")
+                    Text(s[StringKey.ApplyAutomatically])
                 }
                 if (error != null && pattern.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }

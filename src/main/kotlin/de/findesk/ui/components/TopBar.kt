@@ -10,6 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.strings
 
 @Composable
 fun TopBar(
@@ -44,7 +46,7 @@ fun TopBar(
             IconButton(onClick = onThemeToggle) {
                 Icon(
                     imageVector = if (isDarkTheme) Icons.Default.Star else Icons.Default.FavoriteBorder,
-                    contentDescription = "Toggle theme",
+                    contentDescription = strings()[StringKey.ToggleTheme],
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
