@@ -58,12 +58,3 @@ fun PaymentsPlaceholderScreen() {
         description = "SEPA transfers, standing orders, and payment management will be available here.",
     )
 }
-
-@Composable
-fun SettingsPlaceholderScreen() {
-    PlaceholderScreen(
-        title = "Settings",
-        icon = Icons.Default.Settings,
-        description = "Configure application settings, manage bank connections, and customize your experience.",
-    )
-}

@@ -101,6 +101,10 @@ tasks.test {
     val testHome = layout.buildDirectory.dir("test-home").get().asFile
     doFirst { testHome.mkdirs() }
     systemProperty("user.home", testHome.absolutePath)
+    // Headless UI screenshots: ./gradlew test --tests '*ScreenshotTest' -Pscreenshots=<out-dir> [-PscreenshotData=<FINDESK_HOME>]
+    providers.gradleProperty("screenshots").orNull?.let { systemProperty("findesk.screenshots", it) }
+    providers.gradleProperty("screenshotData").orNull?.let { systemProperty("findesk.screenshotData", it) }
+    if (providers.gradleProperty("screenshots").isPresent) outputs.upToDateWhen { false }
 }
 
 ktlint {

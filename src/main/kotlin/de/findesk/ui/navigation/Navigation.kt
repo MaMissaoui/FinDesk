@@ -2,6 +2,9 @@ package de.findesk.ui.navigation
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 
 enum class Screen(val title: String, val icon: ImageVector) {
@@ -14,11 +17,19 @@ enum class Screen(val title: String, val icon: ImageVector) {
     SETTINGS("Settings", Icons.Default.Settings),
 }
 
+/** Optional context passed when navigating, e.g. "show transactions of this account". */
+data class NavigationArgs(val accountId: Int? = null, val uncategorizedOnly: Boolean = false)
+
 class NavigationState {
-    var currentScreen: Screen = Screen.DASHBOARD
+    // Compose state: plain vars don't trigger recomposition, so the sidebar used to do nothing visible
+    var currentScreen: Screen by mutableStateOf(Screen.DASHBOARD)
         private set
 
-    fun navigateTo(screen: Screen) {
+    var args: NavigationArgs by mutableStateOf(NavigationArgs())
+        private set
+
+    fun navigateTo(screen: Screen, args: NavigationArgs = NavigationArgs()) {
+        this.args = args
         currentScreen = screen
     }
 }

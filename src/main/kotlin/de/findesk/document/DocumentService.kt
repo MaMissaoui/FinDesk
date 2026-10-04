@@ -47,7 +47,7 @@ class DocumentService(
         private const val MATCH_WINDOW_DAYS = 14L
         val SUPPORTED_EXTENSIONS = setOf("pdf", "jpg", "jpeg", "png", "tif", "tiff")
 
-        fun defaultDocumentsDirectory(): File = File(System.getProperty("user.home"), ".findesk/documents")
+        fun defaultDocumentsDirectory(): File = de.findesk.util.AppPaths.documentsDir
 
         fun detectMimeType(file: File): String = when (file.extension.lowercase()) {
             "pdf" -> "application/pdf"

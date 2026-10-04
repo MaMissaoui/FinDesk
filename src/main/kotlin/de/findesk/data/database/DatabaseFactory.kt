@@ -1,6 +1,7 @@
 package de.findesk.data.database
 
 import de.findesk.data.table.*
+import de.findesk.util.AppPaths
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.StdOutSqlLogger
@@ -38,8 +39,7 @@ object DatabaseFactory {
     }
 
     private fun getDefaultDataDir(): String {
-        val userHome = System.getProperty("user.home")
-        val appDir = File(userHome, ".findesk")
+        val appDir = AppPaths.dataDir
         if (!appDir.exists()) {
             appDir.mkdirs()
         }

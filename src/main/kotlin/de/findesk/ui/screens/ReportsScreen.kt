@@ -2,7 +2,7 @@ package de.findesk.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -10,219 +10,124 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import de.findesk.document.ReportService
+import de.findesk.ui.components.*
 import de.findesk.ui.theme.*
+import de.findesk.util.Formats
+import de.findesk.viewmodel.ReportsViewModel
+import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.Month
+import java.time.format.TextStyle
+import java.util.Locale
 
 @Composable
 fun ReportsScreen() {
+    val vm = rememberViewModel { ReportsViewModel() }
+    val state by vm.state.collectAsState()
+    LaunchedEffect(Unit) { vm.loadTaxReport() }
     var selectedTab by remember { mutableStateOf(0) }
-    var selectedYear by remember { mutableStateOf(2026) }
+    val report = state.taxReport
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-    ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Reports & Tax",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { /* TODO: Export CSV */ }) {
-                    Icon(Icons.Default.Share, contentDescription = "Export CSV")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export CSV")
-                }
-                Button(onClick = { /* TODO: Export PDF */ }) {
-                    Icon(Icons.Default.Share, contentDescription = "Export PDF")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export PDF")
-                }
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Reports & Tax", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (state.isExporting) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(12.dp))
+            }
+            OutlinedButton(
+                enabled = !state.isExporting,
+                onClick = { FileDialogs.saveFile("Export transactions", "findesk-${state.selectedYear}.csv")?.let { vm.exportToCsv(it) } },
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Export CSV")
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                enabled = !state.isExporting,
+                onClick = { FileDialogs.saveFile("Export tax report", "tax-report-${state.selectedYear}.pdf")?.let { vm.exportToPdf(it) } },
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Export PDF")
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(16.dp))
+        MessageBanner(state.message, state.error, vm::clearMessages)
 
-        // Year Selector
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = "Tax Year:",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { selectedYear-- }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Previous Year")
-                }
-                Text(
-                    text = selectedYear.toString(),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                IconButton(onClick = { selectedYear++ }) {
-                    Icon(Icons.Default.ArrowForward, contentDescription = "Next Year")
-                }
-            }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("Tax Year:", style = MaterialTheme.typography.titleMedium)
+            IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = "Previous year") }
+            Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = "Next year") }
+            if (state.isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Tabs
+        Spacer(Modifier.height(16.dp))
         TabRow(selectedTabIndex = selectedTab) {
-            Tab(
-                selected = selectedTab == 0,
-                onClick = { selectedTab = 0 },
-                text = { Text("Tax Summary") },
-                icon = { Icon(Icons.Default.Info, contentDescription = null) },
-            )
-            Tab(
-                selected = selectedTab == 1,
-                onClick = { selectedTab = 1 },
-                text = { Text("Monthly Breakdown") },
-                icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-            )
-            Tab(
-                selected = selectedTab == 2,
-                onClick = { selectedTab = 2 },
-                text = { Text("Category Analysis") },
-                icon = { Icon(Icons.Default.Star, contentDescription = null) },
-            )
+            listOf("Tax Summary", "Monthly Breakdown", "Category Analysis").forEachIndexed { i, label ->
+                Tab(selected = selectedTab == i, onClick = { selectedTab = i }, text = { Text(label) })
+            }
         }
+        Spacer(Modifier.height(24.dp))
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Content
+        if (report == null) return@Column
+        if (report.transactionCount == 0) {
+            EmptyState(Icons.Default.Info, "No transactions in ${report.year}", "Reports are built from the transactions of the selected year.")
+            return@Column
+        }
         when (selectedTab) {
-            0 -> TaxSummaryTab(selectedYear)
-            1 -> MonthlyBreakdownTab(selectedYear)
-            2 -> CategoryAnalysisTab(selectedYear)
+            0 -> TaxSummaryTab(report)
+            1 -> MonthlyBreakdownTab(report)
+            2 -> CategoryAnalysisTab(report)
         }
     }
 }
 
 @Composable
-private fun TaxSummaryTab(year: Int) {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        // Summary Cards
+private fun TaxSummaryTab(report: ReportService.TaxReport) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                ReportSummaryCard(
-                    title = "Total Income",
-                    value = "€38,400.00",
-                    icon = Icons.Default.ArrowDropDown,
-                    color = Success,
-                    modifier = Modifier.weight(1f),
-                )
-                ReportSummaryCard(
-                    title = "Total Expenses",
-                    value = "€25,800.00",
-                    icon = Icons.Default.Warning,
-                    color = Error,
-                    modifier = Modifier.weight(1f),
-                )
-                ReportSummaryCard(
-                    title = "Net Income",
-                    value = "€12,600.00",
-                    icon = Icons.Default.AccountBox,
-                    color = PrimaryBlue,
-                    modifier = Modifier.weight(1f),
-                )
-                ReportSummaryCard(
-                    title = "Tax-Deductible",
-                    value = "€8,450.00",
-                    icon = Icons.Default.Info,
-                    color = Warning,
-                    modifier = Modifier.weight(1f),
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatCard("Total Income", Formats.money(report.totalIncome), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
+                StatCard("Total Expenses", Formats.money(report.totalExpenses), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard("Net Income", Formats.money(report.netIncome), Icons.Default.AccountBox, PrimaryBlue, Modifier.weight(1f))
+                StatCard("Tax-Relevant", Formats.money(report.taxRelevantTotal), Icons.Default.Info, Warning, Modifier.weight(1f))
             }
         }
-
-        // Tax-Deductible Expenses
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                ) {
+            SectionCard("Tax-Relevant Expenses by Category", Modifier.fillMaxWidth()) {
+                if (report.taxRelevantExpenses.isEmpty()) {
                     Text(
-                        text = "Tax-Deductible Expenses",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        "No tax-relevant expenses. Mark categories as tax-relevant in Settings (e.g. Arbeitsmittel, Spenden, Versicherungen).",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val taxDeductibleItems = listOf(
-                        "Office Supplies" to "€1,200.00",
-                        "Travel Expenses" to "€2,400.00",
-                        "Professional Development" to "€1,800.00",
-                        "Insurance Premiums" to "€1,650.00",
-                        "Home Office" to "€1,400.00",
-                    )
-
-                    taxDeductibleItems.forEach { (category, amount) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = category,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = amount,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        HorizontalDivider()
-                    }
                 }
+                report.taxRelevantExpenses.forEach { (category, amount) -> AmountRow(category, amount) }
             }
         }
-
-        // Quick Stats
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Text(
-                        text = "Quick Statistics",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+            SectionCard("Quick Statistics", Modifier.fillMaxWidth()) {
+                val activeMonths = report.monthlyBreakdown.filter { it.expenses.signum() > 0 }
+                val avgMonthly = if (activeMonths.isEmpty()) {
+                    BigDecimal.ZERO
+                } else {
+                    report.totalExpenses.divide(BigDecimal(activeMonths.size), 2, RoundingMode.HALF_UP)
+                }
+                val highest = report.monthlyBreakdown.maxByOrNull { it.expenses }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    StatItem("Transactions", report.transactionCount.toString())
+                    StatItem("Categories Used", report.categoriesUsed.toString())
+                    StatItem("Avg Monthly Expenses", Formats.money(avgMonthly))
+                    StatItem(
+                        "Highest Month",
+                        highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT)} ${Formats.money(it.expenses)}" } ?: "—",
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                    ) {
-                        StatItem("Transactions", "1,247")
-                        StatItem("Categories Used", "24")
-                        StatItem("Avg Monthly", "€2,150.00")
-                        StatItem("Highest Month", "€3,200.00")
-                    }
                 }
             }
         }
@@ -230,112 +135,32 @@ private fun TaxSummaryTab(year: Int) {
 }
 
 @Composable
-private fun MonthlyBreakdownTab(year: Int) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-        ) {
-            Text(
-                text = "Monthly Income & Expenses - $year",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Table Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
+private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
+    SectionCard("Monthly Income & Expenses - ${report.year}", Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth()) {
+            listOf("Month", "Income", "Expenses", "Net").forEachIndexed { i, h ->
                 Text(
-                    text = "Month",
+                    h,
                     style = MaterialTheme.typography.labelLarge,
-                    color = MediumGray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "Income",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MediumGray,
-                    modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                )
-                Text(
-                    text = "Expenses",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MediumGray,
-                    modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                )
-                Text(
-                    text = "Net",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MediumGray,
-                    modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                    textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
                 )
             }
-            HorizontalDivider()
-
-            // Monthly Data
-            val months = listOf(
-                "January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December",
-            )
-
-            val sampleData = listOf(
-                Triple("€3,200.00", "€2,100.00", "+€1,100.00"),
-                Triple("€3,200.00", "€2,350.00", "+€850.00"),
-                Triple("€3,200.00", "€1,980.00", "+€1,220.00"),
-                Triple("€3,200.00", "€2,450.00", "+€750.00"),
-                Triple("€3,200.00", "€2,200.00", "+€1,000.00"),
-                Triple("€3,200.00", "€2,500.00", "+€700.00"),
-                Triple("€3,200.00", "€2,100.00", "+€1,100.00"),
-                Triple("€3,200.00", "€2,800.00", "+€400.00"),
-                Triple("€3,200.00", "€2,150.00", "+€1,050.00"),
-                Triple("€3,200.00", "€2,300.00", "+€900.00"),
-                Triple("€3,200.00", "€2,000.00", "+€1,200.00"),
-                Triple("€3,200.00", "€2,600.00", "+€600.00"),
-            )
-
-            months.forEachIndexed { index, month ->
-                val (income, expenses, net) = sampleData[index]
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
+        }
+        HorizontalDivider()
+        LazyColumn {
+            itemsIndexed(report.monthlyBreakdown) { _, m ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Text(monthName(m.month, TextStyle.FULL), modifier = Modifier.weight(1f))
+                    Text(Formats.money(m.income), color = Success, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(Formats.money(m.expenses), color = Error, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                     Text(
-                        text = month,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = income,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Success,
-                        modifier = Modifier.weight(1f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                    )
-                    Text(
-                        text = expenses,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Error,
-                        modifier = Modifier.weight(1f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                    )
-                    Text(
-                        text = net,
-                        style = MaterialTheme.typography.bodyMedium,
+                        Formats.money(m.net, signed = true),
                         fontWeight = FontWeight.SemiBold,
-                        color = Success,
+                        color = if (m.net.signum() < 0) Error else Success,
                         modifier = Modifier.weight(1f),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        textAlign = TextAlign.End,
                     )
                 }
                 HorizontalDivider()
@@ -345,136 +170,34 @@ private fun MonthlyBreakdownTab(year: Int) {
 }
 
 @Composable
-private fun CategoryAnalysisTab(year: Int) {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        // Category Breakdown
+private fun CategoryAnalysisTab(report: ReportService.TaxReport) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Text(
-                        text = "Spending by Category",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val categories = listOf(
-                        Triple("Groceries", "€6,240.00", 24.2f),
-                        Triple("Transport", "€3,600.00", 14.0f),
-                        Triple("Entertainment", "€2,400.00", 9.3f),
-                        Triple("Shopping", "€4,800.00", 18.6f),
-                        Triple("Utilities", "€3,200.00", 12.4f),
-                        Triple("Insurance", "€2,400.00", 9.3f),
-                        Triple("Other", "€3,160.00", 12.2f),
-                    )
-
-                    categories.forEach { (category, amount, percentage) ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(
-                                    text = category,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = amount,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            LinearProgressIndicator(
-                                progress = { percentage / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                                color = when (category) {
-                                    "Groceries" -> CategoryColors[0]
-                                    "Transport" -> CategoryColors[1]
-                                    "Entertainment" -> CategoryColors[2]
-                                    "Shopping" -> CategoryColors[3]
-                                    "Utilities" -> CategoryColors[4]
-                                    "Insurance" -> CategoryColors[5]
-                                    else -> CategoryColors[6]
-                                },
-                            )
-                            Text(
-                                text = "$percentage%",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MediumGray,
-                            )
-                        }
+            SectionCard("Spending by Category", Modifier.fillMaxWidth()) {
+                val total = report.totalExpenses.takeIf { it.signum() > 0 } ?: BigDecimal.ONE
+                report.expensesByCategory.entries.forEachIndexed { i, (category, amount) ->
+                    val share = amount.toFloat() / total.toFloat()
+                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                        AmountRow(category, amount)
+                        LinearProgressIndicator(
+                            progress = { share },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = CategoryColors[i % CategoryColors.size],
+                        )
+                        Text("%.1f%%".format(share * 100), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
-
-        // Top Vendors
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Text(
-                        text = "Top Vendors",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val vendors = listOf(
-                        "REWE Supermarket" to "€2,450.00",
-                        "Amazon.de" to "€1,890.00",
-                        "Deutsche Bahn" to "€1,200.00",
-                        "EDEKA" to "€980.00",
-                        "ALDI" to "€870.00",
-                    )
-
-                    vendors.forEachIndexed { index, (vendor, amount) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = "${index + 1}.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MediumGray,
-                                    modifier = Modifier.width(24.dp),
-                                )
-                                Text(
-                                    text = vendor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                            Text(
-                                text = amount,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                        if (index < vendors.size - 1) HorizontalDivider()
+            SectionCard("Top Vendors", Modifier.fillMaxWidth()) {
+                report.topVendors.forEachIndexed { index, (vendor, amount) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${index + 1}.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
+                        Text(vendor, modifier = Modifier.weight(1f))
+                        Text(Formats.money(amount), fontWeight = FontWeight.SemiBold)
                     }
+                    if (index < report.topVendors.size - 1) HorizontalDivider()
                 }
             }
         }
@@ -482,63 +205,19 @@ private fun CategoryAnalysisTab(year: Int) {
 }
 
 @Composable
-private fun ReportSummaryCard(
-    title: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MediumGray,
-                )
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = color,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = DarkGray,
-            )
-        }
+private fun AmountRow(label: String, amount: BigDecimal) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(Formats.money(amount), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 private fun StatItem(label: String, value: String) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = PrimaryBlue,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MediumGray,
-        )
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
+
+private fun monthName(month: Int, style: TextStyle) = Month.of(month).getDisplayName(style, Locale.ENGLISH)

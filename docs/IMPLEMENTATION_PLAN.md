@@ -10,26 +10,29 @@ A phased approach to building FinDesk - a Kotlin JVM + Compose Desktop financial
 The earlier "all phases complete" status was wrong. This is what the code actually does, and what's being worked on, in order.
 
 **Cross-cutting bugs**
-- [ ] Repositories return Exposed DAO entities after the transaction closes. Reading a reference (`txn.category`) then throws, and `ReportService.generateTaxReport` silently returns an empty report for any categorized transaction. Fix: immutable UI models (`de.findesk.model`) built inside `transaction {}`.
-- [ ] `DashboardViewModel`: income and expenses both use `getMonthlyTotal` (net), so they always show the same value.
-- [ ] `TransactionsViewModel`: the category filter is stored but never applied. `searchByText` only matches `partnerName`, not `purpose`.
+- [x] Repositories return Exposed DAO entities after the transaction closes. Reading a reference (`txn.category`) then throws, and `ReportService.generateTaxReport` silently returns an empty report for any categorized transaction. Fix: immutable UI models (`de.findesk.model`) built inside `transaction {}`.
+- [x] `DashboardViewModel`: income and expenses both use `getMonthlyTotal` (net), so they always show the same value.
+- [x] `TransactionsViewModel`: the category filter is stored but never applied. `searchByText` only matches `partnerName`, not `purpose`.
 - [x] Tests wrote to the real `~/.findesk/findesk.db` (fixed: `TestDatabase`).
+- [x] Sidebar navigation didn't recompose (`NavigationState.currentScreen` was a plain var).
+- [x] Rule matching: null fields became the literal text "null", and one invalid regex threw for every transaction.
+- [x] Deleting an account left orphaned transactions, because SQLite FKs aren't enforced (now cascades).
 
 **Phase A: Wiring (foundation)**
-- [ ] ViewModels get a `CoroutineScope` and run repository and service calls on `Dispatchers.IO`.
-- [ ] Every screen observes its ViewModel instead of `sample*` lists (Dashboard, Accounts, Transactions, Documents, Reports).
+- [x] ViewModels get a `CoroutineScope` and run repository and service calls on `Dispatchers.IO`.
+- [x] Every screen observes its ViewModel instead of `sample*` lists (Dashboard, Accounts, Transactions, Documents, Reports).
 
-**Phase B: Pure-JVM features**
-- [ ] Documents: upload (file chooser), link/unlink to transaction, search by file name and OCR text, delete, open externally.
-- [ ] Transactions: text, category and date filters, CSV export, category assignment.
-- [ ] Accounts: add bank-access and account dialog, delete, manual balance edit.
-- [ ] Reports: tax and monthly reports from real data, CSV and PDF export (PDFBox).
-- [ ] PDF text extraction (PDFBox) for text-based PDFs.
-- [ ] Dashboard charts (Compose Canvas): expenses by category, monthly income vs expenses.
-- [ ] Settings screen: data directory info, categories and rules management, theme.
+**Phase B: Pure-JVM features** (plus manual transaction entry, receipt-to-transaction match suggestions, `FINDESK_HOME` data-dir override)
+- [x] Documents: upload (file chooser), link/unlink to transaction, search by file name and OCR text, delete, open externally.
+- [x] Transactions: text, category and date filters, CSV export, category assignment.
+- [x] Accounts: add bank-access and account dialog, delete, manual balance edit.
+- [x] Reports: tax and monthly reports from real data, CSV and PDF export (PDFBox).
+- [x] PDF text extraction (PDFBox) for text-based PDFs.
+- [x] Dashboard charts (Compose Canvas): expenses by category, monthly income vs expenses.
+- [x] Settings screen: data directory info, categories and rules management, theme.
 
 **Phase C: OCR**
-- [ ] Tesseract via tess4j (deu+eng), OCR text stored in `ocr_texts` and linked to the document.
+- [x] Tesseract via tess4j (deu+eng), OCR text stored in `ocr_texts` and linked to the document.
 
 **Phase D: Banking (unverified against real banks)**
 - [ ] HBCI4Java PIN/TAN client: accounts, balances, statements (KUmsAll), imported with hash dedup.

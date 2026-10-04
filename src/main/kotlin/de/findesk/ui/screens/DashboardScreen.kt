@@ -1,256 +1,133 @@
 package de.findesk.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.findesk.model.TransactionItem
+import de.findesk.ui.components.*
+import de.findesk.ui.navigation.NavigationArgs
+import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.*
+import de.findesk.util.Formats
+import de.findesk.viewmodel.DashboardViewModel
 
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
+    val vm = rememberViewModel { DashboardViewModel() }
+    val state by vm.state.collectAsState()
+    LaunchedEffect(Unit) { vm.loadDashboard() }
+
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
+        modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        // Summary Cards
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                SummaryCard(
-                    title = "Total Balance",
-                    value = "€12,450.00",
-                    icon = Icons.Default.AccountBox,
-                    color = PrimaryBlue,
-                    modifier = Modifier.weight(1f),
-                )
-                SummaryCard(
-                    title = "Monthly Income",
-                    value = "€3,200.00",
-                    icon = Icons.Default.Add,
-                    color = Success,
-                    modifier = Modifier.weight(1f),
-                )
-                SummaryCard(
-                    title = "Monthly Expenses",
-                    value = "€2,150.00",
-                    icon = Icons.Default.Delete,
-                    color = Error,
-                    modifier = Modifier.weight(1f),
-                )
-                SummaryCard(
-                    title = "Pending Tasks",
-                    value = "5",
-                    icon = Icons.Default.Warning,
-                    color = Warning,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+        if (state.error != null) {
+            item { MessageBanner(null, state.error) { vm.loadDashboard() } }
         }
 
-        // Charts Row
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                // Expense Chart
-                Card(
-                    modifier = Modifier.weight(1f).height(300.dp),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
+        if (!state.isLoading && !state.hasAccounts) {
+            item {
+                Card {
+                    EmptyState(
+                        icon = Icons.Default.AccountBox,
+                        title = "Welcome to FinDesk",
+                        description = "Add a bank account to start tracking balances, transactions and tax-relevant expenses.",
                     ) {
-                        Text(
-                            text = "Expenses by Category",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Chart Placeholder",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MediumGray,
-                            )
-                        }
-                    }
-                }
-
-                // Tax Deductions Chart
-                Card(
-                    modifier = Modifier.weight(1f).height(300.dp),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                    ) {
-                        Text(
-                            text = "Tax Deductions",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = "Chart Placeholder",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MediumGray,
-                            )
-                        }
+                        Button(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text("Add account") }
                     }
                 }
             }
         }
 
-        // Recent Transactions
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "Recent Transactions",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        TextButton(onClick = { /* Navigate to transactions */ }) {
-                            Text("View All")
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatCard("Total Balance", Formats.money(state.totalBalance), Icons.Default.AccountBox, PrimaryBlue, Modifier.weight(1f))
+                StatCard("Income this month", Formats.money(state.monthlyIncome), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
+                StatCard("Expenses this month", Formats.money(state.monthlyExpenses), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(
+                    "Pending Tasks",
+                    state.pendingTasks.toString(),
+                    Icons.Default.Warning,
+                    Warning,
+                    Modifier.weight(1f).clickable(enabled = state.uncategorizedCount > 0) {
+                        onNavigate(Screen.TRANSACTIONS, NavigationArgs(uncategorizedOnly = true))
+                    },
+                    subtitle = "${state.uncategorizedCount} uncategorized · ${state.unlinkedDocumentCount} unlinked docs",
+                )
+            }
+        }
 
-                    // Sample transactions
-                    TransactionItem(
-                        date = "Today",
-                        description = "REWE Supermarket",
-                        amount = "-€45.67",
-                        category = "Groceries",
-                        isExpense = true,
-                    )
-                    TransactionItem(
-                        date = "Yesterday",
-                        description = "Salary Deposit",
-                        amount = "+€3,200.00",
-                        category = "Income",
-                        isExpense = false,
-                    )
-                    TransactionItem(
-                        date = "2 days ago",
-                        description = "Amazon Purchase",
-                        amount = "-€89.99",
-                        category = "Shopping",
-                        isExpense = true,
-                    )
+        item {
+            Row(modifier = Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SectionCard("Expenses by Category (this month)", Modifier.weight(1f).fillMaxHeight()) {
+                    if (state.expensesByCategory.isEmpty()) {
+                        Text("No expenses this month", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        DonutChart(state.expensesByCategory)
+                    }
                 }
+                SectionCard("Income vs Expenses (6 months)", Modifier.weight(1f).fillMaxHeight()) {
+                    IncomeExpenseBars(state.lastMonths, Modifier.fillMaxSize())
+                }
+            }
+        }
+
+        item {
+            SectionCard("Tax-Deductible Expenses (year to date)", Modifier.fillMaxWidth()) {
+                if (state.taxDeductionsByCategory.isEmpty()) {
+                    Text(
+                        "Mark categories as tax-relevant in Settings to track deductible expenses.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    DonutChart(state.taxDeductionsByCategory)
+                }
+            }
+        }
+
+        item {
+            SectionCard(
+                "Recent Transactions",
+                Modifier.fillMaxWidth(),
+                actions = { TextButton(onClick = { onNavigate(Screen.TRANSACTIONS, NavigationArgs()) }) { Text("View All") } },
+            ) {
+                if (state.recentTransactions.isEmpty()) {
+                    Text("No transactions yet", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                state.recentTransactions.forEach { RecentTransactionRow(it) }
             }
         }
     }
 }
 
 @Composable
-private fun SummaryCard(
-    title: String,
-    value: String,
-    icon: ImageVector,
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MediumGray,
-                )
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = color,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = DarkGray,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TransactionItem(
-    date: String,
-    description: String,
-    amount: String,
-    category: String,
-    isExpense: Boolean,
-) {
+private fun RecentTransactionRow(txn: TransactionItem) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column {
+        Column(Modifier.weight(1f)) {
+            Text(txn.description, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
             Text(
-                text = description,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = "$date • $category",
+                "${Formats.date(txn.date)} • ${txn.categoryName ?: "Uncategorized"}",
                 style = MaterialTheme.typography.bodySmall,
-                color = MediumGray,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
-            text = amount,
+            Formats.money(txn.amount, txn.currency, signed = true),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = if (isExpense) Error else Success,
+            color = if (txn.isExpense) Error else Success,
         )
     }
     HorizontalDivider()

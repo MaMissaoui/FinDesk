@@ -12,132 +12,178 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import de.findesk.ui.theme.*
+import de.findesk.model.AccountItem
+import de.findesk.model.BankAccessItem
+import de.findesk.ui.components.*
+import de.findesk.ui.navigation.NavigationArgs
+import de.findesk.ui.navigation.Screen
+import de.findesk.ui.theme.Error
+import de.findesk.util.Formats
+import de.findesk.viewmodel.AccountsViewModel
+import java.math.BigDecimal
+
+private val ACCOUNT_TYPES = listOf("checking" to "Checking", "savings" to "Savings", "credit_card" to "Credit Card", "depot" to "Depot")
+
+private fun accountTypeLabel(type: String) = ACCOUNT_TYPES.firstOrNull { it.first == type }?.second ?: type
 
 @Composable
-fun AccountsScreen() {
-    var showAddDialog by remember { mutableStateOf(false) }
+fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
+    val vm = rememberViewModel { AccountsViewModel() }
+    val state by vm.state.collectAsState()
+    LaunchedEffect(Unit) { vm.loadAccounts() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-    ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Bank Accounts",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Button(onClick = { showAddDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Account")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Account")
+    var showAddBank by remember { mutableStateOf(false) }
+    var addAccountFor by remember { mutableStateOf<BankAccessItem?>(null) }
+    var editBalance by remember { mutableStateOf<AccountItem?>(null) }
+    var confirmDeleteAccount by remember { mutableStateOf<AccountItem?>(null) }
+    var confirmDeleteBank by remember { mutableStateOf<BankAccessItem?>(null) }
+
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("Bank Accounts", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "Total ${Formats.money(state.totalBalance)} across ${state.accounts.size} account(s)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Button(onClick = { showAddBank = true }) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Add Bank")
             }
         }
+        Spacer(Modifier.height(16.dp))
+        MessageBanner(state.message, state.error, vm::clearMessages)
 
-        Spacer(modifier = Modifier.height(24.dp))
+        if (!state.isLoading && state.bankAccesses.isEmpty()) {
+            EmptyState(
+                Icons.Default.AccountBox,
+                "No banks yet",
+                "Add your bank, then add its accounts. Balances and transactions can be entered manually until online banking sync is set up.",
+            ) { Button(onClick = { showAddBank = true }) { Text("Add Bank") } }
+        }
 
-        // Account List
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            items(sampleAccounts) { account ->
-                AccountCard(account = account)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            items(state.bankAccesses, key = { it.id }) { bank ->
+                val accounts = state.accounts.filter { it.bankAccessId == bank.id }
+                BankCard(
+                    bank = bank,
+                    accounts = accounts,
+                    onAddAccount = { addAccountFor = bank },
+                    onDeleteBank = { confirmDeleteBank = bank },
+                    onTransactions = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = it.id)) },
+                    onEditBalance = { editBalance = it },
+                    onDeleteAccount = { confirmDeleteAccount = it },
+                )
             }
         }
     }
 
-    // Add Account Dialog
-    if (showAddDialog) {
-        AddAccountDialog(
-            onDismiss = { showAddDialog = false },
-            onConfirm = {
-                /* TODO */
-                showAddDialog = false
+    if (showAddBank) {
+        AddBankDialog(
+            validate = vm::validateBankAccess,
+            onDismiss = { showAddBank = false },
+            onConfirm = { name, blz, bic, user ->
+                vm.addBankAccess(name, blz, bic, user)
+                showAddBank = false
             },
+        )
+    }
+    addAccountFor?.let { bank ->
+        AddAccountDialog(
+            bank = bank,
+            validate = vm::validateAccount,
+            onDismiss = { addAccountFor = null },
+            onConfirm = { iban, type, balance ->
+                vm.addAccount(bank.id, iban, type, balance)
+                addAccountFor = null
+            },
+        )
+    }
+    editBalance?.let { account ->
+        BalanceDialog(
+            account = account,
+            onDismiss = { editBalance = null },
+            onConfirm = {
+                vm.updateBalance(account.id, it)
+                editBalance = null
+            },
+        )
+    }
+    confirmDeleteAccount?.let { account ->
+        ConfirmDialog(
+            title = "Delete account?",
+            text = "This deletes ${Formats.iban(account.iban)} and all of its transactions. Linked documents are kept but unlinked.",
+            onConfirm = { vm.deleteAccount(account.id) },
+            onDismiss = { confirmDeleteAccount = null },
+        )
+    }
+    confirmDeleteBank?.let { bank ->
+        ConfirmDialog(
+            title = "Remove ${bank.bankName}?",
+            text = "This deletes the bank, all of its accounts and their transactions.",
+            onConfirm = { vm.deleteBankAccess(bank.id) },
+            onDismiss = { confirmDeleteBank = null },
         )
     }
 }
 
 @Composable
-private fun AccountCard(account: SampleAccount) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
+private fun BankCard(
+    bank: BankAccessItem,
+    accounts: List<AccountItem>,
+    onAddAccount: () -> Unit,
+    onDeleteBank: () -> Unit,
+    onTransactions: (AccountItem) -> Unit,
+    onEditBalance: (AccountItem) -> Unit,
+    onDeleteAccount: (AccountItem) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(bank.bankName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
-                        text = account.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = account.iban,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MediumGray,
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = account.balance,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (account.balance.startsWith("-")) Error else DarkGray,
-                    )
-                    Text(
-                        text = account.type,
+                        "BLZ ${bank.blz}" + (bank.bic.takeIf { it.isNotBlank() }?.let { " · BIC $it" } ?: "") +
+                            (bank.lastSync?.let { " · synced ${Formats.dateTime(it)}" } ?: ""),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MediumGray,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                TextButton(onClick = onAddAccount) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Account")
+                }
+                IconButton(onClick = onDeleteBank) { Icon(Icons.Default.Delete, contentDescription = "Remove bank") }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider()
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Quick Actions
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = { /* TODO */ },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Sync", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Sync")
-                }
-                OutlinedButton(
-                    onClick = { /* TODO */ },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Default.List, contentDescription = "Transactions", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Transactions")
-                }
-                OutlinedButton(
-                    onClick = { /* TODO */ },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Default.Send, contentDescription = "Transfer", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Transfer")
+            if (accounts.isEmpty()) {
+                Text(
+                    "No accounts yet",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            accounts.forEach { account ->
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(accountTypeLabel(account.accountType), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(
+                        Formats.money(account.balance, account.currency),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (account.balance.signum() < 0) Error else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = "Transactions") }
+                    IconButton(onClick = { onEditBalance(account) }) { Icon(Icons.Default.Edit, contentDescription = "Edit balance") }
+                    IconButton(onClick = { onDeleteAccount(account) }) { Icon(Icons.Default.Delete, contentDescription = "Delete account") }
                 }
             }
         }
@@ -145,64 +191,94 @@ private fun AccountCard(account: SampleAccount) {
 }
 
 @Composable
-private fun AddAccountDialog(
+private fun AddBankDialog(
+    validate: (String, String) -> String?,
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
+    onConfirm: (String, String, String, String) -> Unit,
 ) {
     var bankName by remember { mutableStateOf("") }
     var blz by remember { mutableStateOf("") }
+    var bic by remember { mutableStateOf("") }
     var userId by remember { mutableStateOf("") }
+    var touched by remember { mutableStateOf(false) }
+    val error = validate(bankName, blz)
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Bank Account") },
+        title = { Text("Add Bank") },
         text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                OutlinedTextField(
-                    value = bankName,
-                    onValueChange = { bankName = it },
-                    label = { Text("Bank Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = blz,
-                    onValueChange = { blz = it },
-                    label = { Text("BLZ (Bank Code)") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = userId,
-                    onValueChange = { userId = it },
-                    label = { Text("User ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(bankName, { bankName = it }, label = { Text("Bank name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(blz, { blz = it.filter(Char::isDigit).take(8) }, label = { Text("BLZ (8 digits)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(bic, { bic = it }, label = { Text("BIC (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(userId, { userId = it }, label = { Text("Online banking user ID (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
-            Button(onClick = onConfirm) {
-                Text("Connect")
-            }
+            Button(onClick = {
+                touched = true
+                if (error == null) onConfirm(bankName, blz, bic, userId)
+            }) { Text("Add") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
-// Sample data
-private data class SampleAccount(
-    val name: String,
-    val iban: String,
-    val balance: String,
-    val type: String,
-)
+@Composable
+private fun AddAccountDialog(
+    bank: BankAccessItem,
+    validate: (String) -> String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String, BigDecimal) -> Unit,
+) {
+    var iban by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(ACCOUNT_TYPES.first().first) }
+    var balance by remember { mutableStateOf("0,00") }
+    var touched by remember { mutableStateOf(false) }
+    val parsedBalance = Formats.parseAmount(balance)
+    val error = validate(iban) ?: if (parsedBalance == null) "Balance is not a number" else null
 
-private val sampleAccounts = listOf(
-    SampleAccount("Girokonto", "DE89 3704 0044 0532 0130 00", "€5,234.56", "Checking"),
-    SampleAccount("Sparkonto", "DE89 3704 0044 0532 0130 01", "€12,450.00", "Savings"),
-    SampleAccount("Visa Card", "DE89 3704 0044 0532 0130 02", "-€456.78", "Credit Card"),
-)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add account at ${bank.bankName}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(iban, { iban = it.uppercase() }, label = { Text("IBAN") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                DropdownSelector(
+                    label = accountTypeLabel(type),
+                    options = ACCOUNT_TYPES,
+                    optionLabel = { it.second },
+                    onSelect = { type = it.first },
+                )
+                OutlinedTextField(balance, { balance = it }, label = { Text("Current balance (€)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                touched = true
+                if (error == null) onConfirm(iban, type, parsedBalance!!)
+            }) { Text("Add") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm: (BigDecimal) -> Unit) {
+    var text by remember { mutableStateOf(account.balance.toPlainString().replace('.', ',')) }
+    val parsed = Formats.parseAmount(text)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Update balance") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(text, { text = it }, label = { Text("Balance (€)") }, singleLine = true, isError = parsed == null)
+            }
+        },
+        confirmButton = { Button(onClick = { parsed?.let(onConfirm) }, enabled = parsed != null) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}

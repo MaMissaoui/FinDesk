@@ -96,6 +96,19 @@ class TransactionsViewModel(
         )
     }
 
+    /** Applies navigation context (e.g. "transactions of this account") and loads. */
+    fun start(accountId: Int? = null, uncategorizedOnly: Boolean = false): Job {
+        _state.update {
+            it.copy(
+                accountId = accountId,
+                categoryFilter = if (uncategorizedOnly) CategoryFilter.None else CategoryFilter.Any,
+                // A deep link into an account or the uncategorized list shouldn't be limited to this month
+                period = if (accountId != null || uncategorizedOnly) Period.ALL else it.period,
+            )
+        }
+        return loadTransactions()
+    }
+
     fun loadTransactions(): Job {
         _state.update { it.copy(isLoading = true, error = null) }
         return launchSafely(onError) { refresh() }

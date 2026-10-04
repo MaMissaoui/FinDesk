@@ -37,7 +37,7 @@ class SettingsViewModel(
     private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
-    private val dataDirectory: String = System.getProperty("user.home") + "/.findesk",
+    private val dataDirectory: String = de.findesk.util.AppPaths.dataDir.absolutePath,
     private val isOcrAvailable: Boolean = false,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
