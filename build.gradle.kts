@@ -28,8 +28,10 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-jdbc:0.61.0")
     implementation("org.jetbrains.exposed:exposed-java-time:0.61.0")
 
-    // SQLite JDBC
-    implementation("org.xerial:sqlite-jdbc:3.47.1.0")
+    // SQLite JDBC with encryption (SQLite3MultipleCiphers fork of xerial's driver, same org.sqlite package;
+    // never add org.xerial:sqlite-jdbc next to it) and a small pool, since every keyed open runs the KDF
+    implementation("io.github.willena:sqlite-jdbc:3.53.4.0")
+    implementation("com.zaxxer:HikariCP:7.1.0")
 
     // PDF text extraction and report export
     implementation("org.apache.pdfbox:pdfbox:3.0.8")
@@ -46,7 +48,6 @@ dependencies {
     // Testing
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.exposed:exposed-core:0.61.0")
-    testImplementation("org.xerial:sqlite-jdbc:3.47.1.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation(compose.uiTest)
 }
@@ -57,8 +58,8 @@ compose.desktop {
 
         nativeDistributions {
             // From `./gradlew suggestRuntimeModules`, plus modules only loaded at runtime:
-            // TLS cipher suites for bank connections, XML for JAXB (HBCI4Java), extra charsets for FinTS
-            modules("java.instrument", "java.naming", "java.prefs", "java.smartcardio", "java.sql", "jdk.unsupported", "java.xml", "jdk.crypto.ec", "jdk.charsets")
+            // TLS cipher suites for bank connections, JMX for HikariCP, XML for JAXB (HBCI4Java), extra charsets for FinTS
+            modules("java.instrument", "java.naming", "java.prefs", "java.smartcardio", "java.sql", "java.management", "jdk.unsupported", "java.xml", "jdk.crypto.ec", "jdk.charsets")
 
             packageName = "FinDesk"
             packageVersion = "1.0.0"

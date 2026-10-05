@@ -1,10 +1,12 @@
 package de.findesk.data.backup
 
+import de.findesk.data.database.DatabaseCrypto
+import de.findesk.data.database.DatabaseFactory
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.sql.DriverManager
+import java.sql.Connection
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Properties
@@ -19,9 +21,19 @@ import java.util.zip.ZipOutputStream
  * Restoring replaces the live database, so it is two-phase: [stageRestore] validates the backup and unpacks
  * it next to the data; [applyPendingRestore] (called at startup before the database opens) moves the current
  * data aside into `pre-restore-<timestamp>/` and puts the backup in place.
+ *
+ * An encrypted database stays encrypted in the backup (`VACUUM INTO` keeps the key), so a backup can only be
+ * restored with the passphrase that was in effect when it was made.
  */
-class BackupService(private val dataDir: File) {
+class BackupService(
+    private val dataDir: File,
+    /** Opens a database file with the open database's key (or none for a plaintext file). */
+    private val connect: (File) -> Connection = { DatabaseFactory.rawConnection(it) },
+) {
     data class BackupInfo(val created: String, val appVersion: String, val transactions: Long, val documents: Int)
+
+    /** The backup's database is encrypted with a passphrase other than the current one; pass it to [stageRestore]. */
+    class BackupPassphraseRequiredException(val wrongPassphraseGiven: Boolean) : Exception("This backup was made with a different passphrase")
 
     companion object {
         const val DB_NAME = "findesk.db"
@@ -40,7 +52,7 @@ class BackupService(private val dataDir: File) {
         try {
             // VACUUM INTO gives a consistent, compacted copy even while the app has the database open.
             // It can't run inside a transaction, so use a plain autocommit connection.
-            DriverManager.getConnection("jdbc:sqlite:${File(dataDir, DB_NAME).absolutePath}").use { c ->
+            connect(File(dataDir, DB_NAME)).use { c ->
                 c.createStatement().use { it.execute("VACUUM INTO '${tmpDb.absolutePath.replace("'", "''")}'") }
             }
             val transactions = countRows(tmpDb, "transactions")
@@ -86,9 +98,11 @@ class BackupService(private val dataDir: File) {
 
     /**
      * Validates [backup] and unpacks it into the pending-restore directory. Nothing live is touched; the restore
-     * happens on the next start.
+     * happens on the next start, where the startup gate asks for the backup's passphrase (or sets one for a
+     * plaintext backup). Throws [BackupPassphraseRequiredException] when the backup can't be opened with the current
+     * passphrase and [backupPassphrase] is missing or wrong, so a backup that can't be opened is never staged.
      */
-    fun stageRestore(backup: File): BackupInfo {
+    fun stageRestore(backup: File, backupPassphrase: String? = null): BackupInfo {
         val info = inspect(backup)
         val pending = File(dataDir, PENDING_DIR)
         pending.deleteRecursively()
@@ -103,7 +117,17 @@ class BackupService(private val dataDir: File) {
                 }
             }
             val db = File(pending, DB_NAME)
-            require(countRows(db, "accounts") >= 0) { "Backup database is unreadable" }
+            val readable = try {
+                countRows(db, "accounts")
+            } catch (e: DatabaseCrypto.WrongPassphraseException) {
+                if (backupPassphrase == null) throw BackupPassphraseRequiredException(wrongPassphraseGiven = false)
+                try {
+                    DatabaseCrypto.open(db, backupPassphrase).use { c -> countRows(c, "accounts") }
+                } catch (e: DatabaseCrypto.WrongPassphraseException) {
+                    throw BackupPassphraseRequiredException(wrongPassphraseGiven = true)
+                }
+            }
+            require(readable >= 0) { "Backup database is unreadable" }
         } catch (e: Exception) {
             pending.deleteRecursively()
             throw e
@@ -151,7 +175,9 @@ class BackupService(private val dataDir: File) {
         return target
     }
 
-    private fun countRows(db: File, table: String): Long = DriverManager.getConnection("jdbc:sqlite:${db.absolutePath}").use { c ->
-        c.createStatement().use { st -> st.executeQuery("SELECT COUNT(*) FROM $table").use { rs -> if (rs.next()) rs.getLong(1) else 0 } }
+    private fun countRows(db: File, table: String): Long = connect(db).use { c -> countRows(c, table) }
+
+    private fun countRows(c: Connection, table: String): Long = c.createStatement().use { st ->
+        st.executeQuery("SELECT COUNT(*) FROM $table").use { rs -> if (rs.next()) rs.getLong(1) else 0 }
     }
 }

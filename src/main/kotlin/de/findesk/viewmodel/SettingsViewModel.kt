@@ -36,6 +36,10 @@ data class SettingsState(
     val restoredFrom: String? = null,
     /** Backup chosen for restore, waiting for confirmation. */
     val restoreCandidate: Pair<java.io.File, de.findesk.data.backup.BackupService.BackupInfo>? = null,
+    /** Backup made under another passphrase, waiting for that passphrase; [restorePassphraseWrong] after a wrong one. */
+    val restorePassphraseFor: java.io.File? = null,
+    val restorePassphraseWrong: Boolean = false,
+    val isEncrypted: Boolean = false,
     val profiles: List<ProfileStore.Profile> = emptyList(),
     /** Profile running now (null = default) and the one that opens at the next start. */
     val openProfile: String? = null,
@@ -89,6 +93,7 @@ class SettingsViewModel(
                 isOcrAvailable = isOcrAvailable,
                 hasPendingRestore = backupService.hasPendingRestore,
                 restoredFrom = de.findesk.data.database.DatabaseFactory.restoredFrom?.absolutePath,
+                isEncrypted = de.findesk.data.database.DatabaseFactory.isEncrypted,
                 profiles = profileStore.list(),
                 openProfile = openProfile,
                 nextProfile = profileStore.active().slug,
@@ -200,9 +205,30 @@ class SettingsViewModel(
     /** Step 2: confirmed. Unpacks the backup; it replaces the current data on the next start. */
     fun confirmRestore(): Job {
         val (file, _) = _state.value.restoreCandidate ?: return Job().apply { complete() }
-        _state.update { it.copy(isBusy = true, restoreCandidate = null) }
-        return launchSafely({ e -> _state.update { it.copy(isBusy = false, error = e.userMessage()) } }) {
-            backupService.stageRestore(file)
+        return stageRestore(file, null)
+    }
+
+    /** Step 2b, for a backup made under another passphrase: checks it with that passphrase (not stored). */
+    fun confirmRestoreWithPassphrase(passphrase: String): Job {
+        val file = _state.value.restorePassphraseFor ?: return Job().apply { complete() }
+        return stageRestore(file, passphrase)
+    }
+
+    fun cancelRestorePassphrase() {
+        _state.update { it.copy(restorePassphraseFor = null, restorePassphraseWrong = false) }
+    }
+
+    private fun stageRestore(file: java.io.File, backupPassphrase: String?): Job {
+        _state.update { it.copy(isBusy = true, restoreCandidate = null, restorePassphraseFor = null) }
+        return launchSafely({ e ->
+            if (e is de.findesk.data.backup.BackupService.BackupPassphraseRequiredException) {
+                _state.update { it.copy(isBusy = false, restorePassphraseFor = file, restorePassphraseWrong = e.wrongPassphraseGiven) }
+            } else {
+                _state.update { it.copy(isBusy = false, error = e.userMessage()) }
+            }
+        }) {
+            backupService.stageRestore(file, backupPassphrase)
+            _state.update { it.copy(restorePassphraseWrong = false) }
             auditLogRepository.log("RESTORE_STAGED", "user", "Restore from ${file.name} staged")
             refresh()
             _state.update { it.copy(isBusy = false, message = "Restore prepared. Restart FinDesk to finish; your current data will be kept in a pre-restore folder.") }

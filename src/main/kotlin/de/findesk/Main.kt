@@ -2,6 +2,7 @@ package de.findesk
 
 import androidx.compose.desktop.ui.tooling.preview.Preview
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -12,6 +13,7 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
@@ -34,8 +36,10 @@ import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.util.AppPaths
 import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsViewModel
+import de.findesk.viewmodel.UnlockViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
 
 @Composable
 @Preview
@@ -111,9 +115,40 @@ fun main() {
     val profiles = ProfileStore()
     val profile = profiles.active()
     AppPaths.activeProfile = profile.slug
-    DatabaseFactory.init()
+    val dataDir = AppPaths.dataDir.apply { mkdirs() }
+    // Before the gate looks at the database file, so a restored backup is what gets unlocked or encrypted
+    DatabaseFactory.applyPendingRestore(dataDir)
     val profileLabel = profile.name.takeIf { profiles.list().size > 1 }
-    application { FinDeskWindow(profileLabel) }
+    application {
+        var unlocked by remember { mutableStateOf(false) }
+        if (unlocked) FinDeskWindow(profileLabel) else UnlockWindow(dataDir, profileLabel) { unlocked = true }
+    }
+}
+
+/** Nothing can be read before the database is open, so language and theme come from the system here. */
+@Composable
+private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, onOpened: () -> Unit) {
+    val vm = remember { UnlockViewModel(dataDir) }
+    val state by vm.state.collectAsState()
+    LaunchedEffect(state.opened) {
+        if (state.opened) {
+            vm.close()
+            onOpened()
+        }
+    }
+    val strings = Translations.of(AppLanguage.fromSystem())
+    Window(
+        onCloseRequest = ::exitApplication,
+        title = strings[StringKey.UnlockWindowTitle] + profileLabel?.let { " · $it" }.orEmpty(),
+        state = rememberWindowState(size = DpSize(560.dp, 720.dp)),
+        icon = painterResource("icon-512.png"),
+    ) {
+        CompositionLocalProvider(LocalStrings provides strings) {
+            FinDeskTheme(darkTheme = isSystemInDarkTheme()) {
+                UnlockScreen(vm, profileLabel)
+            }
+        }
+    }
 }
 
 @Composable

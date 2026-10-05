@@ -237,6 +237,21 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else Warning,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (state.isEncrypted) s[StringKey.EncryptionStatus] + " " + s[StringKey.BackupNote] else s[StringKey.EncryptionOff],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(enabled = !state.isBusy, onClick = {
@@ -344,6 +359,14 @@ fun SettingsScreen(
             dismissButton = { TextButton(onClick = vm::cancelRestoreChoice) { Text(s[StringKey.Cancel]) } },
         )
     }
+    state.restorePassphraseFor?.let { file ->
+        BackupPassphraseDialog(
+            fileName = file.name,
+            wrong = state.restorePassphraseWrong,
+            onConfirm = vm::confirmRestoreWithPassphrase,
+            onDismiss = vm::cancelRestorePassphrase,
+        )
+    }
     confirmDeleteCategory?.let { c ->
         ConfirmDialog(
             title = s.format(StringKey.DeleteCategoryTitle, c.name),
@@ -442,6 +465,37 @@ private fun RuleDialog(
             }
         },
         confirmButton = { Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+    )
+}
+
+@Composable
+private fun BackupPassphraseDialog(fileName: String, wrong: Boolean, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    val s = strings()
+    var passphrase by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s[StringKey.BackupPassphraseTitle]) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(fileName, style = MaterialTheme.typography.labelLarge)
+                Text(s[StringKey.BackupPassphraseText])
+                OutlinedTextField(
+                    passphrase,
+                    { passphrase = it },
+                    label = { Text(s[StringKey.Passphrase]) },
+                    singleLine = true,
+                    isError = wrong,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    supportingText = if (wrong) {
+                        { Text(s[StringKey.WrongPassphrase]) }
+                    } else {
+                        null
+                    },
+                )
+            }
+        },
+        confirmButton = { Button(enabled = passphrase.isNotEmpty(), onClick = { onConfirm(passphrase) }) { Text(s[StringKey.PrepareRestore]) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }

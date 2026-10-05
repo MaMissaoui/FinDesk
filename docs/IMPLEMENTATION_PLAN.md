@@ -45,7 +45,13 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 
 **Known gaps / next**
 - [x] Statement file import: CSV (Sparkasse, ING, DKB, generic; encoding/delimiter/header detection, adjustable mapping, pending rows skipped) and CAMT.053 XML/ZIP, with re-import dedup.
-- [ ] SQLCipher encryption for the database (data and passports are unencrypted at rest, except the passport passphrase-encrypted file).
+- [x] SQLCipher encryption for the database, with a passphrase at every start (decided 2026-10-05).
+    - [x] Driver: `io.github.willena:sqlite-jdbc` (SQLite3MultipleCiphers, same `org.sqlite` package) replaces xerial; SQLCipher v4 scheme (AES-256, PBKDF2-SHA512 256k). Key passed via connection properties only, never in SQL through Exposed or in the URL.
+    - [x] Connection pool (HikariCP over our own DataSource): a keyed open costs ~100 ms, so connections are reused. SQL logger only with `FINDESK_SQL_LOG=1` (it printed every statement, incl. the passport passphrase setting).
+    - [x] Startup gate before the main window, per profile: encrypted DB -> unlock (wrong passphrase rejected, change passphrase there too); plaintext or new DB -> set a passphrase (twice, min. length, "no recovery" acknowledgement), then encrypt via copy -> rekey -> verify row counts -> atomic swap. No way to skip. Pending restores are applied first, so a restored plaintext backup is re-encrypted.
+    - [x] Backups use the keyed connection (`VACUUM INTO` keeps the encryption); a backup made under another passphrase is accepted and asks for that passphrase at the next start.
+    - [x] Schema update without Exposed's createMissingTablesAndColumns (with driver 3.50.2+ it emitted `ALTER TABLE … MODIFY`).
+    - Not covered: `documents/` stays unencrypted (the unlock screen points to FileVault/BitLocker); passport files are protected indirectly (their passphrase lives in the DB). Plaintext copies made before encryption (pre-restore folders, profiles-deleted, older backups, the 2026-10-04 reset backup) stay plaintext.
 - [x] Budget tracking per category: dashboard card with spent/limit, over-budget and ahead-of-pace warnings.
 
 ---
@@ -93,7 +99,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 
 ### Technical Notes
 - Use Exposed ORM (already in dependencies)
-- SQLite for local storage (SQLCipher for encryption later)
+- SQLite for local storage, encrypted with SQLCipher v4 (passphrase at every start)
 - Follow repository pattern for clean separation
 
 ---
@@ -178,7 +184,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 ---
 
 ## Future Enhancements (Post v1.0)
-- [ ] SQLCipher encryption for database
+- [x] SQLCipher encryption for database (passphrase at every start; see Known gaps)
 - [ ] Plugin system
 - [x] Multi-currency support (no conversion: overviews total the primary currency from Settings, others shown side by side; import skips bookings in a different currency than the account; SEPA only from EUR accounts)
 - [x] Import CSV and CAMT.053

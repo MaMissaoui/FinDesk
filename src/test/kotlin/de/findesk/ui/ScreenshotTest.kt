@@ -18,6 +18,9 @@ import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
+import de.findesk.viewmodel.UnlockMode
+import de.findesk.viewmodel.UnlockViewModel
+import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty
@@ -27,6 +30,7 @@ import java.nio.file.Files
 /**
  * Renders every screen offscreen to PNG. Not part of the normal suite; run with
  * `./gradlew test --tests '*ScreenshotTest' -Pscreenshots=<out-dir> [-PscreenshotData=<FINDESK_HOME with findesk.db>]`.
+ * An encrypted findesk.db needs its passphrase in the environment variable FINDESK_SCREENSHOT_PASSPHRASE.
  */
 @EnabledIfSystemProperty(named = "findesk.screenshots", matches = ".+")
 class ScreenshotTest {
@@ -36,18 +40,48 @@ class ScreenshotTest {
     fun `render all screens`() {
         val dataDir = System.getProperty("findesk.screenshotData")?.let(::File)
             ?: Files.createTempDirectory("findesk-shots").toFile()
-        DatabaseFactory.init(dataDir.absolutePath)
+        DatabaseFactory.init(dataDir.absolutePath, System.getenv("FINDESK_SCREENSHOT_PASSPHRASE")?.takeIf { it.isNotEmpty() })
 
         Screen.entries.forEach { screen ->
             render("${screen.ordinal}-${screen.name.lowercase()}", screen, dark = false)
         }
         render("9-dashboard-dark", Screen.DASHBOARD, dark = true)
         render("8-dashboard-full", Screen.DASHBOARD, dark = false, height = 1800)
+        render("7-settings-full", Screen.SETTINGS, dark = false, height = 2400)
     }
 
-    private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) {
-        val scene = ImageComposeScene(width = 1440, height = height, density = Density(1f)) {
-            Frame(screen, dark)
+    @Test
+    fun `render the unlock screens`() {
+        fun gate(name: String, mode: UnlockMode, language: AppLanguage = AppLanguage.EN, dark: Boolean = false, wrongAttempt: Boolean = false) {
+            val dir = Files.createTempDirectory("findesk-gate").toFile()
+            when (mode) {
+                UnlockMode.CREATE -> {}
+                UnlockMode.ENCRYPT -> DatabaseFactory.init(dir.absolutePath)
+                UnlockMode.UNLOCK, UnlockMode.CHANGE -> DatabaseFactory.init(dir.absolutePath, "screenshot passphrase")
+            }
+            DatabaseFactory.init(Files.createTempDirectory("findesk-gate-other").toFile().absolutePath) // release the file
+            val vm = UnlockViewModel(dir)
+            if (mode == UnlockMode.CHANGE) vm.showChange(true)
+            if (wrongAttempt) runBlocking { vm.unlock("wrong passphrase").join() }
+            render(name, width = 560, height = 720) {
+                CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
+                    FinDeskTheme(darkTheme = dark) { UnlockScreen(vm, profileName = "Business") }
+                }
+            }
+            vm.close()
+        }
+        gate("gate-1-create", UnlockMode.CREATE)
+        gate("gate-2-encrypt-de", UnlockMode.ENCRYPT, language = AppLanguage.DE)
+        gate("gate-3-unlock-wrong", UnlockMode.UNLOCK, wrongAttempt = true)
+        gate("gate-4-change-dark", UnlockMode.CHANGE, dark = true)
+        gate("gate-5-unlock-fr", UnlockMode.UNLOCK, language = AppLanguage.FR)
+    }
+
+    private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
+
+    private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {
+        val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
+            content()
         }
         try {
             // Let LaunchedEffects start and IO-dispatched view model loads finish. A fixed frame count raced cold
