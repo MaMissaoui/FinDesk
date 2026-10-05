@@ -80,8 +80,7 @@ class UnlockViewModel(
         val encrypting = _state.value.mode == UnlockMode.ENCRYPT
         if (encrypting) {
             DatabaseCrypto.reencrypt(db, null, passphrase)
-            // From here on the file is encrypted: if opening fails, a retry is an unlock
-            _state.update { it.copy(mode = UnlockMode.UNLOCK) }
+            reencrypted = true
         }
         DatabaseFactory.init(dataDir.absolutePath, passphrase)
         AuditLogRepositoryImpl().log("DATABASE_ENCRYPTED", "user", if (encrypting) "Existing database encrypted" else "New encrypted database")
@@ -95,7 +94,7 @@ class UnlockViewModel(
         }
         validateNew(passphrase, repeat, acknowledged)
         DatabaseCrypto.reencrypt(db, current, passphrase)
-        _state.update { it.copy(mode = UnlockMode.UNLOCK) }
+        reencrypted = true
         DatabaseFactory.init(dataDir.absolutePath, passphrase)
         AuditLogRepositoryImpl().log("DATABASE_PASSPHRASE_CHANGED", "user", "Database passphrase changed")
     }
@@ -112,6 +111,10 @@ class UnlockViewModel(
 
     private class Rejected(val error: UnlockError) : Exception(error.name)
 
+    /** The file now has the new key. If opening it then fails, a retry is an unlock (set only on failure, to avoid a flash). */
+    @Volatile
+    private var reencrypted = false
+
     private fun run(block: () -> Unit): Job {
         if (_state.value.isBusy || _state.value.opened) return Job().apply { complete() }
         _state.update { it.copy(isBusy = true, error = null, failure = null) }
@@ -121,7 +124,14 @@ class UnlockViewModel(
                 is DatabaseCrypto.WrongPassphraseException -> UnlockError.WRONG_PASSPHRASE
                 else -> UnlockError.FAILED
             }
-            _state.update { it.copy(isBusy = false, error = error, failure = if (error == UnlockError.FAILED) e.userMessage() else null) }
+            _state.update {
+                it.copy(
+                    mode = if (reencrypted) UnlockMode.UNLOCK else it.mode,
+                    isBusy = false,
+                    error = error,
+                    failure = if (error == UnlockError.FAILED) e.userMessage() else null,
+                )
+            }
         }) {
             block()
             _state.update { it.copy(isBusy = false, opened = true) }
