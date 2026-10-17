@@ -19,6 +19,9 @@ interface RuleRepository {
     fun delete(id: Int): Boolean
     fun matchTransaction(purpose: String?, partnerName: String?): Category?
     fun findAllItems(): List<RuleItem>
+
+    /** The auto-apply rules, loaded and compiled once: use it to categorize many bookings in a row. */
+    fun matcher(): RuleMatcher
 }
 
 class RuleRepositoryImpl : RuleRepository {
@@ -90,6 +93,33 @@ class RuleRepositoryImpl : RuleRepository {
 
     override fun findAllItems(): List<RuleItem> = transaction {
         Rule.all().orderBy(RulesTable.priority to SortOrder.DESC).map { it.toItem() }
+    }
+
+    override fun matcher(): RuleMatcher = transaction {
+        RuleMatcher(findAutoApplyRules().map { it.pattern to it.category.id.value })
+    }
+}
+
+/**
+ * Auto-apply rules compiled once, in priority order. Matches like [RuleRepository.matchTransaction]: the first rule
+ * whose pattern is found in purpose and partner name wins; an invalid regex matches as a plain substring.
+ */
+class RuleMatcher(rules: List<Pair<String, Int>>) {
+    private val compiled: List<Pair<(String) -> Boolean, Int>> = rules.map { (pattern, categoryId) ->
+        val regex = try {
+            pattern.toRegex(RegexOption.IGNORE_CASE)
+        } catch (e: java.util.regex.PatternSyntaxException) {
+            null
+        }
+        val test: (String) -> Boolean = if (regex != null) regex::containsMatchIn else { text -> text.contains(pattern, ignoreCase = true) }
+        test to categoryId
+    }
+
+    /** The category id of the first matching rule, or null. */
+    fun categoryFor(purpose: String?, partnerName: String?): Int? {
+        val text = listOfNotNull(purpose, partnerName).joinToString(" ")
+        if (text.isBlank()) return null
+        return compiled.firstOrNull { (matches, _) -> matches(text) }?.second
     }
 }
 

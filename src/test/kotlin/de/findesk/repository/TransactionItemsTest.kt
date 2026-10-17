@@ -84,4 +84,36 @@ class TransactionItemsTest {
         // Null fields must not turn into the literal text "null"
         assertNull(data.ruleRepo.matchTransaction("Coffee", null))
     }
+
+    @Test
+    fun `the compiled matcher agrees with matchTransaction`() {
+        data.ruleRepo.create("[unclosed", food, priority = 10)
+        data.ruleRepo.create("staples|paper", office, priority = 5)
+        data.ruleRepo.create("paper", food, priority = 1) // lower priority: never wins over the rule above
+        data.ruleRepo.create("kiosk", food, priority = 20, autoApply = false) // not auto-applied
+        val matcher = data.ruleRepo.matcher()
+
+        val texts = listOf("buy [unclosed thing" to null, "Printer PAPER" to "Staples", "Kartenzahlung Kiosk" to null, "Coffee" to null, null to null, "  " to null)
+        texts.forEach { (purpose, partner) ->
+            assertEquals(data.ruleRepo.matchTransaction(purpose, partner)?.id?.value, matcher.categoryFor(purpose, partner), "$purpose / $partner")
+        }
+        assertEquals(office, matcher.categoryFor("Printer paper", null))
+        assertNull(matcher.categoryFor("Kartenzahlung Kiosk", null))
+    }
+
+    @Test
+    fun `createAll inserts a batch all or nothing`() {
+        val before = data.transactionRepo.findItems().size
+        fun row(accountId: Int, n: Int) = NewTransaction(accountId, LocalDate.of(2026, 5, n), BigDecimal("-$n.00"), "EUR", "Shop $n", null, null, "batch-$n")
+
+        assertEquals(2, data.transactionRepo.createAll(listOf(row(account, 1), row(account, 2))))
+        assertEquals(before + 2, data.transactionRepo.findItems().size)
+
+        // An unknown account in the middle fails the batch, and nothing of it is kept
+        assertThrows(IllegalArgumentException::class.java) {
+            data.transactionRepo.createAll(listOf(row(account, 3), row(999_999, 4), row(account, 5)))
+        }
+        assertEquals(before + 2, data.transactionRepo.findItems().size)
+        assertEquals(0, data.transactionRepo.createAll(emptyList()))
+    }
 }
