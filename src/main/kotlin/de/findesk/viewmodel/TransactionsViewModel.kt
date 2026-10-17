@@ -262,19 +262,25 @@ class TransactionsViewModel(
         // The booking is in the account's currency; defaulting to EUR would mix currencies.
         val account = accountRepository.findAllItems().firstOrNull { it.id == accountId }
             ?: throw IllegalArgumentException("Account $accountId not found")
-        val hash = FinTSClient.transactionHash(date, amount, partnerName, purpose)
-        if (transactionRepository.findByHash(hash) != null) {
+        val partner = partnerName?.trim()?.ifEmpty { null }
+        val text = purpose?.trim()?.ifEmpty { null }
+        // Guards against entering the same booking twice on this account, whatever its source; the same booking on
+        // another account is a different one
+        val duplicate = transactionRepository.findItems(TransactionFilter(startDate = date, endDate = date, accountId = accountId))
+            .any { it.amount.compareTo(amount) == 0 && it.partnerName == partner && it.purpose == text }
+        if (duplicate) {
             _state.update { it.copy(error = AppStrings[StringKey.ErrorDuplicateTransaction]) }
             return@launchSafely
         }
+        val hash = FinTSClient.transactionHash(date, amount, partner, "${text.orEmpty()}#${account.iban}#manual")
         val resolvedCategory = categoryId ?: ruleRepository.matchTransaction(purpose, partnerName)?.id?.value
         transactionRepository.create(
             accountId = accountId,
             date = date,
             amount = amount,
             currency = account.currency,
-            partnerName = partnerName?.trim()?.ifEmpty { null },
-            purpose = purpose?.trim()?.ifEmpty { null },
+            partnerName = partner,
+            purpose = text,
             categoryId = resolvedCategory,
             hash = hash,
         )

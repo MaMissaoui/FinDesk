@@ -89,6 +89,24 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `the manual duplicate check is per account`() = runBlocking {
+        val other = data.account(iban = "DE44500105175407324931", balance = "0")
+        val vm = TransactionsViewModel(today = { today })
+        vm.addManualTransaction(account, today, BigDecimal("-4.50"), "Bäckerei", "Brötchen", null).join()
+
+        // The same booking on another account is a different booking
+        vm.addManualTransaction(other, today, BigDecimal("-4.50"), "Bäckerei", "Brötchen", null).join()
+        assertNull(vm.state.value.error)
+        assertEquals(2, data.transactionRepo.findItems().count { it.partnerName == "Bäckerei" })
+
+        // Typed again on the first account, even with stray spaces, it is caught
+        vm.addManualTransaction(account, today, BigDecimal("-4.5"), " Bäckerei ", "Brötchen ", null).join()
+        assertEquals("An identical transaction already exists", vm.state.value.error)
+        assertEquals(2, data.transactionRepo.findItems().count { it.partnerName == "Bäckerei" })
+        vm.close()
+    }
+
+    @Test
     fun `statement import previews, picks the account from the file and imports`() = runBlocking {
         val other = data.account(iban = "DE44500105175407324931", balance = "0")
         val csv = File(tmp, "ing.csv").apply {
