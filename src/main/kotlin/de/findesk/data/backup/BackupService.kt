@@ -5,8 +5,8 @@ import de.findesk.data.database.DatabaseFactory
 import de.findesk.util.FileSecurity
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.sql.Connection
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -30,6 +30,8 @@ class BackupService(
     private val dataDir: File,
     /** Opens a database file with the open database's key (or none for a plaintext file). */
     private val connect: (File) -> Connection = { DatabaseFactory.rawConnection(it) },
+    /** Upper bound for everything a restore unpacks, whatever sizes the ZIP declares. */
+    private val maxRestoreBytes: Long = MAX_RESTORE_BYTES,
 ) {
     data class BackupInfo(val created: String, val appVersion: String, val transactions: Long, val documents: Int)
 
@@ -47,6 +49,7 @@ class BackupService(
         const val PRE_RESTORE_PREFIX = "pre-restore-"
         private val CONTENT_DIRS = listOf("documents", "passports")
         private const val MAX_ENTRY_BYTES = 2L * 1024 * 1024 * 1024
+        private const val MAX_RESTORE_BYTES = 8L * 1024 * 1024 * 1024
         private val STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
     }
 
@@ -54,7 +57,9 @@ class BackupService(
 
     /** Writes a backup of the current data to [target]. Safe while the app is running. */
     fun createBackup(target: File, appVersion: String = "0.1.0"): BackupInfo {
-        val tmpDb = File.createTempFile("findesk-backup", ".db").apply { delete() }
+        // Next to the data rather than in the shared temp dir: a plaintext database's copy is readable there,
+        // and one left behind by a crash would outlive the data it came from
+        val tmpDb = File.createTempFile("findesk-backup", ".db.tmp", dataDir).apply { delete() }
         try {
             // VACUUM INTO gives a consistent, compacted copy even while the app has the database open.
             // It can't run inside a transaction, so use a plain autocommit connection.
@@ -117,11 +122,16 @@ class BackupService(
         pending.mkdirs()
         try {
             ZipFile(backup).use { zip ->
+                var budget = maxRestoreBytes
                 zip.entries().asSequence().filter { !it.isDirectory && it.name != MANIFEST }.forEach { entry ->
                     val out = safeTarget(pending, entry.name)
                     require(entry.size <= MAX_ENTRY_BYTES) { "Entry ${entry.name} is too large" }
                     out.parentFile.mkdirs()
-                    zip.getInputStream(entry).use { input -> Files.copy(input, out.toPath(), StandardCopyOption.REPLACE_EXISTING) }
+                    // Counted while copying: the sizes in the ZIP directory are the archive's own claim
+                    val limit = minOf(MAX_ENTRY_BYTES, budget)
+                    val written = zip.getInputStream(entry).use { input -> copyAtMost(input, out, limit) }
+                    require(written <= limit) { "Backup is too large to restore" }
+                    budget -= written
                 }
             }
             val db = File(pending, DB_NAME)
@@ -181,6 +191,19 @@ class BackupService(
         val target = File(root, normalized).canonicalFile
         require(target.path.startsWith(root.canonicalPath + File.separator)) { "Unsafe path in backup: $name" }
         return target
+    }
+
+    /** Copies up to [limit] bytes; returns more than [limit] if [input] had more, so the caller can reject it. */
+    private fun copyAtMost(input: InputStream, out: File, limit: Long): Long = out.outputStream().use { output ->
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var total = 0L
+        var n = input.read(buffer)
+        while (n >= 0 && total + n <= limit) {
+            output.write(buffer, 0, n)
+            total += n
+            n = input.read(buffer)
+        }
+        if (n >= 0) total + n else total
     }
 
     private fun countRows(db: File, table: String): Long = connect(db).use { c -> countRows(c, table) }
