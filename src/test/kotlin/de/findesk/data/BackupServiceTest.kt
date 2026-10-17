@@ -135,4 +135,35 @@ class BackupServiceTest {
         DatabaseFactory.init(dataDir.absolutePath)
         assertNull(DatabaseFactory.restoredFrom)
     }
+
+    @Test
+    fun `a restore that unpacks more than the cap is rejected`() {
+        val dataDir = File(tmp, "d4").apply { mkdirs() }
+        val big = zip(
+            File(tmp, "big.zip"),
+            mapOf("findesk-backup.properties" to "created=x", "findesk.db" to "x", "documents/a.pdf" to "a".repeat(600), "documents/b.pdf" to "b".repeat(600)),
+        )
+
+        val error = assertThrows<IllegalArgumentException> { BackupService(dataDir, maxRestoreBytes = 1_000).stageRestore(big) }
+
+        assertEquals("Backup is too large to restore", error.message)
+        assertFalse(BackupService(dataDir).hasPendingRestore, "failed staging leaves nothing behind")
+    }
+
+    @Test
+    fun `the backup's temporary database copy stays out of the shared temp dir`() {
+        val dataDir = File(tmp, "d5").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        TestData().account()
+        val seen = mutableListOf<String>()
+        val service = BackupService(dataDir, connect = { file ->
+            DatabaseFactory.rawConnection(file).also { seen += file.parentFile.canonicalPath }
+        })
+
+        service.createBackup(File(tmp, "b5.zip"))
+
+        assertTrue(seen.isNotEmpty())
+        assertTrue(seen.all { it == dataDir.canonicalPath }, "copies opened in $seen")
+        assertTrue(dataDir.listFiles()!!.none { it.name.endsWith(".db.tmp") }, "temporary copy removed")
+    }
 }
