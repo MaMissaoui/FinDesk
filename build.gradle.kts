@@ -73,10 +73,14 @@ compose.desktop {
             // DEB/RPM on Linux. Formats listed inside an OS block are ignored for other hosts.
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb, TargetFormat.Rpm)
 
-            // macOS
+            // The installer icon must be in the native format of each OS: jpackage only accepts
+            // .icns on macOS and .ico on Windows. Given anything else it warns
+            // ("... is not an ICNS/ICO file and will not be used") and silently falls back to the
+            // JDK's JavaApp icon (Duke), so a PNG here would ship the wrong icon. Linux takes .png.
+            // icon.icns/icon.ico are generated from FinDesk-icon.svg (see CONTRIBUTING.md).
             macOS {
                 bundleID = "de.findesk.app"
-                iconFile.set(project.file("src/main/resources/icon-512.png"))
+                iconFile.set(project.file("src/main/resources/icons/icon.icns"))
             }
 
             // Windows
@@ -86,7 +90,7 @@ compose.desktop {
                 menu = true
                 menuGroup = "FinDesk"
                 shortcut = true
-                iconFile.set(project.file("src/main/resources/icon-512.png"))
+                iconFile.set(project.file("src/main/resources/icons/icon.ico"))
             }
 
             // Linux
