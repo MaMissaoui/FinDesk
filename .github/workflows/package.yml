@@ -63,7 +63,14 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: findesk-${{ runner.os }}
-          path: build/compose/binaries/main/**
+          # Only the installers: `main/**` would also pick up the unpacked runtime image
+          # and every dependency jar.
+          path: |
+            build/compose/binaries/main/dmg/*.dmg
+            build/compose/binaries/main/msi/*.msi
+            build/compose/binaries/main/exe/*.exe
+            build/compose/binaries/main/deb/*.deb
+            build/compose/binaries/main/rpm/*.rpm
           if-no-files-found: error
           retention-days: 14
 
@@ -71,4 +78,9 @@ jobs:
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
         with:
-          files: build/compose/binaries/main/**
+          files: |
+            build/compose/binaries/main/dmg/*.dmg
+            build/compose/binaries/main/msi/*.msi
+            build/compose/binaries/main/exe/*.exe
+            build/compose/binaries/main/deb/*.deb
+            build/compose/binaries/main/rpm/*.rpm
