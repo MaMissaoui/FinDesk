@@ -220,13 +220,35 @@ private fun BankCard(
                         Text(s[StringKey.Sync])
                     }
                 }
-                IconButton(onClick = onEditConnection) { Icon(Icons.Default.Settings, contentDescription = s[StringKey.ConnectionSettings]) }
                 TextButton(onClick = onAddAccount) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(s[StringKey.AddAccountShort])
                 }
-                IconButton(onClick = onDeleteBank) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.RemoveBank]) }
+                // Bank-wide actions live in a menu: a trash icon here looked like the account rows' delete below it,
+                // yet removes the bank with all its accounts
+                var bankMenu by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
+                    DropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(s[StringKey.ConnectionSettings]) },
+                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                            onClick = {
+                                bankMenu = false
+                                onEditConnection()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(s[StringKey.RemoveBank], color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                bankMenu = false
+                                onDeleteBank()
+                            },
+                        )
+                    }
+                }
             }
             if (accounts.isEmpty()) {
                 Text(
