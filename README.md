@@ -1,5 +1,9 @@
 # FinDesk – Your Financial Workspace
 
+[![CI](https://github.com/MaMissaoui/FinDesk/actions/workflows/ci.yml/badge.svg)](https://github.com/MaMissaoui/FinDesk/actions/workflows/ci.yml)
+[![Package](https://github.com/MaMissaoui/FinDesk/actions/workflows/package.yml/badge.svg)](https://github.com/MaMissaoui/FinDesk/actions/workflows/package.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A free, local-first personal finance desktop application that unifies
 multi-banking (FinTS/HBCI), transactions, documents and tax-relevant
 information in one place. Similar in spirit to
@@ -65,6 +69,12 @@ FINDESK_HOME=/tmp/findesk-dev ./gradlew run --no-daemon
 ./gradlew test          # full suite
 ./gradlew ktlintCheck   # lint
 ```
+
+## Downloads
+
+Prebuilt installers for macOS (DMG), Windows (MSI/portable EXE) and Linux
+(DEB/RPM) are attached to every
+[release](https://github.com/MaMissaoui/FinDesk/releases).
 
 ## Build installers
 

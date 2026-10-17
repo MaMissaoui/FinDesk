@@ -1,0 +1,70 @@
+name: Package
+
+# Installers are built for the current OS only, so each runner builds its own formats.
+# Runs on every pull request (artifacts appear on the run / PR checks) and attaches the
+# installers to the release when one is published.
+on:
+  release:
+    types: [published]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (DMG)
+            os: macos-latest
+            task: packageDmg
+          - name: Linux (DEB/RPM)
+            os: ubuntu-latest
+            task: packageDeb packageRpm
+          - name: Windows (MSI/EXE)
+            os: windows-latest
+            task: packageMsi packageExe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install packaging tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot rpm
+
+      - name: Build installers
+        shell: bash
+        run: ./gradlew --no-daemon ${{ matrix.task }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: findesk-${{ runner.os }}
+          path: build/compose/binaries/main/**
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach installers to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/compose/binaries/main/**
