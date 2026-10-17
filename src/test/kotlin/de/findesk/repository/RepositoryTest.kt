@@ -154,9 +154,7 @@ class RepositoryTest {
         ruleRepo.create(".*rewe.*|.*edeka.*|.*aldi.*", category.id.value, priority = 10)
         ruleRepo.create(".*amazon.*", categoryRepo.create("Shopping").id.value, priority = 5)
 
-        val matched = ruleRepo.matchTransaction("REWE SAGT DANKE", null)
-        assertNotNull(matched)
-        assertEquals("Groceries", matched!!.name)
+        assertEquals(category.id.value, ruleRepo.matchCategoryId("REWE SAGT DANKE", null))
     }
 
     @Test

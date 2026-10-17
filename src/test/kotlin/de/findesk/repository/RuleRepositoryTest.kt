@@ -62,8 +62,6 @@ class RuleRepositoryTest {
         ruleRepo.create(".*rewe.*|.*edeka.*|.*aldi.*", testCategoryId, priority = 10)
         ruleRepo.create(".*amazon.*|.*ebay.*", testCategoryId2, priority = 5)
 
-        val match1 = ruleRepo.matchTransaction("REWE SAGT DANKE", null)
-        assertNotNull(match1)
-        assertEquals("Groceries", match1!!.name)
+        assertEquals(testCategoryId, ruleRepo.matchCategoryId("REWE SAGT DANKE", null))
     }
 }
