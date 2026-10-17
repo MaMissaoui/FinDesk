@@ -49,12 +49,6 @@ fun DocumentsScreen() {
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    s[StringKey.NavDocuments],
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.semantics { heading() },
-                )
                 if (!state.isOcrAvailable) {
                     Text(
                         s[StringKey.OcrNeedsTesseract],
