@@ -340,4 +340,4 @@ artifacts on every pull request; on a published release the same files are attac
 | Windows | EXE | `build/compose/binaries/main/exe/` |
 | Linux | DEB | `build/compose/binaries/main/deb/` |
 | Linux | RPM | `build/compose/binaries/main/rpm/` |
-| All | JAR | `build/libs/FinDesk-0.1.0-SNAPSHOT.jar` |
+| All | JAR | `build/libs/FinDesk-1.0.0.jar` |
