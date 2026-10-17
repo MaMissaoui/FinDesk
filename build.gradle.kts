@@ -1,4 +1,8 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.security.MessageDigest
 
 plugins {
     kotlin("jvm") version "2.1.10"
@@ -137,6 +141,82 @@ tasks.register("buildDistribution") {
     group = "distribution"
     description = "Builds distribution package for current platform"
     dependsOn("package")
+}
+
+// jpackage resolves the icon while it builds the *app image*, and the DMG/MSI/EXE/DEB/RPM only copy
+// the result, so the app image is the one place to check. Given an icon that is not in the native
+// format of the OS, it warns ("... is not an ICNS/ICO file and will not be used") and silently
+// substitutes the JDK's JavaApp icon (Duke) — a build that succeeds with the wrong icon, which is
+// what the 2026-10-17 packaging audit found. Nothing at compile time catches that, so this compares
+// the packaged artifact against the icon files committed in the repository.
+//   ./gradlew createDistributable verifyInstallerIcon
+val iconIcns = layout.projectDirectory.file("src/main/resources/icons/icon.icns").asFile
+val iconIco = layout.projectDirectory.file("src/main/resources/icons/icon.ico").asFile
+val iconPng = layout.projectDirectory.file("src/main/resources/icon-512.png").asFile
+val packagedAppDir = layout.buildDirectory.dir("compose/binaries/main/app")
+
+fun sha256(file: File): String = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+
+/** The image payloads an `.ico` declares — the exact bytes an icon resource has to contain. */
+fun icoImagePayloads(file: File): List<ByteArray> {
+    val bytes = file.readBytes()
+    val header = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    return (0 until header.getShort(4).toInt()).map { i ->
+        val entry = 6 + i * 16
+        val size = header.getInt(entry + 8)
+        val offset = header.getInt(entry + 12)
+        bytes.copyOfRange(offset, offset + size)
+    }
+}
+
+/** [String.indexOf] without allocating a string for the haystack (the launcher is over 100 MB). */
+fun ByteArray.containsBytes(needle: ByteArray): Boolean {
+    outer@ for (i in 0..size - needle.size) {
+        if (this[i] != needle[0]) continue
+        for (j in 1 until needle.size) if (this[i + j] != needle[j]) continue@outer
+        return true
+    }
+    return false
+}
+
+tasks.register("verifyInstallerIcon") {
+    group = "distribution"
+    description = "Fails if the packaged app image carries jpackage's Duke fallback instead of the repository's icon"
+    dependsOn("createDistributable")
+    inputs.files(iconIcns, iconIco, iconPng)
+    doLast {
+        val app = packagedAppDir.get().asFile
+        val bundles = app.listFiles().orEmpty().filter { it.isDirectory }
+        check(bundles.isNotEmpty()) { "No app image under $app — run createDistributable first" }
+        val launchers = bundles.flatMap { it.listFiles().orEmpty().toList() }.filter { it.extension == "exe" }
+
+        // What is present decides how the icon has to look, so the check works on any host
+        if (bundles.any { it.name.endsWith(".app") }) {
+            val icns = bundles.flatMap { File(it, "Contents/Resources").listFiles().orEmpty().toList() }.filter { it.extension == "icns" }
+            check(icns.size == 1) { "Expected one .icns in the app image, found ${icns.map { it.path }}" }
+            val packaged = icns.single()
+            check(sha256(packaged) == sha256(iconIcns)) { "The app image ships ${packaged.path} (${sha256(packaged)}), not ${iconIcns.name} (${sha256(iconIcns)})" }
+            println("Icon OK: ${packaged.name} in the app image matches ${iconIcns.name}")
+        } else if (launchers.isNotEmpty()) {
+            check(launchers.size == 1) { "Expected one launcher in the app image, found ${launchers.map { it.path }}" }
+            val launcher = launchers.single()
+            val bytes = launcher.readBytes()
+            val images = icoImagePayloads(iconIco)
+            val missing = images.filterNot { bytes.containsBytes(it) }
+            check(missing.isEmpty()) {
+                "${launcher.name} does not embed ${missing.size} of the ${images.size} ${iconIco.name} images (sizes ${missing.map { it.size }}) — jpackage fell back to the JDK icon"
+            }
+            println("Icon OK: ${launcher.name} embeds all ${images.size} images of ${iconIco.name}")
+        } else {
+            val png = bundles.flatMap { bundle ->
+                File(bundle, "lib").listFiles().orEmpty().toList() + listOfNotNull(File(bundle, "${bundle.name}.png").takeIf(File::isFile))
+            }.filter { it.extension == "png" }
+            check(png.size == 1) { "Expected one .png in the app image, found ${png.map { it.path }}" }
+            val packaged = png.single()
+            check(sha256(packaged) == sha256(iconPng)) { "The app image ships ${packaged.path} (${sha256(packaged)}), not ${iconPng.name} (${sha256(iconPng)})" }
+            println("Icon OK: ${packaged.name} in the app image matches ${iconPng.name}")
+        }
+    }
 }
 
 // Print build info
