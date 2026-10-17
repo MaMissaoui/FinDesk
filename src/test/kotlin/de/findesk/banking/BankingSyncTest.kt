@@ -357,6 +357,115 @@ class BankingSyncTest {
         assertTrue(AuditLogRepositoryImpl().findByAction("TRANSFER").any { it.details!!.contains("sent") })
     }
 
+    /** A service whose gateway runs [transfer] (after asking for the PIN) instead of the fake's own transfer. */
+    private fun serviceWithTransfer(name: String, transfer: (TransferOrder) -> FinTSClient.TransferResult): BankingService {
+        val scripted = object : FinTSGateway by gateway {
+            override fun transfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult {
+                ScriptedInteraction().pin(connection.bankName, connection.userId)
+                return transfer(order)
+            }
+        }
+        return BankingService(finTSClient = FinTSClient(gateway = scripted, passportDir = File(tmp, name)), today = { today })
+    }
+
+    @Test
+    fun `an order whose dialog breaks off is recorded as outcome unknown, and the review closes`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val order = TransferOrder("Max Mustermann", savings, null, BigDecimal("10.00"), "Test")
+        // The bank may have executed it before the answer was lost
+        val vm = de.findesk.viewmodel.PaymentsViewModel(bankingService = serviceWithTransfer("p-unknown") { throw IllegalStateException("Read timed out") })
+        vm.load().join()
+        val account = vm.state.value.accounts.single()
+
+        vm.review(account, order)
+        assertNull(vm.state.value.review!!.unconfirmed)
+        vm.confirmAndSend().join()
+
+        assertNull(vm.state.value.review, "an unknown outcome must not leave a ready-to-send review open")
+        assertTrue(vm.state.value.error!!.contains("may have been executed"), vm.state.value.error)
+        assertEquals(de.findesk.model.PaymentOrderStatus.UNKNOWN, vm.state.value.paymentOrders.single().status)
+        assertTrue(AuditLogRepositoryImpl().findByAction("TRANSFER").any { it.details!!.contains("outcome unknown") })
+
+        // Sending it again takes a fresh review, which points at the unconfirmed order
+        vm.review(account, order.copy(recipientIban = savings.lowercase()))
+        assertEquals(vm.state.value.paymentOrders.single().id, vm.state.value.review!!.unconfirmed?.id)
+        vm.review(account, order.copy(amount = BigDecimal("11.00")))
+        assertNull(vm.state.value.review!!.unconfirmed, "a different amount is a different order")
+        vm.close()
+    }
+
+    @Test
+    fun `a definite rejection is recorded as rejected and keeps the review for a corrected retry`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val vm = de.findesk.viewmodel.PaymentsViewModel(bankingService = serviceWithTransfer("p-rejected") { throw OrderNotExecutedException("9050 Empfänger-IBAN ungültig") })
+        vm.load().join()
+
+        vm.review(vm.state.value.accounts.single(), TransferOrder("Max Mustermann", savings, null, BigDecimal("10.00"), "Test"))
+        vm.confirmAndSend().join()
+
+        assertNotNull(vm.state.value.review)
+        assertEquals("9050 Empfänger-IBAN ungültig", vm.state.value.error)
+        assertEquals(de.findesk.model.PaymentOrderStatus.REJECTED, vm.state.value.paymentOrders.single().status)
+        vm.close()
+    }
+
+    @Test
+    fun `closing the payments screen mid-send still records the bank's answer`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val vm = de.findesk.viewmodel.PaymentsViewModel(
+            bankingService = serviceWithTransfer("p-close") { order ->
+                entered.countDown()
+                release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                gateway.transfers += giro to order
+                FinTSClient.TransferResult("job-9", "ACCEPTED")
+            },
+        )
+        vm.load().join()
+        vm.review(vm.state.value.accounts.single(), TransferOrder("Max Mustermann", savings, null, BigDecimal("10.00"), "Test"))
+
+        vm.confirmAndSend()
+        assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+        vm.close() // the user navigates away while the bank works on the order
+        release.countDown()
+
+        val orders = de.findesk.repository.PaymentOrderRepositoryImpl()
+        val deadline = System.currentTimeMillis() + 5000
+        while (orders.findRecentItems().single().status == de.findesk.model.PaymentOrderStatus.PENDING && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        val recorded = orders.findRecentItems().single()
+        assertEquals(de.findesk.model.PaymentOrderStatus.ACCEPTED, recorded.status)
+        assertEquals("job-9", recorded.bankOrderId)
+        assertEquals(1, gateway.transfers.size)
+        assertTrue(AuditLogRepositoryImpl().findByAction("TRANSFER").any { it.details!!.contains("sent") })
+    }
+
+    @Test
+    fun `an order the bank accepted counts as sent even if the dialog failed afterwards`() {
+        val accepted = org.kapott.hbci.status.HBCIStatus().apply { addRetVal(retVal("0020", "Auftrag ausgeführt")) }
+        assertNull(Hbci4JavaGateway.orderOutcome(accepted, "Dialogende fehlgeschlagen"))
+
+        val rejected = org.kapott.hbci.status.HBCIStatus().apply { addRetVal(retVal("9050", "Auftrag abgelehnt")) }
+        assertTrue(Hbci4JavaGateway.orderOutcome(rejected, null) is OrderNotExecutedException)
+
+        // No answer for the job, or an exception while it was processed: the bank may have it
+        assertTrue(Hbci4JavaGateway.orderOutcome(org.kapott.hbci.status.HBCIStatus(), "Read timed out") is IllegalStateException)
+        val broken = org.kapott.hbci.status.HBCIStatus().apply {
+            addRetVal(retVal("9050", "Auftrag abgelehnt"))
+            addException(java.io.IOException("connection reset"))
+        }
+        assertFalse(Hbci4JavaGateway.orderOutcome(broken, null) is OrderNotExecutedException)
+        assertFalse(Hbci4JavaGateway.orderOutcome(null, null) is OrderNotExecutedException)
+    }
+
+    private fun retVal(code: String, text: String) = org.kapott.hbci.status.HBCIRetVal(null, null, null, null, null, null).apply {
+        this.code = code
+        this.text = text
+    }
+
     @Test
     fun `transfers are refused from accounts that are not in EUR`() = runBlocking {
         val usd = data.accountRepo.create(bankId, "DE89370400440532013000", balance = BigDecimal("900.00"), currency = "USD").id.value

@@ -107,6 +107,9 @@ object PaymentOrderStatus {
     const val REJECTED = "REJECTED"
     const val TAN_REQUIRED = "TAN_REQUIRED"
     const val CANCELLED = "CANCELLED"
+
+    /** The dialog failed after the order may have reached the bank (or the app stopped mid-send): check online banking. */
+    const val UNKNOWN = "UNKNOWN"
 }
 
 /** A locally recorded order sent to a bank, with the bank's answer once it is known. */

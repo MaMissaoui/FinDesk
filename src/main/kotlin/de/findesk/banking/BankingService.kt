@@ -7,6 +7,7 @@ import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
 import de.findesk.util.Iban
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +42,9 @@ class BankingService(
 
         /** Later syncs overlap the previous one to catch late bookings; duplicates are skipped. */
         const val SYNC_OVERLAP_DAYS = 10L
+
+        /** Error code for an order whose dialog failed after it may have reached the bank. Never resend it blindly. */
+        const val OUTCOME_UNKNOWN = "OUTCOME_UNKNOWN"
 
         const val MAX_PURPOSE_LENGTH = 140
         const val MAX_NAME_LENGTH = 70
@@ -355,9 +359,11 @@ class BankingService(
             accountCheck?.let { it(account)?.let { message -> return deny("INVALID", message, account.iban) } }
             // SEPA credit transfers are EUR only; the order amount is in EUR, so another account currency would be wrong
             if (account.currency != "EUR") return deny("CURRENCY", AppStrings.format(StringKey.ErrorSepaEurOnly, account.currency), account.iban)
-            // Recorded before sending so a crash mid-dialog still leaves a trace; the bank's answer updates it
-            val recordId = withContext(Dispatchers.IO) {
-                paymentOrderRepository.create(
+            // From here on the attempt is seen through even if the caller is cancelled (e.g. the Payments screen closes
+            // mid-dialog): the bank may already have the order, so its answer must be recorded and audited, not dropped
+            return withContext(NonCancellable + Dispatchers.IO) {
+                // Recorded before sending so a crash mid-dialog still leaves a trace; the bank's answer updates it
+                val recordId = paymentOrderRepository.create(
                     action = action,
                     accountIban = account.iban,
                     recipientName = normalized.recipientName,
@@ -368,12 +374,16 @@ class BankingService(
                     requestedDate = requestedDate,
                     schedule = schedule,
                 )
+                val result = try {
+                    ambiguousAsUnknown(send(account, normalized))
+                } catch (e: Exception) {
+                    BankingResult.Error(OUTCOME_UNKNOWN, AppStrings.format(StringKey.ErrorOrderOutcomeUnknown, e.message ?: e.javaClass.simpleName))
+                }
+                paymentOrderRepository.complete(recordId, statusOf(result), bankOrderId(result), resultMessage(result))
+                auditOrder(action, normalized, account.iban, describe, outcome(result))
+                if (result is BankingResult.Error) _error.value = result.message
+                result
             }
-            val result = send(account, normalized)
-            withContext(Dispatchers.IO) { paymentOrderRepository.complete(recordId, statusOf(result), bankOrderId(result), resultMessage(result)) }
-            withContext(Dispatchers.IO) { auditOrder(action, normalized, account.iban, describe, outcome(result)) }
-            if (result is BankingResult.Error) _error.value = result.message
-            return result
         } finally {
             _isLoading.value = false
         }
@@ -389,17 +399,33 @@ class BankingService(
         )
     }
 
+    /**
+     * A dialog failure other than a definite rejection may come after the bank received the order. Sending it again
+     * could pay twice, so it is reported as unknown and the user is told to check online banking first.
+     */
+    private fun <T> ambiguousAsUnknown(result: BankingResult<T>): BankingResult<T> = if (result is BankingResult.Error && result.code == FinTSClient.FINTS_ERROR) {
+        BankingResult.Error(OUTCOME_UNKNOWN, AppStrings.format(StringKey.ErrorOrderOutcomeUnknown, result.message))
+    } else {
+        result
+    }
+
     private fun outcome(result: BankingResult<*>): String = when (result) {
         is BankingResult.Success -> "sent"
-        is BankingResult.Error -> "failed: ${result.message}"
+        is BankingResult.Error -> if (result.code == OUTCOME_UNKNOWN) "outcome unknown: ${result.message}" else "failed: ${result.message}"
         is BankingResult.TanRequired -> "TAN required"
     }
 
     /** Recorded status of an attempt, from the bank's answer. */
     private fun statusOf(result: BankingResult<*>): String = when (result) {
         is BankingResult.Success -> PaymentOrderStatus.ACCEPTED
+
         is BankingResult.TanRequired -> PaymentOrderStatus.TAN_REQUIRED
-        is BankingResult.Error -> if (result.code == "CANCELLED") PaymentOrderStatus.CANCELLED else PaymentOrderStatus.REJECTED
+
+        is BankingResult.Error -> when (result.code) {
+            "CANCELLED" -> PaymentOrderStatus.CANCELLED
+            OUTCOME_UNKNOWN -> PaymentOrderStatus.UNKNOWN
+            else -> PaymentOrderStatus.REJECTED
+        }
     }
 
     /** The reference the bank gave for the order, when it reports one. */

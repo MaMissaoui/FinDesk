@@ -59,6 +59,7 @@ class Strings(
         PaymentOrderStatus.REJECTED -> this[StringKey.PaymentStatusRejected]
         PaymentOrderStatus.TAN_REQUIRED -> this[StringKey.PaymentStatusTanRequired]
         PaymentOrderStatus.CANCELLED -> this[StringKey.PaymentStatusCancelled]
+        PaymentOrderStatus.UNKNOWN -> this[StringKey.PaymentStatusUnknown]
         else -> status
     }
 

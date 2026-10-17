@@ -138,3 +138,10 @@ interface FinTSGateway {
     /** The login's supported business transactions, detected during the last dialog, if any. */
     val lastCapabilities: BankCapabilities? get() = null
 }
+
+/**
+ * An order that definitely did not take effect: the bank answered it with an error, or it was never sent (rejected
+ * PIN, unknown account, job not offered). Correcting and sending it again is safe. Any other failure of an order is
+ * ambiguous, because the bank may have executed it before the dialog broke.
+ */
+class OrderNotExecutedException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
