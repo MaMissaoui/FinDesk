@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import de.findesk.i18n.strings
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.PrimaryBlue
+import de.findesk.util.AppInfo
 
 @Composable
 fun Sidebar(
@@ -72,7 +73,7 @@ fun Sidebar(
 
         // Version info at bottom
         Text(
-            text = "v0.1.0",
+            text = "v${AppInfo.VERSION}",
             style = MaterialTheme.typography.bodySmall,
             color = Color.White,
             modifier = Modifier.padding(top = 16.dp),
