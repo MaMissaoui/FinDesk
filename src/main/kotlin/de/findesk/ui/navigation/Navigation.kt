@@ -8,14 +8,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
+import de.findesk.ui.components.AppIcons
 
 enum class Screen(val icon: ImageVector) {
     DASHBOARD(Icons.Default.Home),
-    ACCOUNTS(Icons.Default.AccountBox),
+    ACCOUNTS(AppIcons.AccountBalance),
     TRANSACTIONS(Icons.Default.List),
-    PAYMENTS(Icons.Default.ShoppingCart),
-    DOCUMENTS(Icons.Default.Menu),
-    REPORTS(Icons.Default.Info),
+    PAYMENTS(AppIcons.Send),
+    DOCUMENTS(AppIcons.Description),
+    REPORTS(AppIcons.BarChart),
     SETTINGS(Icons.Default.Settings),
     ;
 

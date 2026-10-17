@@ -61,7 +61,7 @@ fun ReportsScreen() {
                 enabled = !state.isExporting,
                 onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "findesk-${fileSuffix(state.customRange, state.selectedYear)}.csv")?.let { vm.exportToCsv(it) } },
             ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(s[StringKey.ExportCsv])
             }
@@ -70,7 +70,7 @@ fun ReportsScreen() {
                 enabled = !state.isExporting,
                 onClick = { FileDialogs.saveFile(s[StringKey.ExportReport], "report-${fileSuffix(state.customRange, state.selectedYear)}.pdf")?.let { vm.exportToPdf(it) } },
             ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(8.dp))
+                Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(s[StringKey.ExportPdf])
             }
@@ -114,7 +114,7 @@ fun ReportsScreen() {
         if (report == null) return@Column
         if (report.transactionCount == 0) {
             val hint = if (report.otherCurrencyBookings > 0) s.format(StringKey.OtherCurrenciesExcluded, report.currency, report.otherCurrencyBookings) else s[StringKey.ReportsBuiltFrom]
-            EmptyState(Icons.Default.Info, s.format(StringKey.NoTransactionsIn, report.title), hint)
+            EmptyState(AppIcons.BarChart, s.format(StringKey.NoTransactionsIn, report.title), hint)
             return@Column
         }
         when (selectedTab) {
@@ -142,7 +142,7 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
                 StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
-                StatCard(s[StringKey.NetIncome], Formats.money(report.netIncome, report.currency), Icons.Default.AccountBox, PrimaryBlue, Modifier.weight(1f))
+                StatCard(s[StringKey.NetIncome], Formats.money(report.netIncome, report.currency), AppIcons.BarChart, PrimaryBlue, Modifier.weight(1f))
                 StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), Icons.Default.Info, Warning, Modifier.weight(1f))
             }
         }

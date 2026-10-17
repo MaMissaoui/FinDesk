@@ -49,7 +49,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             item {
                 Card {
                     EmptyState(
-                        icon = Icons.Default.AccountBox,
+                        icon = AppIcons.AccountBalance,
                         title = s[StringKey.WelcomeTitle],
                         description = s[StringKey.WelcomeDescription],
                     ) {
@@ -64,7 +64,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                 StatCard(
                     s[StringKey.TotalBalance],
                     Formats.money(state.totalBalance, state.currency),
-                    Icons.Default.AccountBox,
+                    AppIcons.AccountBalance,
                     PrimaryBlue,
                     Modifier.weight(1f),
                     subtitle = state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
