@@ -1,5 +1,13 @@
 # Security Policy
 
+## Alpha status
+
+FinDesk is alpha software and is **not released for production use**. It must not
+be connected to real bank accounts. The banking code has never been run against a
+live bank, so a sync, transfer, scheduled transfer or standing order can fail,
+hang or behave unexpectedly — and those orders move real money. Treat every
+balance, statement and report it produces as unverified.
+
 ## Reporting a vulnerability
 
 Please **do not** open a public issue for security problems. Instead, report
