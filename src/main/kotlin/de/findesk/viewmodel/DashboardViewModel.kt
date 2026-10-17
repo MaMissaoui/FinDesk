@@ -140,6 +140,17 @@ class DashboardViewModel(
 
     private fun slices(expenses: List<TransactionItem>): List<ChartSlice> = expenses
         .groupBy { it.categoryName ?: ReportService.UNCATEGORIZED }
-        .map { (name, txns) -> ChartSlice(name, txns.sumOf { it.amount.abs() }, txns.first().categoryColor) }
+        .map { (name, txns) ->
+            val color = if (txns.first().categoryId == null) UNCATEGORIZED_COLOR else txns.first().categoryColor
+            ChartSlice(name, txns.sumOf { it.amount.abs() }, color)
+        }
         .sortedByDescending { it.amount }
+
+    companion object {
+        /**
+         * Neutral grey for bookings without a category, as their badge is grey. Left to the palette fallback, it took
+         * whatever palette colour its label hashed to, e.g. the same purple as a "Donations" category.
+         */
+        const val UNCATEGORIZED_COLOR = "#757575"
+    }
 }
