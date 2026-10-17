@@ -30,11 +30,16 @@ import de.findesk.util.Formats
 import de.findesk.util.Iban
 import de.findesk.viewmodel.PaymentsViewModel
 
-/** [createViewModel] lets the screenshot test open the screen with a prepared review. */
+/**
+ * [createViewModel] lets the screenshot test open the screen with a prepared review. [onSendingChange] reports when an
+ * order is in flight, so the app can keep the user on this screen until the bank has answered.
+ */
 @Composable
-fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewModel() }) {
+fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewModel() }, onSendingChange: (Boolean) -> Unit = {}) {
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
+    LaunchedEffect(state.isSending) { onSendingChange(state.isSending) }
+    DisposableEffect(Unit) { onDispose { onSendingChange(false) } }
     val s = strings()
     LaunchedEffect(Unit) { vm.load() }
     BankingPromptHost(vm.bankingInteraction)

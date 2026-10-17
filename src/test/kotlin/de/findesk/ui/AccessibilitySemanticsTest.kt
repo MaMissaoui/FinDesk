@@ -8,6 +8,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -46,6 +48,21 @@ class AccessibilitySemanticsTest {
             .assertIsSelected()
         onNode(hasText(strings[StringKey.NavAccounts]) and hasRole(Role.Tab))
             .assertExists()
+    }
+
+    @Test
+    fun `Sidebar disables the other screens while one is locked`() = runComposeUiTest {
+        setContent {
+            CompositionLocalProvider(LocalStrings provides strings) {
+                FinDeskTheme {
+                    Sidebar(currentScreen = Screen.PAYMENTS, onScreenSelected = {}, lockedOn = Screen.PAYMENTS)
+                }
+            }
+        }
+
+        onNode(hasText(strings[StringKey.NavPayments]) and hasRole(Role.Tab)).assertIsEnabled()
+        onNode(hasText(strings[StringKey.NavDashboard]) and hasRole(Role.Tab)).assertIsNotEnabled()
+        onNode(hasText(strings[StringKey.NavSettings]) and hasRole(Role.Tab)).assertIsNotEnabled()
     }
 
     @Test

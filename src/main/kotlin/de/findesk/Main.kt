@@ -70,6 +70,7 @@ fun App(
                     currentScreen = navigationState.currentScreen,
                     onScreenSelected = { navigationState.navigateTo(it) },
                     profileName = profileLabel,
+                    lockedOn = navigationState.lockedOn,
                 )
 
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -91,7 +92,11 @@ fun App(
 
                                 Screen.TRANSACTIONS -> TransactionsScreen(args = navigationState.args)
 
-                                Screen.PAYMENTS -> PaymentsScreen()
+                                Screen.PAYMENTS -> PaymentsScreen(
+                                    onSendingChange = { sending ->
+                                        if (sending) navigationState.lock(Screen.PAYMENTS) else navigationState.unlock(Screen.PAYMENTS)
+                                    },
+                                )
 
                                 Screen.DOCUMENTS -> DocumentsScreen()
 
