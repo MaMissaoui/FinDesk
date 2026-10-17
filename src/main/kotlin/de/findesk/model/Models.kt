@@ -23,6 +23,8 @@ data class BankAccessItem(
     val tanMethod: String?,
     val serverUrl: String?,
     val lastSync: LocalDateTime?,
+    /** Comma-separated BPD/UPD job names the login supports; null until the first sync. */
+    val capabilities: String? = null,
 )
 
 data class AccountItem(
@@ -89,6 +91,41 @@ data class RuleItem(
 )
 
 enum class Direction { ALL, INCOME, EXPENSES }
+
+/** Actions recorded in [PaymentOrderItem.action]. */
+object PaymentAction {
+    const val TRANSFER = "TRANSFER"
+    const val SCHEDULED_TRANSFER = "SCHEDULED_TRANSFER"
+    const val STANDING_ORDER_CREATE = "STANDING_ORDER_CREATE"
+    const val STANDING_ORDER_DELETE = "STANDING_ORDER_DELETE"
+}
+
+/** Lifecycle of a [PaymentOrderItem]; only the bank's answer changes it after it was recorded. */
+object PaymentOrderStatus {
+    const val PENDING = "PENDING"
+    const val ACCEPTED = "ACCEPTED"
+    const val REJECTED = "REJECTED"
+    const val TAN_REQUIRED = "TAN_REQUIRED"
+    const val CANCELLED = "CANCELLED"
+}
+
+/** A locally recorded order sent to a bank, with the bank's answer once it is known. */
+data class PaymentOrderItem(
+    val id: Int,
+    val createdAt: LocalDateTime,
+    val action: String,
+    val accountIban: String?,
+    val recipientName: String?,
+    val recipientIban: String?,
+    val amount: BigDecimal?,
+    val currency: String,
+    val purpose: String?,
+    val requestedDate: LocalDate?,
+    val schedule: String?,
+    val bankOrderId: String?,
+    val status: String,
+    val message: String?,
+)
 
 data class TransactionFilter(
     val startDate: LocalDate? = null,

@@ -43,7 +43,7 @@ fun Sidebar(
         ) {
             Image(
                 painter = painterResource("icon-64.png"),
-                contentDescription = "FinDesk Logo",
+                contentDescription = strings()[de.findesk.i18n.StringKey.AppLogo],
                 modifier = Modifier.size(40.dp),
             )
             Column {

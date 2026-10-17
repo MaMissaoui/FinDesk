@@ -1,6 +1,8 @@
 package de.findesk.viewmodel
 
 import de.findesk.document.DocumentService
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.model.DocumentItem
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
@@ -95,7 +97,7 @@ class DocumentsViewModel(
             _state.update {
                 it.copy(
                     isUploading = false,
-                    message = "Uploaded $uploaded file(s), text extracted from $withText".takeIf { uploaded > 0 },
+                    message = AppStrings.format(StringKey.MessageUploaded, uploaded, withText).takeIf { uploaded > 0 },
                     error = failures.takeIf { f -> f.isNotEmpty() }?.joinToString("\n"),
                 )
             }
@@ -123,7 +125,7 @@ class DocumentsViewModel(
     fun linkToTransaction(documentId: Int, transactionId: Int): Job = launchSafely(onError) {
         documentService.linkToTransaction(documentId, transactionId)
         refresh()
-        _state.update { it.copy(message = "Document linked") }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageDocumentLinked]) }
     }
 
     fun unlinkFromTransaction(documentId: Int): Job = launchSafely(onError) {
@@ -136,7 +138,7 @@ class DocumentsViewModel(
         refresh()
         _state.value.selectedDocument?.takeIf { it.id == documentId }?.let { selectDocument(it) }
         _state.update {
-            it.copy(message = if (result?.text?.isNotBlank() == true) "Text extracted" else "No text could be extracted")
+            it.copy(message = if (result?.text?.isNotBlank() == true) AppStrings[StringKey.TextExtracted] else AppStrings[StringKey.MessageNoTextExtracted])
         }
     }
 
@@ -146,7 +148,7 @@ class DocumentsViewModel(
             _state.update { it.copy(selectedDocument = null, selectedOcrText = null, suggestions = emptyList()) }
         }
         refresh()
-        _state.update { it.copy(message = "Document deleted") }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageDocumentDeleted]) }
     }
 
     fun clearMessages() {

@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import de.findesk.document.RecurringDetector
 import de.findesk.model.Direction
+import de.findesk.model.PaymentAction
+import de.findesk.model.PaymentOrderStatus
 import de.findesk.viewmodel.DocumentTab
 import de.findesk.viewmodel.Period
 
@@ -49,6 +51,23 @@ class Strings(
         DocumentTab.ALL -> this[StringKey.TabAllDocuments]
         DocumentTab.UNLINKED -> this[StringKey.TabUnlinked]
         DocumentTab.LINKED -> this[StringKey.TabLinked]
+    }
+
+    fun paymentStatus(status: String): String = when (status) {
+        PaymentOrderStatus.PENDING -> this[StringKey.PaymentStatusPending]
+        PaymentOrderStatus.ACCEPTED -> this[StringKey.PaymentStatusAccepted]
+        PaymentOrderStatus.REJECTED -> this[StringKey.PaymentStatusRejected]
+        PaymentOrderStatus.TAN_REQUIRED -> this[StringKey.PaymentStatusTanRequired]
+        PaymentOrderStatus.CANCELLED -> this[StringKey.PaymentStatusCancelled]
+        else -> status
+    }
+
+    fun paymentAction(action: String): String = when (action) {
+        PaymentAction.TRANSFER -> this[StringKey.PaymentActionTransfer]
+        PaymentAction.SCHEDULED_TRANSFER -> this[StringKey.PaymentActionScheduled]
+        PaymentAction.STANDING_ORDER_CREATE -> this[StringKey.PaymentActionStandingOrder]
+        PaymentAction.STANDING_ORDER_DELETE -> this[StringKey.PaymentActionStandingOrderDelete]
+        else -> action
     }
 }
 

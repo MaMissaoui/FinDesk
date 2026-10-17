@@ -1,5 +1,6 @@
 package de.findesk.util
 
+import de.findesk.i18n.AppStrings
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormat
@@ -14,7 +15,8 @@ object Formats {
     private val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
     private val dateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
 
-    private fun decimalFormat() = DecimalFormat("#,##0.00", DecimalFormatSymbols(Locale.US))
+    /** Uses the app language's decimal/grouping separators ("1.234,56" in German, "1,234.56" in English). */
+    private fun decimalFormat() = DecimalFormat("#,##0.00", DecimalFormatSymbols(AppStrings.current.language.locale))
 
     /** "€1,234.56" / "-€1,234.56"; with [signed], positive amounts get a leading "+". */
     fun money(amount: BigDecimal, currency: String = "EUR", signed: Boolean = false): String {

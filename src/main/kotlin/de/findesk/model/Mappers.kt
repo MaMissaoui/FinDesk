@@ -4,6 +4,7 @@ import de.findesk.data.entity.Account
 import de.findesk.data.entity.BankAccess
 import de.findesk.data.entity.Category
 import de.findesk.data.entity.Document
+import de.findesk.data.entity.PaymentOrder
 import de.findesk.data.entity.Rule
 import de.findesk.data.entity.Transaction
 
@@ -19,6 +20,7 @@ fun BankAccess.toItem() = BankAccessItem(
     tanMethod = tanMethod,
     serverUrl = serverUrl,
     lastSync = lastSync,
+    capabilities = capabilities,
 )
 
 fun Account.toItem() = AccountItem(
@@ -82,4 +84,21 @@ fun Rule.toItem() = RuleItem(
     categoryName = category.name,
     priority = priority,
     autoApply = autoApply,
+)
+
+fun PaymentOrder.toItem() = PaymentOrderItem(
+    id = id.value,
+    createdAt = createdAt,
+    action = action,
+    accountIban = accountIban,
+    recipientName = recipientName,
+    recipientIban = recipientIban,
+    amount = amount,
+    currency = currency,
+    purpose = purpose,
+    requestedDate = requestedDate,
+    schedule = schedule,
+    bankOrderId = bankOrderId,
+    status = status,
+    message = message,
 )

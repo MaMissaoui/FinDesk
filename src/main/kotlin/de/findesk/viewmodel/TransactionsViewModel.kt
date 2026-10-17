@@ -2,6 +2,8 @@ package de.findesk.viewmodel
 
 import de.findesk.banking.FinTSClient
 import de.findesk.document.ReportService
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.importer.CsvMapping
 import de.findesk.importer.ParsedStatement
 import de.findesk.importer.StatementImportService
@@ -239,7 +241,7 @@ class TransactionsViewModel(
         }
         auditLogRepository.log("SAVE_RULE", "user", "Rule '$pattern' created from a transaction, applied to $applied")
         refresh()
-        _state.update { it.copy(message = "Rule created and applied to $applied uncategorized transaction(s)") }
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageRuleCreated, applied)) }
     }
 
     fun updateTransactionCategory(transactionId: Int, categoryId: Int?): Job = launchSafely(onError) {
@@ -256,10 +258,13 @@ class TransactionsViewModel(
         purpose: String?,
         categoryId: Int?,
     ): Job = launchSafely(onError) {
-        require(amount.signum() != 0) { "Amount must not be zero" }
+        require(amount.signum() != 0) { AppStrings[StringKey.ErrorAmountNotZero] }
+        // The booking is in the account's currency; defaulting to EUR would mix currencies.
+        val account = accountRepository.findAllItems().firstOrNull { it.id == accountId }
+            ?: throw IllegalArgumentException("Account $accountId not found")
         val hash = FinTSClient.transactionHash(date, amount, partnerName, purpose)
         if (transactionRepository.findByHash(hash) != null) {
-            _state.update { it.copy(error = "An identical transaction already exists") }
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorDuplicateTransaction]) }
             return@launchSafely
         }
         val resolvedCategory = categoryId ?: ruleRepository.matchTransaction(purpose, partnerName)?.id?.value
@@ -267,6 +272,7 @@ class TransactionsViewModel(
             accountId = accountId,
             date = date,
             amount = amount,
+            currency = account.currency,
             partnerName = partnerName?.trim()?.ifEmpty { null },
             purpose = purpose?.trim()?.ifEmpty { null },
             categoryId = resolvedCategory,
@@ -274,7 +280,7 @@ class TransactionsViewModel(
         )
         auditLogRepository.log("ADD_TRANSACTION", "user", "Added manual transaction on account $accountId")
         refresh()
-        _state.update { it.copy(message = "Transaction added") }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageTransactionAdded]) }
     }
 
     fun deleteTransaction(transactionId: Int): Job = launchSafely(onError) {
@@ -295,14 +301,14 @@ class TransactionsViewModel(
         }
         auditLogRepository.log("AUTO_CATEGORIZE", "user", "Auto-categorized $updated of ${uncategorized.size} transactions")
         refresh()
-        _state.update { it.copy(message = "Categorized $updated of ${uncategorized.size} uncategorized transactions") }
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageAutoCategorized, updated, uncategorized.size)) }
     }
 
     /** Exports exactly what is currently shown. */
     fun exportCsv(file: File): Job = launchSafely(onError) {
         val ok = reportService.exportToCsv(_state.value.transactions, file)
         _state.update {
-            if (ok) it.copy(message = "Exported ${it.transactions.size} transactions to ${file.name}") else it.copy(error = "Export failed")
+            if (ok) it.copy(message = AppStrings.format(StringKey.MessageExportedCount, it.transactions.size, file.name)) else it.copy(error = AppStrings[StringKey.ErrorExportFailed])
         }
     }
 

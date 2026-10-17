@@ -74,16 +74,16 @@ fun FlickerCodeView(code: String, modifier: Modifier = Modifier) {
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Speed", style = MaterialTheme.typography.bodySmall)
+            Text(strings()[StringKey.FlickerSpeed], style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = { frequency = (frequency - 2).coerceAtLeast(FlickerRenderer.FREQUENCY_MIN) }) { Text("−") }
             Text("$frequency Hz", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = { frequency = (frequency + 2).coerceAtMost(FlickerRenderer.FREQUENCY_MAX) }) { Text("+") }
             Spacer(Modifier.width(12.dp))
-            Text("Size", style = MaterialTheme.typography.bodySmall)
+            Text(strings()[StringKey.FlickerSize], style = MaterialTheme.typography.bodySmall)
             Slider(value = width, onValueChange = { width = it }, valueRange = 180f..420f, modifier = Modifier.width(140.dp))
         }
         Text(
-            "Hold the TAN generator against the bars so its arrows line up with the triangles.",
+            strings()[StringKey.FlickerHint],
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

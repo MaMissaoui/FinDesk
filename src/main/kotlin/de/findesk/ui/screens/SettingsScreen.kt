@@ -149,7 +149,7 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .clickable(
                                 onClick = { editCategory = c },
-                                onClickLabel = s.format(StringKey.EditCategory, c.name),
+                                onClickLabel = s.format(StringKey.EditCategoryNamed, c.name),
                                 role = Role.Button,
                             )
                             .padding(vertical = 8.dp),
@@ -191,7 +191,7 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .clickable(
                                 onClick = { editRule = r },
-                                onClickLabel = s.format(StringKey.EditRule, r.pattern),
+                                onClickLabel = s.format(StringKey.EditRuleNamed, r.pattern),
                                 role = Role.Button,
                             )
                             .padding(vertical = 8.dp),
@@ -446,7 +446,7 @@ private fun RuleDialog(
     var category by remember { mutableStateOf(categories.firstOrNull { it.id == existing?.categoryId } ?: categories.first()) }
     var priority by remember { mutableStateOf((existing?.priority ?: 0).toString()) }
     var autoApply by remember { mutableStateOf(existing?.autoApply ?: true) }
-    val error = validate(pattern) ?: if (priority.toIntOrNull() == null) "Priority must be a whole number" else null
+    val error = validate(pattern) ?: if (priority.toIntOrNull() == null) strings()[StringKey.PriorityMustBeNumber] else null
     val s = strings()
 
     AlertDialog(

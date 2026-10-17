@@ -34,8 +34,9 @@ import java.util.Locale
 /** Donut chart with a legend; slices beyond [maxSlices] are folded into "Other". */
 @Composable
 fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Modifier, maxSlices: Int = 6, currency: String = "EUR") {
+    val s = strings()
     val shown = if (slices.size > maxSlices) {
-        slices.take(maxSlices - 1) + ChartSlice("Other", slices.drop(maxSlices - 1).fold(BigDecimal.ZERO) { a, s -> a + s.amount }, "#9E9E9E")
+        slices.take(maxSlices - 1) + ChartSlice(s[StringKey.ChartOther], slices.drop(maxSlices - 1).fold(BigDecimal.ZERO) { a, s -> a + s.amount }, "#9E9E9E")
     } else {
         slices
     }
@@ -112,8 +113,8 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 4.dp)) {
-            Legend(Success, "Income")
-            Legend(Error, "Expenses")
+            Legend(Success, strings()[StringKey.ChartIncome])
+            Legend(Error, strings()[StringKey.ChartExpenses])
         }
     }
 }

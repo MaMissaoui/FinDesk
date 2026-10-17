@@ -1,5 +1,7 @@
 package de.findesk.document
 
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.util.Formats
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
@@ -11,7 +13,6 @@ import java.io.File
 import java.time.LocalDate
 import java.time.Month
 import java.time.format.TextStyle
-import java.util.Locale
 
 /**
  * Renders a [ReportService.TaxReport] as a simple multi-page A4 PDF.
@@ -23,42 +24,42 @@ class PdfReportExporter {
     fun export(report: ReportService.TaxReport, outputFile: File) {
         PDDocument().use { doc ->
             val writer = PageWriter(doc)
-            writer.text(if (report.isCalendarYear) "FinDesk Tax Report ${report.year}" else "FinDesk Report ${report.title}", bold, 18f)
-            writer.text("Generated ${Formats.date(LocalDate.now())}", regular, 9f)
+            writer.text(if (report.isCalendarYear) AppStrings.format(StringKey.ReportTitleTax, report.year) else AppStrings.format(StringKey.ReportTitleRange, report.title), bold, 18f)
+            writer.text(AppStrings.format(StringKey.PdfGenerated, Formats.date(LocalDate.now())), regular, 9f)
             writer.gap(12f)
 
-            writer.heading("Summary")
-            writer.row("Total income", Formats.money(report.totalIncome, report.currency))
-            writer.row("Total expenses", Formats.money(report.totalExpenses, report.currency))
-            writer.row("Net income", Formats.money(report.netIncome, report.currency))
-            writer.row("Tax-relevant expenses", Formats.money(report.taxRelevantTotal, report.currency))
-            writer.row("Transactions", report.transactionCount.toString())
+            writer.heading(AppStrings[StringKey.PdfSummary])
+            writer.row(AppStrings[StringKey.PdfTotalIncome], Formats.money(report.totalIncome, report.currency))
+            writer.row(AppStrings[StringKey.PdfTotalExpenses], Formats.money(report.totalExpenses, report.currency))
+            writer.row(AppStrings[StringKey.PdfNetIncome], Formats.money(report.netIncome, report.currency))
+            writer.row(AppStrings[StringKey.PdfTaxRelevantExpenses], Formats.money(report.taxRelevantTotal, report.currency))
+            writer.row(AppStrings[StringKey.PdfTransactionCount], report.transactionCount.toString())
             if (report.otherCurrencyBookings > 0) {
-                writer.text("All amounts in ${report.currency}. ${report.otherCurrencyBookings} booking(s) in other currencies are not included.", regular, 9f)
+                writer.text(AppStrings.format(StringKey.PdfAllAmountsIn, report.currency, report.otherCurrencyBookings), regular, 9f)
             }
             writer.gap(10f)
 
-            writer.heading("Tax-relevant expenses by category")
+            writer.heading(AppStrings[StringKey.PdfTaxByCategory])
             if (report.taxRelevantExpenses.isEmpty()) {
-                writer.text("No categories are marked as tax-relevant.", regular, 10f)
+                writer.text(AppStrings[StringKey.PdfNoTaxRelevant], regular, 10f)
             }
             report.taxRelevantExpenses.forEach { (category, amount) -> writer.row(category, Formats.money(amount, report.currency)) }
             writer.gap(10f)
 
-            writer.heading("Monthly breakdown")
-            writer.row("Month", "Income / Expenses / Net", font = bold)
+            writer.heading(AppStrings[StringKey.PdfMonthlyBreakdown])
+            writer.row(AppStrings[StringKey.PdfMonth], AppStrings[StringKey.PdfIncomeExpensesNet], font = bold)
             report.monthlyBreakdown.forEach {
-                val name = Month.of(it.month).getDisplayName(TextStyle.FULL, Locale.ENGLISH) + if (report.isCalendarYear) "" else " ${it.year}"
+                val name = Month.of(it.month).getDisplayName(TextStyle.FULL, AppStrings.current.language.locale) + if (report.isCalendarYear) "" else " ${it.year}"
                 writer.row(name, "${Formats.money(it.income, report.currency)} / ${Formats.money(it.expenses, report.currency)} / ${Formats.money(it.net, report.currency)}")
             }
             writer.gap(10f)
 
-            writer.heading("Expenses by category")
+            writer.heading(AppStrings[StringKey.PdfExpensesByCategory])
             report.expensesByCategory.forEach { (category, amount) -> writer.row(category, Formats.money(amount, report.currency)) }
 
             if (report.taxRelevantTransactions.isNotEmpty()) {
                 writer.gap(10f)
-                writer.heading("Tax-relevant transactions")
+                writer.heading(AppStrings[StringKey.PdfTaxTransactions])
                 report.taxRelevantTransactions.sortedBy { it.date }.forEach {
                     writer.row(
                         "${Formats.date(it.date)}  ${it.description.take(55)}  (${it.categoryName.orEmpty()})",

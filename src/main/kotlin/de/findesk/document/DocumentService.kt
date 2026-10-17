@@ -70,9 +70,9 @@ class DocumentService(
         _isLoading.value = true
         _error.value = null
         try {
-            require(sourceFile.isFile) { "File does not exist: ${sourceFile.name}" }
+            require(sourceFile.isFile) { de.findesk.i18n.AppStrings.format(de.findesk.i18n.StringKey.ErrorFileDoesNotExist, sourceFile.name) }
             val mimeType = detectMimeType(sourceFile)
-            require(mimeType != "application/octet-stream") { "Unsupported file type: ${sourceFile.extension}" }
+            require(mimeType != "application/octet-stream") { de.findesk.i18n.AppStrings.format(de.findesk.i18n.StringKey.ErrorUnsupportedFileType, sourceFile.extension) }
 
             documentsDir.mkdirs()
             val destFile = File(documentsDir, "${UUID.randomUUID()}_${sourceFile.name}")

@@ -53,7 +53,7 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
             SecretDialog(
                 title = s[StringKey.TanRequired],
                 text = p.challenge.message.ifBlank { s[StringKey.TanDefaultMessage] },
-                label = "TAN",
+                label = s[StringKey.TanLabel],
                 masked = false,
                 onAnswer = interaction::answer,
             ) {

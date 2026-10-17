@@ -21,6 +21,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.i18n.AppLanguage
+import de.findesk.i18n.AppStrings
 import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
@@ -60,6 +61,7 @@ fun App(
     }
     val navigate: (Screen, NavigationArgs) -> Unit = { screen, args -> navigationState.navigateTo(screen, args) }
     val strings = Translations.of(language)
+    LaunchedEffect(language) { AppStrings.set(language) }
 
     CompositionLocalProvider(LocalStrings provides strings) {
         FinDeskTheme(darkTheme = isDarkTheme) {
@@ -137,6 +139,7 @@ private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, 
         }
     }
     val strings = Translations.of(AppLanguage.fromSystem())
+    LaunchedEffect(Unit) { AppStrings.set(AppLanguage.fromSystem()) }
     Window(
         onCloseRequest = ::exitApplication,
         title = strings[StringKey.UnlockWindowTitle] + profileLabel?.let { " · $it" }.orEmpty(),

@@ -90,7 +90,7 @@ class OcrService(
 
     private fun processImage(file: File): OcrResult? {
         val ocr = engine ?: return null
-        val image = ImageIO.read(file) ?: throw IllegalArgumentException("Unreadable image: ${file.name}")
+        val image = ImageIO.read(file) ?: throw IllegalArgumentException(de.findesk.i18n.AppStrings.format(de.findesk.i18n.StringKey.ErrorUnreadableImage, file.name))
         val result = ocr.recognize(image)
         val text = result.text.trim()
         return OcrResult(

@@ -32,6 +32,7 @@ object DatabaseFactory {
             RulesTable,
             DocumentsTable,
             OcrTextsTable,
+            PaymentOrdersTable,
             SettingsTable,
             PluginsTable,
             AuditLogTable,

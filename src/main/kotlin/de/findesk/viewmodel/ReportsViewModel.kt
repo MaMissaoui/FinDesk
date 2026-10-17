@@ -1,6 +1,8 @@
 package de.findesk.viewmodel
 
 import de.findesk.document.ReportService
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -58,7 +60,7 @@ class ReportsViewModel(
 
     fun setCustomRange(from: LocalDate, to: LocalDate): Job {
         if (from.isAfter(to)) {
-            _state.update { it.copy(error = "Start date is after end date") }
+            _state.update { it.copy(error = AppStrings[StringKey.InvalidDateRange]) }
             return Job().apply { complete() }
         }
         _state.update { it.copy(customRange = from to to, isLoading = true, error = null) }
@@ -74,7 +76,7 @@ class ReportsViewModel(
             val report = _state.value.taxReport ?: reportService.generateTaxReport(_state.value.selectedYear)
             val ok = reportService.exportToPdf(report, file)
             _state.update {
-                it.copy(isExporting = false, message = if (ok) "Saved ${file.name}" else null, error = if (ok) null else "PDF export failed")
+                it.copy(isExporting = false, message = if (ok) AppStrings.format(StringKey.MessageSavedTo, file.name) else null, error = if (ok) null else AppStrings[StringKey.ErrorPdfExportFailed])
             }
         }
     }
@@ -85,7 +87,7 @@ class ReportsViewModel(
             val range = _state.value.customRange
             val ok = if (range != null) reportService.exportRangeToCsv(range.first, range.second, file) else reportService.exportYearToCsv(_state.value.selectedYear, file)
             _state.update {
-                it.copy(isExporting = false, message = if (ok) "Saved ${file.name}" else null, error = if (ok) null else "CSV export failed")
+                it.copy(isExporting = false, message = if (ok) AppStrings.format(StringKey.MessageSavedTo, file.name) else null, error = if (ok) null else AppStrings[StringKey.ErrorCsvExportFailed])
             }
         }
     }

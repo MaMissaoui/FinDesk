@@ -220,7 +220,7 @@ private fun DocumentDetail(
                         .heightIn(max = 360.dp)
                         .clickable(
                             onClick = { openExternally(File(doc.filePath)) },
-                            onClickLabel = s.format(StringKey.OpenPreview, doc.fileName),
+                            onClickLabel = s.format(StringKey.OpenPreviewNamed, doc.fileName),
                             role = Role.Button,
                         ),
                     contentScale = androidx.compose.ui.layout.ContentScale.Fit,

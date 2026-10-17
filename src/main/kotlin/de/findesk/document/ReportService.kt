@@ -49,7 +49,7 @@ class ReportService(
 
     /** Same report for any inclusive date range (months may span years). */
     suspend fun generateRangeReport(from: LocalDate, to: LocalDate): TaxReport = withContext(Dispatchers.IO) {
-        require(!from.isAfter(to)) { "Start date is after end date" }
+        require(!from.isAfter(to)) { de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.InvalidDateRange] }
         _isLoading.value = true
         try {
             buildReport(from, to, transactionRepository.findItems(TransactionFilter(startDate = from, endDate = to)), Currencies.primary(settingsRepository))
@@ -178,7 +178,7 @@ class ReportService(
 
         CategoryTrend(
             categoryId = categoryId,
-            categoryName = category?.name ?: "Unknown",
+            categoryName = category?.name ?: de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ReportUnknownCategory],
             monthlyData = monthlyData,
             averageMonthly = average,
             trend = trend,
@@ -204,7 +204,17 @@ class ReportService(
         try {
             outputFile.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(UTF8_BOM)
-                writer.write(CsvFormat.row("Date", "Partner", "Purpose", "Category", "Amount", "Currency", "Account"))
+                writer.write(
+                    CsvFormat.row(
+                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColDate],
+                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColPartner],
+                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColPurpose],
+                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColCategory],
+                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAmount],
+                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColCurrency],
+                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAccount],
+                    ),
+                )
                 transactions.forEach { txn ->
                     writer.write(
                         CsvFormat.row(

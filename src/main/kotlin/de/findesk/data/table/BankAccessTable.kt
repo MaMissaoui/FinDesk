@@ -5,11 +5,14 @@ import org.jetbrains.exposed.sql.javatime.datetime
 
 object BankAccessTable : IntIdTable("bank_access") {
     val bankName = varchar("bank_name", 255)
-    val blz = varchar("blz", 20)
+    val blz = varchar("blz", 20).index()
     val bic = varchar("bic", 20)
     val userId = varchar("user_id", 100)
     val hbciVersion = varchar("hbci_version", 10).default("300")
     val tanMethod = varchar("tan_method", 50).nullable()
     val serverUrl = varchar("server_url", 255).nullable()
     val lastSync = datetime("last_sync").nullable()
+
+    /** Comma-separated BPD/UPD job names the login supports (see BankCapabilities); null until the first sync. */
+    val capabilities = text("capabilities").nullable()
 }

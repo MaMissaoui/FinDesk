@@ -1,6 +1,8 @@
 package de.findesk.importer
 
 import de.findesk.banking.FinTSClient
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.repository.*
 import de.findesk.util.Iban
 import kotlinx.coroutines.Dispatchers
@@ -29,12 +31,12 @@ class StatementImportService(
         val currency: String = "EUR",
     ) {
         fun summary(): String = buildString {
-            append("Imported $imported transaction(s)")
-            if (categorized > 0) append(", $categorized auto-categorized")
-            if (duplicates > 0) append(", $duplicates already known")
-            if (probableDuplicates > 0) append(", $probableDuplicates probable duplicate(s) of existing bookings skipped")
-            if (wrongCurrency > 0) append(", $wrongCurrency in another currency than the account skipped")
-            balanceUpdated?.let { append(". Balance set to ${de.findesk.util.Formats.money(it, currency)}") }
+            append(AppStrings.format(StringKey.ImportSummary, imported))
+            if (categorized > 0) append(AppStrings.format(StringKey.ImportSummaryAuto, categorized))
+            if (duplicates > 0) append(AppStrings.format(StringKey.ImportSummaryKnown, duplicates))
+            if (probableDuplicates > 0) append(AppStrings.format(StringKey.ImportSummaryProbable, probableDuplicates))
+            if (wrongCurrency > 0) append(AppStrings.format(StringKey.ImportSummaryWrongCurrency, wrongCurrency))
+            balanceUpdated?.let { append(AppStrings.format(StringKey.ImportSummaryBalance, de.findesk.util.Formats.money(it, currency))) }
         }
     }
 
@@ -45,8 +47,8 @@ class StatementImportService(
 
     /** Reads and parses a file. [csvMapping] overrides the detected CSV column mapping. */
     suspend fun read(file: File, csvMapping: CsvMapping? = null): ParsedStatement = withContext(Dispatchers.IO) {
-        require(file.isFile) { "File not found: ${file.name}" }
-        require(file.length() <= MAX_FILE_BYTES) { "File is too large" }
+        require(file.isFile) { AppStrings.format(StringKey.ErrorFileNotFound, file.name) }
+        require(file.length() <= MAX_FILE_BYTES) { AppStrings[StringKey.ErrorFileTooLarge] }
         val bytes = file.readBytes()
         val ext = file.extension.lowercase()
         when {
@@ -74,7 +76,7 @@ class StatementImportService(
      * to the balance after the newest booking.
      */
     suspend fun import(accountId: Int, statement: ParsedStatement, updateBalance: Boolean = true): ImportReport = withContext(Dispatchers.IO) {
-        val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: throw IllegalArgumentException("Account not found")
+        val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: throw IllegalArgumentException(AppStrings[StringKey.ErrorAccountNotFound])
         // Decided before inserting anything, so the balance check and dedup see the account as it was
         val (bookings, wrongCurrency) = statement.bookings.partition { it.currency == null || it.currency == account.currency }
         val balanceAllowed = balanceUpdateAllowed(accountId, statement.copy(bookings = bookings))

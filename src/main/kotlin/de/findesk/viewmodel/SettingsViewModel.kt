@@ -1,6 +1,8 @@
 package de.findesk.viewmodel
 
 import de.findesk.document.DocumentService
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.model.CategoryItem
 import de.findesk.model.RuleItem
 import de.findesk.repository.*
@@ -115,9 +117,9 @@ class SettingsViewModel(
     }
 
     fun validateCategory(name: String, color: String, excludeId: Int? = null): String? = when {
-        name.isBlank() -> "Name is required"
-        !HEX_COLOR.matches(color) -> "Color must look like #3BC7B0"
-        _state.value.categories.any { it.name.equals(name.trim(), ignoreCase = true) && it.id != excludeId } -> "Category already exists"
+        name.isBlank() -> AppStrings[StringKey.ErrorNameRequired]
+        !HEX_COLOR.matches(color) -> AppStrings[StringKey.ErrorColorFormat]
+        _state.value.categories.any { it.name.equals(name.trim(), ignoreCase = true) && it.id != excludeId } -> AppStrings[StringKey.ErrorCategoryExists]
         else -> null
     }
 
@@ -153,13 +155,13 @@ class SettingsViewModel(
     }
 
     fun validateRule(pattern: String): String? = when {
-        pattern.isBlank() -> "Pattern is required"
+        pattern.isBlank() -> AppStrings[StringKey.ErrorPatternRequired]
 
         else -> try {
             pattern.toRegex()
             null
         } catch (e: PatternSyntaxException) {
-            "Invalid regular expression: ${e.description}"
+            AppStrings.format(StringKey.ErrorInvalidRegex, e.description)
         }
     }
 
@@ -179,6 +181,7 @@ class SettingsViewModel(
 
     fun deleteRule(id: Int): Job = launchSafely(onError) {
         ruleRepository.delete(id)
+        auditLogRepository.log("DELETE_RULE", "user", "Deleted rule $id")
         refresh()
     }
 
@@ -188,7 +191,7 @@ class SettingsViewModel(
             val info = backupService.createBackup(target)
             auditLogRepository.log("BACKUP_CREATED", "user", "Backup ${target.name}: ${info.transactions} transactions, ${info.documents} documents")
             refresh()
-            _state.update { it.copy(isBusy = false, message = "Backup saved to ${target.name} (${info.transactions} transactions, ${info.documents} documents)") }
+            _state.update { it.copy(isBusy = false, message = AppStrings.format(StringKey.MessageBackupSaved, target.name, info.transactions, info.documents)) }
         }
     }
 
@@ -231,14 +234,14 @@ class SettingsViewModel(
             _state.update { it.copy(restorePassphraseWrong = false) }
             auditLogRepository.log("RESTORE_STAGED", "user", "Restore from ${file.name} staged")
             refresh()
-            _state.update { it.copy(isBusy = false, message = "Restore prepared. Restart FinDesk to finish; your current data will be kept in a pre-restore folder.") }
+            _state.update { it.copy(isBusy = false, message = AppStrings[StringKey.MessageRestorePrepared]) }
         }
     }
 
     fun cancelPendingRestore(): Job = launchSafely(onError) {
         backupService.cancelPendingRestore()
         refresh()
-        _state.update { it.copy(message = "Pending restore cancelled") }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageRestoreCancelled]) }
     }
 
     fun createProfile(name: String): Job = launchSafely(onError) {
@@ -264,7 +267,7 @@ class SettingsViewModel(
         val movedTo = profileStore.delete(slug, openProfile)
         auditLogRepository.log("PROFILE_DELETED", "user", "Profile $slug moved to ${movedTo.absolutePath}")
         refresh()
-        _state.update { it.copy(message = "Profile moved to ${movedTo.absolutePath}") }
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageProfileMoved, movedTo.absolutePath)) }
     }
 
     fun clearMessages() {

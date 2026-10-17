@@ -3,6 +3,8 @@ package de.findesk.viewmodel
 import de.findesk.banking.BankDirectory
 import de.findesk.banking.BankingResult
 import de.findesk.banking.BankingService
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.model.AccountItem
 import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
@@ -72,8 +74,8 @@ class AccountsViewModel(
 
     /** Validates input; returns an error message or null. Exposed for the dialog's inline validation. */
     fun validateBankAccess(bankName: String, blz: String): String? = when {
-        bankName.isBlank() -> "Bank name is required"
-        !blz.trim().matches(Regex("\\d{8}")) -> "BLZ must be 8 digits"
+        bankName.isBlank() -> AppStrings[StringKey.BankNameRequired]
+        !blz.trim().matches(Regex("\\d{8}")) -> AppStrings[StringKey.BlzMustBe8Digits]
         else -> null
     }
 
@@ -85,15 +87,15 @@ class AccountsViewModel(
         bankAccessRepository.create(bankName.trim(), blz.trim(), bic.trim().uppercase(), userId.trim())
         auditLogRepository.log("ADD_BANK_ACCESS", "user", "Added bank: ${bankName.trim()}")
         refresh()
-        _state.update { it.copy(message = "Added ${bankName.trim()}", error = null) }
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageAdded, bankName.trim()), error = null) }
     }
 
     fun validateAccount(iban: String): String? {
         val normalized = Iban.normalize(iban)
         return when {
-            normalized.isEmpty() -> "IBAN is required"
-            !Iban.isValid(normalized) -> "IBAN is not valid (checksum failed)"
-            _state.value.accounts.any { it.iban == normalized } -> "An account with this IBAN already exists"
+            normalized.isEmpty() -> AppStrings[StringKey.IbanRequired]
+            !Iban.isValid(normalized) -> AppStrings[StringKey.IbanChecksumFailed]
+            _state.value.accounts.any { it.iban == normalized } -> AppStrings[StringKey.AccountIbanExists]
             else -> null
         }
     }
@@ -119,7 +121,7 @@ class AccountsViewModel(
         )
         auditLogRepository.log("ADD_ACCOUNT", "user", "Added account ${normalized.takeLast(4)}")
         refresh()
-        _state.update { it.copy(message = "Account added", error = null) }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageAccountAdded], error = null) }
     }
 
     fun updateBalance(accountId: Int, balance: BigDecimal): Job = launchSafely(onError) {
@@ -132,14 +134,13 @@ class AccountsViewModel(
         accountRepository.deleteWithTransactions(accountId)
         auditLogRepository.log("DELETE_ACCOUNT", "user", "Deleted account $accountId and its transactions")
         refresh()
-        _state.update { it.copy(message = "Account deleted") }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageAccountDeleted]) }
     }
 
     fun deleteBankAccess(bankAccessId: Int): Job = launchSafely(onError) {
-        bankAccessRepository.deleteWithAccounts(bankAccessId)
-        auditLogRepository.log("DELETE_BANK_ACCESS", "user", "Deleted bank access $bankAccessId")
+        bankingService.removeBankAccess(bankAccessId)
         refresh()
-        _state.update { it.copy(message = "Bank removed") }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageBankRemoved]) }
     }
 
     /** Opens the detail view: balance history over [days] days plus recent bookings. */
@@ -173,13 +174,14 @@ class AccountsViewModel(
 
     fun updateConnection(bankAccessId: Int, userId: String, serverUrl: String): Job = launchSafely(onError) {
         bankAccessRepository.updateConnection(bankAccessId, serverUrl = serverUrl, userId = userId)
+        auditLogRepository.log("UPDATE_BANK_CONNECTION", "user", "Updated connection settings of bank access $bankAccessId")
         refresh()
-        _state.update { it.copy(message = "Connection settings saved") }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
     }
 
     /** Online sync via FinTS. Prompts for PIN/TAN through [bankingInteraction]. */
     fun syncBankAccess(bankAccessId: Int): Job {
-        _state.update { it.copy(syncingBankId = bankAccessId, syncStep = "Connecting…", error = null, message = null) }
+        _state.update { it.copy(syncingBankId = bankAccessId, syncStep = AppStrings[StringKey.SyncConnecting], error = null, message = null) }
         val progressJob = launchSafely({}) {
             bankingService.syncProgress.collect { p -> _state.update { it.copy(syncStep = p?.currentStep ?: it.syncStep) } }
         }
@@ -194,7 +196,7 @@ class AccountsViewModel(
 
                     is BankingResult.Error -> _state.update { it.copy(error = if (r.code == "CANCELLED") null else r.message) }
 
-                    is BankingResult.TanRequired -> _state.update { it.copy(error = "TAN required") }
+                    is BankingResult.TanRequired -> _state.update { it.copy(error = AppStrings[StringKey.TanRequired]) }
                 }
             } finally {
                 progressJob.cancel()
