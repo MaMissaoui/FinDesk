@@ -44,8 +44,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 @Composable
-fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
-    val vm = rememberViewModel { TransactionsViewModel() }
+fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel: () -> TransactionsViewModel = { TransactionsViewModel() }) {
+    val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
     LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly) }
@@ -213,6 +213,15 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
                 vm.addManualTransaction(accountId, date, amount, partner, purpose, categoryId)
                 showAdd = false
             },
+        )
+    }
+    state.pendingDuplicate?.let { entry ->
+        ConfirmDialog(
+            title = s[StringKey.DuplicateTransactionTitle],
+            text = s.format(StringKey.DuplicateTransactionText, Formats.date(entry.date), Formats.money(entry.amount, entry.currency)),
+            confirmLabel = s[StringKey.AddAnyway],
+            onConfirm = { vm.confirmDuplicate() },
+            onDismiss = vm::dismissDuplicate,
         )
     }
     confirmDelete?.let { txn ->

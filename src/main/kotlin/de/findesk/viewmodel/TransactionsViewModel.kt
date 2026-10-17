@@ -83,10 +83,22 @@ data class TransactionsState(
     val maxAmount: BigDecimal? = null,
     val selected: TransactionItem? = null,
     val selectedDocuments: List<de.findesk.model.DocumentItem> = emptyList(),
+    /** A manual entry identical to one already booked that day, waiting for the user to confirm it (see [TransactionsViewModel.confirmDuplicate]). */
+    val pendingDuplicate: ManualEntry? = null,
     val isImporting: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val message: String? = null,
+)
+
+data class ManualEntry(
+    val accountId: Int,
+    val date: LocalDate,
+    val amount: BigDecimal,
+    val currency: String,
+    val partnerName: String?,
+    val purpose: String?,
+    val categoryId: Int?,
 )
 
 class TransactionsViewModel(
@@ -258,6 +270,7 @@ class TransactionsViewModel(
         partnerName: String?,
         purpose: String?,
         categoryId: Int?,
+        confirmedDuplicate: Boolean = false,
     ): Job = launchSafely(onError) {
         require(amount.signum() != 0) { AppStrings[StringKey.ErrorAmountNotZero] }
         // The booking is in the account's currency; defaulting to EUR would mix currencies.
@@ -265,15 +278,17 @@ class TransactionsViewModel(
             ?: throw IllegalArgumentException("Account $accountId not found")
         val partner = partnerName?.trim()?.ifEmpty { null }
         val text = purpose?.trim()?.ifEmpty { null }
-        // Guards against entering the same booking twice on this account, whatever its source; the same booking on
-        // another account is a different one
-        val duplicate = transactionRepository.findItems(TransactionFilter(startDate = date, endDate = date, accountId = accountId))
-            .any { it.amount.compareTo(amount) == 0 && it.partnerName == partner && it.purpose == text }
-        if (duplicate) {
-            _state.update { it.copy(error = AppStrings[StringKey.ErrorDuplicateTransaction]) }
+        // The same booking twice on this account, whatever its source, is usually a slip, but two coffees on one day
+        // are real: ask instead of refusing. The same booking on another account is a different one.
+        val identical = transactionRepository.findItems(TransactionFilter(startDate = date, endDate = date, accountId = accountId))
+            .count { it.amount.compareTo(amount) == 0 && it.partnerName == partner && it.purpose == text }
+        if (identical > 0 && !confirmedDuplicate) {
+            _state.update { it.copy(pendingDuplicate = ManualEntry(accountId, date, amount, account.currency, partner, text, categoryId)) }
             return@launchSafely
         }
-        val hash = FinTSClient.transactionHash(date, amount, partner, "${text.orEmpty()}#${account.iban}#manual")
+        // A repeat gets its own hash, so each entry stays distinguishable
+        val repeat = if (identical > 0) "#$identical" else ""
+        val hash = FinTSClient.transactionHash(date, amount, partner, "${text.orEmpty()}#${account.iban}#manual$repeat")
         val resolvedCategory = categoryId ?: ruleRepository.matchCategoryId(purpose, partnerName)
         transactionRepository.create(
             accountId = accountId,
@@ -285,9 +300,21 @@ class TransactionsViewModel(
             categoryId = resolvedCategory,
             hash = hash,
         )
-        auditLogRepository.log("ADD_TRANSACTION", "user", "Added manual transaction on account $accountId")
+        val note = if (identical > 0) " (confirmed repeat of an identical booking)" else ""
+        auditLogRepository.log("ADD_TRANSACTION", "user", "Added manual transaction on account $accountId$note")
         refresh()
         _state.update { it.copy(message = AppStrings[StringKey.MessageTransactionAdded]) }
+    }
+
+    /** Adds the pending identical entry after the user confirmed it is a second, real booking. */
+    fun confirmDuplicate(): Job? {
+        val entry = _state.value.pendingDuplicate ?: return null
+        _state.update { it.copy(pendingDuplicate = null) }
+        return with(entry) { addManualTransaction(accountId, date, amount, partnerName, purpose, categoryId, confirmedDuplicate = true) }
+    }
+
+    fun dismissDuplicate() {
+        _state.update { it.copy(pendingDuplicate = null) }
     }
 
     fun deleteTransaction(transactionId: Int): Job = launchSafely(onError) {

@@ -27,6 +27,7 @@ import de.findesk.ui.navigation.Screen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.viewmodel.PaymentsViewModel
+import de.findesk.viewmodel.TransactionsViewModel
 import de.findesk.viewmodel.UnlockMode
 import de.findesk.viewmodel.UnlockViewModel
 import kotlinx.coroutines.runBlocking
@@ -119,6 +120,22 @@ class ScreenshotTest {
         render("payments-sending-locked-sidebar", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, lockedOn = Screen.PAYMENTS) }
     }
 
+    /** Adding a manual booking identical to one already on that day asks before adding it (two coffees are real). */
+    @Test
+    fun `render the confirmation for an identical manual entry`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-duplicate").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        val today = java.time.LocalDate.now()
+
+        fun confirming(): TransactionsViewModel = TransactionsViewModel().apply {
+            repeat(2) { runBlocking { addManualTransaction(account, today, BigDecimal("-3.50"), "Café Fleur", "Cappuccino", null).join() } }
+            check(state.value.pendingDuplicate != null) { "the second entry should wait for confirmation" }
+        }
+        render("transactions-duplicate-confirm", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::confirming) }
+        render("transactions-duplicate-confirm-de-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, language = AppLanguage.DE, transactions = ::confirming) }
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {
@@ -146,7 +163,7 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, lockedOn: Screen? = null) {
+    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, lockedOn: Screen? = null) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
@@ -160,7 +177,7 @@ class ScreenshotTest {
                                 when (screen) {
                                     Screen.DASHBOARD -> DashboardScreen()
                                     Screen.ACCOUNTS -> AccountsScreen()
-                                    Screen.TRANSACTIONS -> TransactionsScreen()
+                                    Screen.TRANSACTIONS -> if (transactions != null) TransactionsScreen(createViewModel = transactions) else TransactionsScreen()
                                     Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
                                     Screen.DOCUMENTS -> DocumentsScreen()
                                     Screen.REPORTS -> ReportsScreen()
