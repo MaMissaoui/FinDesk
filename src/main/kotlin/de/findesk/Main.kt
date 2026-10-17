@@ -25,6 +25,7 @@ import de.findesk.i18n.AppStrings
 import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
+import de.findesk.repository.SettingsRepository
 import de.findesk.repository.SettingsRepositoryImpl
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
@@ -40,6 +41,7 @@ import de.findesk.viewmodel.SettingsViewModel
 import de.findesk.viewmodel.UnlockViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
@@ -49,12 +51,11 @@ fun App(
     language: AppLanguage = AppLanguage.EN,
     onLanguageChange: (AppLanguage) -> Unit = {},
     profileLabel: String? = null,
+    initialDarkTheme: Boolean = false,
 ) {
     val settings = remember { SettingsRepositoryImpl() }
     val scope = rememberCoroutineScope()
-    var isDarkTheme by remember {
-        mutableStateOf(runCatching { settings.getValue(SettingsViewModel.KEY_DARK_THEME) == "true" }.getOrDefault(false))
-    }
+    var isDarkTheme by remember { mutableStateOf(initialDarkTheme) }
     val setDarkTheme: (Boolean) -> Unit = { enabled ->
         isDarkTheme = enabled
         scope.launch(Dispatchers.IO) { settings.setValue(SettingsViewModel.KEY_DARK_THEME, enabled.toString()) }
@@ -127,20 +128,30 @@ fun main() {
     DatabaseFactory.applyPendingRestore(dataDir)
     val profileLabel = profile.name.takeIf { profiles.list().size > 1 }
     application {
-        var unlocked by remember { mutableStateOf(false) }
-        if (unlocked) FinDeskWindow(profileLabel) else UnlockWindow(dataDir, profileLabel) { unlocked = true }
+        var prefs by remember { mutableStateOf<UiPrefs?>(null) }
+        prefs?.let { FinDeskWindow(profileLabel, it) } ?: UnlockWindow(dataDir, profileLabel) { prefs = it }
+    }
+}
+
+/** Language and theme, read off the UI thread once the database is open, before the main window shows them. */
+private data class UiPrefs(val language: AppLanguage, val darkTheme: Boolean) {
+    companion object {
+        fun load(settings: SettingsRepository = SettingsRepositoryImpl()) = UiPrefs(
+            language = AppLanguage.fromCode(runCatching { settings.getValue(AppLanguage.KEY) }.getOrNull()),
+            darkTheme = runCatching { settings.getValue(SettingsViewModel.KEY_DARK_THEME) == "true" }.getOrDefault(false),
+        )
     }
 }
 
 /** Nothing can be read before the database is open, so language and theme come from the system here. */
 @Composable
-private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, onOpened: () -> Unit) {
+private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, onOpened: (UiPrefs) -> Unit) {
     val vm = remember { UnlockViewModel(dataDir) }
     val state by vm.state.collectAsState()
     LaunchedEffect(state.opened) {
         if (state.opened) {
             vm.close()
-            onOpened()
+            onOpened(withContext(Dispatchers.IO) { UiPrefs.load() })
         }
     }
     val strings = Translations.of(AppLanguage.fromSystem())
@@ -160,16 +171,12 @@ private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, 
 }
 
 @Composable
-private fun ApplicationScope.FinDeskWindow(profileLabel: String?) {
-    val settings = SettingsRepositoryImpl()
+private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs) {
+    val settings = remember { SettingsRepositoryImpl() }
     val windowState = rememberWindowState()
     val navigationState = remember { NavigationState() }
     val scope = rememberCoroutineScope()
-    var language by remember {
-        mutableStateOf(
-            AppLanguage.fromCode(runCatching { settings.getValue(AppLanguage.KEY) }.getOrNull()),
-        )
-    }
+    var language by remember { mutableStateOf(prefs.language) }
     val setLanguage: (AppLanguage) -> Unit = { lang ->
         language = lang
         scope.launch(Dispatchers.IO) { settings.setValue(AppLanguage.KEY, lang.code) }
@@ -187,6 +194,6 @@ private fun ApplicationScope.FinDeskWindow(profileLabel: String?) {
         state = windowState,
         icon = painterResource("icon-512.png"),
     ) {
-        App(navigationState, language, setLanguage, profileLabel)
+        App(navigationState, language, setLanguage, profileLabel, initialDarkTheme = prefs.darkTheme)
     }
 }
