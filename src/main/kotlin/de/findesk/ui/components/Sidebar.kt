@@ -28,6 +28,8 @@ fun Sidebar(
     modifier: Modifier = Modifier,
     /** Open profile, shown when there is more than one. */
     profileName: String? = null,
+    /** While set, only this screen can be selected (see NavigationState.lockedOn). */
+    lockedOn: Screen? = null,
 ) {
     Column(
         modifier = modifier
@@ -64,6 +66,7 @@ fun Sidebar(
             SidebarItem(
                 screen = screen,
                 isSelected = screen == currentScreen,
+                enabled = lockedOn == null || screen == lockedOn,
                 onClick = { onScreenSelected(screen) },
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -85,11 +88,13 @@ fun Sidebar(
 private fun SidebarItem(
     screen: Screen,
     isSelected: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
     // Darken rather than lighten: any white highlight drops the white label below 4.5:1 (see ContrastTest)
     val backgroundColor = if (isSelected) Color.Black.copy(alpha = 0.2f) else Color.Transparent
-    val contentColor = Color.White
+    // Disabled items may fall below 4.5:1, which WCAG allows for inactive controls
+    val contentColor = if (enabled) Color.White else Color.White.copy(alpha = 0.5f)
 
     Row(
         modifier = Modifier
@@ -98,6 +103,7 @@ private fun SidebarItem(
             .background(backgroundColor)
             .selectable(
                 selected = isSelected,
+                enabled = enabled,
                 onClick = onClick,
                 role = Role.Tab,
             )

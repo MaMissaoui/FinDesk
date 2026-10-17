@@ -112,6 +112,8 @@ class ScreenshotTest {
         }
         render("payments-review-unconfirmed", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::reviewing) }
         render("payments-review-unconfirmed-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::reviewing) }
+        // While an order is in flight the sidebar keeps the user on Payments
+        render("payments-sending-locked-sidebar", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, lockedOn = Screen.PAYMENTS) }
     }
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
@@ -141,11 +143,11 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null) {
+    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, lockedOn: Screen? = null) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    Sidebar(currentScreen = screen, onScreenSelected = {})
+                    Sidebar(currentScreen = screen, onScreenSelected = {}, lockedOn = lockedOn)
                     Column(Modifier.fillMaxSize()) {
                         TopBar(title = stringsFor(screen), isDarkTheme = dark, onThemeToggle = {})
                         HorizontalDivider()

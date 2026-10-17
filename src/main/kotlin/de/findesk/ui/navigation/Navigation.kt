@@ -41,7 +41,21 @@ class NavigationState {
     var args: NavigationArgs by mutableStateOf(NavigationArgs())
         private set
 
+    /** Screen that must stay open, because an order is being sent from it; null while navigation is free. */
+    var lockedOn: Screen? by mutableStateOf(null)
+        private set
+
+    fun lock(screen: Screen) {
+        lockedOn = screen
+    }
+
+    fun unlock(screen: Screen) {
+        if (lockedOn == screen) lockedOn = null
+    }
+
     fun navigateTo(screen: Screen, args: NavigationArgs = NavigationArgs()) {
+        // Leaving mid-send would cancel the bank's PIN/TAN prompts and hide the bank's answer
+        if (lockedOn != null && screen != lockedOn) return
         this.args = args
         currentScreen = screen
     }
