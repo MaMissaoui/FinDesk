@@ -6,6 +6,7 @@ import de.findesk.model.PaymentOrderItem
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.model.toItem
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -29,6 +30,13 @@ interface PaymentOrderRepository {
     fun complete(id: Int, status: String, bankOrderId: String? = null, message: String? = null)
 
     fun findRecentItems(limit: Int = 20): List<PaymentOrderItem>
+
+    /**
+     * Marks orders still pending from before [startedBefore] (an earlier run of the app that stopped mid-send) as
+     * [PaymentOrderStatus.UNKNOWN]: nothing will ever complete them, and the bank may have executed them.
+     * Returns how many were marked.
+     */
+    fun markInterrupted(startedBefore: LocalDateTime): Int
 }
 
 class PaymentOrderRepositoryImpl : PaymentOrderRepository {
@@ -67,6 +75,16 @@ class PaymentOrderRepositoryImpl : PaymentOrderRepository {
             this.message = message
             this.updatedAt = LocalDateTime.now()
         }
+    }
+
+    override fun markInterrupted(startedBefore: LocalDateTime): Int = transaction {
+        val now = LocalDateTime.now()
+        PaymentOrder.find { (PaymentOrdersTable.status eq PaymentOrderStatus.PENDING) and (PaymentOrdersTable.createdAt less startedBefore) }
+            .toList()
+            .onEach {
+                it.status = PaymentOrderStatus.UNKNOWN
+                it.updatedAt = now
+            }.size
     }
 
     override fun findRecentItems(limit: Int): List<PaymentOrderItem> = transaction {

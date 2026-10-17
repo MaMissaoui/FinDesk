@@ -159,8 +159,13 @@ class FinTSClient(
             _connectionStatus.value = ConnectionStatus.DISCONNECTED
             BankingResult.Error("CANCELLED", e.message ?: AppStrings[StringKey.ErrorCancelled])
         } catch (e: Exception) {
+            if (e is OrderNotExecutedException || e is UnsupportedOperationException) {
+                // The bank refused it, or nothing was sent: unlike other failures, an order can't have gone through
+                _connectionStatus.value = ConnectionStatus.ERROR
+                return@withContext BankingResult.Error(NOT_EXECUTED, e.message ?: AppStrings[StringKey.ErrorBankRejected])
+            }
             _connectionStatus.value = ConnectionStatus.ERROR
-            BankingResult.Error("FINTS_ERROR", e.message ?: AppStrings[StringKey.ErrorDialogFailed])
+            BankingResult.Error(FINTS_ERROR, e.message ?: AppStrings[StringKey.ErrorDialogFailed])
         } finally {
             _syncProgress.value = null
         }
@@ -214,6 +219,12 @@ class FinTSClient(
     )
 
     companion object {
+        /** Error code for a failure that certainly didn't execute an order (see [OrderNotExecutedException]). */
+        const val NOT_EXECUTED = "NOT_EXECUTED"
+
+        /** Error code for any other dialog failure; for an order it means the outcome is unknown. */
+        const val FINTS_ERROR = "FINTS_ERROR"
+
         /** SHA-256 over the fields that identify a booking; used for duplicate detection. */
         fun transactionHash(date: LocalDate, amount: BigDecimal, partnerName: String?, purpose: String?): String {
             val input = "$date|${amount.stripTrailingZeros().toPlainString()}|${partnerName.orEmpty()}|${purpose.orEmpty()}"

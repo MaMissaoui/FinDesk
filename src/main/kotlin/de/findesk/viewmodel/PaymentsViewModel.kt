@@ -11,7 +11,10 @@ import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.model.AccountItem
 import de.findesk.model.PaymentOrderItem
+import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
+import de.findesk.util.AppInfo
+import de.findesk.util.Iban
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,6 +30,8 @@ data class PaymentReview(
     val order: TransferOrder,
     val date: java.time.LocalDate? = null,
     val schedule: StandingOrderSchedule? = null,
+    /** An earlier order to the same recipient and amount whose outcome is unknown or still open: maybe already paid. */
+    val unconfirmed: PaymentOrderItem? = null,
 )
 
 data class PaymentsState(
@@ -53,6 +58,7 @@ class PaymentsViewModel(
     private val bankingService: BankingService = BankingService(),
     private val paymentOrderRepository: PaymentOrderRepository = PaymentOrderRepositoryImpl(),
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     val bankingInteraction: UiBankingInteraction = UiBankingInteraction(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
@@ -67,6 +73,9 @@ class PaymentsViewModel(
     fun load(): Job = launchSafely(onError) { refresh() }
 
     private fun refresh() {
+        // Orders left pending by an earlier run that stopped mid-send can't complete any more
+        val interrupted = paymentOrderRepository.markInterrupted(AppInfo.startedAt)
+        if (interrupted > 0) auditLogRepository.log("PAYMENT_ORDERS_INTERRUPTED", "system", "$interrupted order(s) left pending by an earlier run marked as outcome unknown")
         _state.update {
             it.copy(
                 accounts = accountRepository.findAllItems().filter { a -> a.currency == "EUR" }, // SEPA is EUR only
@@ -88,7 +97,12 @@ class PaymentsViewModel(
         val error = validate(order)
             ?: date?.let(bankingService::validateExecutionDate)
             ?: schedule?.let(bankingService::validateSchedule)
-        _state.update { if (error != null) it.copy(error = error) else it.copy(review = PaymentReview(from, order, date, schedule), error = null) }
+        val unconfirmed = _state.value.paymentOrders.firstOrNull { o ->
+            o.status in setOf(PaymentOrderStatus.UNKNOWN, PaymentOrderStatus.PENDING) &&
+                o.recipientIban.equals(Iban.normalize(order.recipientIban), ignoreCase = true) &&
+                o.amount?.compareTo(order.amount) == 0
+        }
+        _state.update { if (error != null) it.copy(error = error) else it.copy(review = PaymentReview(from, order, date, schedule, unconfirmed), error = null) }
     }
 
     fun cancelReview() {
@@ -125,7 +139,15 @@ class PaymentsViewModel(
             _state.update {
                 when (result) {
                     is BankingResult.Success -> it.copy(isSending = false, review = null, message = sent)
-                    is BankingResult.Error -> it.copy(isSending = false, review = if (result.code == "CANCELLED") null else it.review, error = if (result.code == "CANCELLED") AppStrings[StringKey.MessageTransferCancelled] else result.message)
+
+                    // A definite rejection keeps the review open to correct and retry; an unknown outcome closes it, so
+                    // sending again takes a fresh review that shows the unconfirmed order
+                    is BankingResult.Error -> it.copy(
+                        isSending = false,
+                        review = if (result.code == "CANCELLED" || result.code == BankingService.OUTCOME_UNKNOWN) null else it.review,
+                        error = if (result.code == "CANCELLED") AppStrings[StringKey.MessageTransferCancelled] else result.message,
+                    )
+
                     is BankingResult.TanRequired -> it.copy(isSending = false, error = AppStrings[StringKey.TanRequired])
                 }
             }
@@ -180,7 +202,11 @@ class PaymentsViewModel(
                         message = AppStrings.format(StringKey.MessageStandingOrderDeleted, existing.order.recipientName),
                     )
 
-                    is BankingResult.Error -> it.copy(isSending = false, deleteReview = if (result.code == "CANCELLED") null else it.deleteReview, error = if (result.code == "CANCELLED") null else result.message)
+                    is BankingResult.Error -> it.copy(
+                        isSending = false,
+                        deleteReview = if (result.code == "CANCELLED" || result.code == BankingService.OUTCOME_UNKNOWN) null else it.deleteReview,
+                        error = if (result.code == "CANCELLED") null else result.message,
+                    )
 
                     is BankingResult.TanRequired -> it.copy(isSending = false, error = AppStrings[StringKey.TanRequired])
                 }

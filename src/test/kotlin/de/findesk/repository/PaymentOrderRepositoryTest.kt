@@ -19,6 +19,26 @@ class PaymentOrderRepositoryTest {
     }
 
     @Test
+    fun `orders left pending by an earlier run are marked outcome unknown`() {
+        TestDatabase.init() // counts below must not see the other tests' orders
+        fun order() = repository.create(PaymentAction.TRANSFER, "DE02120300000000202051", "Max", "DE02120300000000202052", BigDecimal("5.00"), "EUR", null, null, null)
+        val stale = order()
+        val done = order().also { repository.complete(it, PaymentOrderStatus.ACCEPTED) }
+        val cutoff = java.time.LocalDateTime.now().plusSeconds(1)
+
+        assertEquals(1, repository.markInterrupted(cutoff))
+
+        val items = repository.findRecentItems(50)
+        assertEquals(PaymentOrderStatus.UNKNOWN, items.first { it.id == stale }.status)
+        assertEquals(PaymentOrderStatus.ACCEPTED, items.first { it.id == done }.status)
+        assertEquals(0, repository.markInterrupted(cutoff))
+        // An order still in flight in this run is newer than the start and stays pending
+        val inFlight = order()
+        assertEquals(0, repository.markInterrupted(java.time.LocalDateTime.now().minusMinutes(1)))
+        assertEquals(PaymentOrderStatus.PENDING, repository.findRecentItems(50).first { it.id == inFlight }.status)
+    }
+
+    @Test
     fun `new order starts pending and gets the bank's answer`() {
         val id = repository.create(
             action = PaymentAction.TRANSFER,

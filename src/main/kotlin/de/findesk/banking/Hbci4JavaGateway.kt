@@ -19,6 +19,8 @@ import org.kapott.hbci.manager.HBCIHandler
 import org.kapott.hbci.manager.MatrixCode
 import org.kapott.hbci.manager.QRCode
 import org.kapott.hbci.passport.HBCIPassport
+import org.kapott.hbci.status.HBCIExecStatus
+import org.kapott.hbci.status.HBCIStatus
 import org.kapott.hbci.structures.Konto
 import org.kapott.hbci.structures.Value
 import java.time.LocalDate
@@ -130,8 +132,7 @@ class Hbci4JavaGateway : FinTSGateway {
             setParam("usage", order.purpose)
             addToQueue()
         }
-        checkStatus(handler.execute().let { it.isOK to it.errorString })
-        checkJob(job.jobResult)
+        checkOrder(handler.execute(), job)
         FinTSClient.TransferResult(transactionId = job.jobResult.jobId ?: "", status = "ACCEPTED")
     }
 
@@ -147,8 +148,7 @@ class Hbci4JavaGateway : FinTSGateway {
             setParam("date", date.toDate())
             addToQueue()
         }
-        checkStatus(handler.execute().let { it.isOK to it.errorString })
-        checkJob(job.jobResult)
+        checkOrder(handler.execute(), job)
         FinTSClient.TransferResult(transactionId = job.jobResult.jobId ?: "", status = "SCHEDULED")
     }
 
@@ -195,8 +195,7 @@ class Hbci4JavaGateway : FinTSGateway {
             setScheduleParams(schedule)
             addToQueue()
         }
-        checkStatus(handler.execute().let { it.isOK to it.errorString })
-        checkJob(job.jobResult)
+        checkOrder(handler.execute(), job)
         (job.jobResult as? GVRDauerNew)?.orderId
     }
 
@@ -212,8 +211,7 @@ class Hbci4JavaGateway : FinTSGateway {
             setParam("orderid", requireNotNull(existing.orderId) { AppStrings[StringKey.ErrorNoStandingOrderId] })
             addToQueue()
         }
-        checkStatus(handler.execute().let { it.isOK to it.errorString })
-        checkJob(job.jobResult)
+        checkOrder(handler.execute(), job)
     }
 
     private fun HBCIJob<*>.setOrderParams(src: Konto, order: TransferOrder) {
@@ -281,7 +279,11 @@ class Hbci4JavaGateway : FinTSGateway {
     }
 
     private fun unwrap(e: Throwable, callback: FinDeskHbciCallback): Throwable {
-        generateSequence(e) { it.cause }.firstOrNull { it is BankingCancelledException }?.let { return it }
+        generateSequence(e) { it.cause }.firstOrNull { it is BankingCancelledException || it is OrderNotExecutedException }?.let { return it }
+        // A rejected PIN fails the dialog before any order in it is sent
+        if (callback.pinRejected) {
+            return OrderNotExecutedException(callback.bankMessages.lastOrNull() ?: AppStrings[StringKey.ErrorBankRejectedPin], e)
+        }
         if (generateSequence(e) { it.cause }.any { it is JobNotSupportedException }) {
             return UnsupportedOperationException(AppStrings[StringKey.ErrorOrderNotOffered], e)
         }
@@ -301,8 +303,16 @@ class Hbci4JavaGateway : FinTSGateway {
         if (!result.isOK) throw IllegalStateException(result.jobStatus?.toString()?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejected])
     }
 
+    /**
+     * An order's outcome comes from its own job status, not the dialog's: an order the bank accepted counts as sent
+     * even if a later step of the dialog failed, so it is never offered for sending again.
+     */
+    private fun checkOrder(exec: HBCIExecStatus, job: HBCIJob<*>) {
+        orderOutcome(job.jobResult.jobStatus, exec.errorString)?.let { throw it }
+    }
+
     private fun HBCIHandler.findKonto(iban: String): Konto = passport.accounts.orEmpty().firstOrNull { it.iban.equals(iban, ignoreCase = true) }
-        ?: throw IllegalArgumentException("Account ${iban.takeLast(4)} is not available with this bank login")
+        ?: throw OrderNotExecutedException("Account ${iban.takeLast(4)} is not available with this bank login")
 
     private fun Konto.toAccount(connection: FinTSConnection) = FinTSAccount(
         iban = iban.orEmpty(),
@@ -336,6 +346,17 @@ class Hbci4JavaGateway : FinTSGateway {
     companion object {
         private val LOCK = Any()
 
+        /**
+         * Null when the bank accepted the job. Only a bank answer made of error codes (9xxx) without local exceptions is a
+         * definite rejection ([OrderNotExecutedException]); anything else (no answer, an exception while sending or reading
+         * the response) leaves open whether the bank executed the order.
+         */
+        internal fun orderOutcome(status: HBCIStatus?, dialogError: String?): Exception? {
+            if (status?.isOK == true) return null
+            val reason = status?.toString()?.trim()?.ifEmpty { null } ?: dialogError?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejected]
+            return if (status != null && status.hasErrors() && !status.hasExceptions()) OrderNotExecutedException(reason) else IllegalStateException(reason)
+        }
+
         /** FinTS account type codes: 1-9 checking, 10-19 savings, 30-39 depot, 50-59 credit card. */
         internal fun accountTypeFor(code: String?): String = when (code?.toIntOrNull()) {
             in 1..9 -> "checking"
@@ -365,6 +386,10 @@ internal class FinDeskHbciCallback(
         private set
     val bankMessages = mutableListOf<String>()
     private var pin: String? = null
+
+    /** The bank rejected the last PIN entered; the dialog then fails at its start, before any order is sent. */
+    var pinRejected = false
+        private set
 
     /** Error-level log lines (level 1), used to explain failures. Higher levels may contain message dumps and are dropped. */
     val diagnostics = mutableListOf<String>()
@@ -401,6 +426,8 @@ internal class FinDeskHbciCallback(
 
             HBCICallback.NEED_PT_PIN -> {
                 val value = pin ?: interaction.pin(connection.bankName, connection.userId)?.takeIf { it.isNotEmpty() } ?: cancel()
+                // A new PIN after a rejected one may open the dialog, and then its orders do get sent
+                if (pin == null) pinRejected = false
                 pin = value
                 recorder?.addSecret(value)
                 retData.set(value)
@@ -454,6 +481,7 @@ internal class FinDeskHbciCallback(
 
             HBCICallback.WRONG_PIN -> {
                 pin = null
+                pinRejected = true
                 bankMessages += AppStrings[StringKey.ErrorBankRejectedPin]
             }
 

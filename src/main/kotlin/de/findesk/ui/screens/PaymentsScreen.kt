@@ -282,6 +282,13 @@ fun PaymentsScreen() {
                         s[StringKey.Execution],
                         review.schedule?.let { scheduleText(it, s) } ?: review.date?.let { s.format(StringKey.OnDate, Formats.date(it)) } ?: s[StringKey.ExecuteNow],
                     )
+                    review.unconfirmed?.let { earlier ->
+                        Text(
+                            s.format(StringKey.WarningUnconfirmedOrder, earlier.recipientName.orEmpty(), Formats.money(order.amount), Formats.date(earlier.createdAt.toLocalDate())),
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
@@ -368,7 +375,7 @@ private fun ReviewRow(label: String, value: String) {
 @Composable
 private fun paymentStatusColor(status: String) = when (status) {
     PaymentOrderStatus.ACCEPTED -> de.findesk.ui.theme.Success
-    PaymentOrderStatus.REJECTED -> MaterialTheme.colorScheme.error
+    PaymentOrderStatus.REJECTED, PaymentOrderStatus.UNKNOWN -> MaterialTheme.colorScheme.error
     PaymentOrderStatus.PENDING, PaymentOrderStatus.TAN_REQUIRED -> MaterialTheme.colorScheme.tertiary
     else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
