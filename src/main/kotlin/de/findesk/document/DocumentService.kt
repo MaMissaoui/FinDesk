@@ -4,6 +4,7 @@ import de.findesk.model.DocumentItem
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import de.findesk.util.FileSecurity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,6 +57,16 @@ class DocumentService(
             "tiff", "tif" -> "image/tiff"
             else -> "application/octet-stream"
         }
+
+        /**
+         * Makes a user-supplied file name safe to use on disk: keeps the last path segment, drops control
+         * characters and bounds the length. The display name is stored separately and unchanged.
+         */
+        fun sanitizeFileName(name: String): String {
+            val base = name.substringAfterLast('/').substringAfterLast('\\')
+            val cleaned = base.filter { !it.isISOControl() }.trim()
+            return cleaned.ifBlank { "document" }.take(150)
+        }
     }
 
     /**
@@ -74,9 +85,10 @@ class DocumentService(
             val mimeType = detectMimeType(sourceFile)
             require(mimeType != "application/octet-stream") { de.findesk.i18n.AppStrings.format(de.findesk.i18n.StringKey.ErrorUnsupportedFileType, sourceFile.extension) }
 
-            documentsDir.mkdirs()
-            val destFile = File(documentsDir, "${UUID.randomUUID()}_${sourceFile.name}")
+            FileSecurity.secureDirectory(documentsDir)
+            val destFile = File(documentsDir, "${UUID.randomUUID()}_${sanitizeFileName(sourceFile.name)}")
             sourceFile.copyTo(destFile)
+            FileSecurity.secureFile(destFile)
 
             val document = documentRepository.create(
                 fileName = sourceFile.name,

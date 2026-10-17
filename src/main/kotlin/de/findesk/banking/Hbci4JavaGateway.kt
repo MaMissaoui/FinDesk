@@ -2,6 +2,7 @@ package de.findesk.banking
 
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.util.FileSecurity
 import org.hbci4java.HBCI4JavaBankAccount
 import org.hbci4java.HBCI4JavaClient
 import org.hbci4java.HBCI4JavaConfig
@@ -238,24 +239,43 @@ class Hbci4JavaGateway : FinTSGateway {
     }
 
     private fun <T> withHandler(connection: FinTSConnection, interaction: BankingInteraction, block: (HBCIHandler) -> T): T {
-        connection.passportFile.parentFile?.mkdirs()
-        val callback = FinDeskHbciCallback(connection, interaction)
+        connection.passportFile.parentFile?.let { FileSecurity.secureDirectory(it) }
+        val recorder = if (ProtocolTraceStore.enabled) {
+            TraceRecorder(connection.bankName, connection.blz, connection.hbciVersion).apply {
+                addSecret(connection.userId, connection.customerId, connection.passportPassphrase)
+            }
+        } else {
+            null
+        }
+        val callback = FinDeskHbciCallback(connection, interaction, recorder)
         val props = Properties().apply {
             setProperty("client.passport.default", "PinTan")
             setProperty("client.passport.PinTan.filename", connection.passportFile.absolutePath)
             setProperty("client.passport.PinTan.init", "1")
-            setProperty("log.loglevel.default", "1")
+            // Level 5 also logs the FinTS message bodies; only raise it while the user wants a trace
+            setProperty("log.loglevel.default", if (recorder != null) "5" else "1")
         }
         // HBCI4Java keeps per-thread global state; serialise dialogs
         synchronized(LOCK) {
             try {
                 HBCI4JavaClient(HBCI4JavaConfig(props), callback).use { client ->
                     client.createSession(HBCI4JavaBankAccount(HBCI4JavaBankAccount.Type.PINTAN, connection.passportFile)).use { session ->
-                        return session.execute { handler -> block(handler) }.also { lastTanMethod = callback.chosenTanMethod }
+                        val result = session.execute { handler ->
+                            handler.passport.accounts.orEmpty().forEach { recorder?.addSecret(it.number, it.iban) }
+                            block(handler)
+                        }
+                        lastTanMethod = callback.chosenTanMethod
+                        recorder?.let { ProtocolTraceStore.publish(it.build()) }
+                        return result
                     }
                 }
             } catch (e: Throwable) {
+                // A failed dialog is exactly the one worth sharing, so publish its trace too
+                recorder?.let { ProtocolTraceStore.publish(it.build()) }
                 throw unwrap(e, callback)
+            } finally {
+                // The passport file holds the bank's keys; keep it readable only by the owner
+                FileSecurity.secureFile(connection.passportFile)
             }
         }
     }
@@ -340,6 +360,8 @@ class Hbci4JavaGateway : FinTSGateway {
 internal class FinDeskHbciCallback(
     private val connection: FinTSConnection,
     private val interaction: BankingInteraction,
+    /** Opt-in capture of the dialog for support; null when tracing is off. */
+    private val recorder: TraceRecorder? = null,
 ) : AbstractHBCICallback() {
     var chosenTanMethod: String? = connection.tanMethod
         private set
@@ -350,7 +372,9 @@ internal class FinDeskHbciCallback(
     val diagnostics = mutableListOf<String>()
 
     override fun log(msg: String?, level: Int, date: Date?, trace: StackTraceElement?) {
-        if (level <= 1 && !msg.isNullOrBlank()) diagnostics += msg.take(500)
+        if (msg.isNullOrBlank()) return
+        recorder?.record(level, msg)
+        if (level <= 1) diagnostics += msg.take(500)
     }
 
     override fun status(passport: HBCIPassport?, statusTag: Int, o: Array<out Any?>?) {}
@@ -380,6 +404,7 @@ internal class FinDeskHbciCallback(
             HBCICallback.NEED_PT_PIN -> {
                 val value = pin ?: interaction.pin(connection.bankName, connection.userId)?.takeIf { it.isNotEmpty() } ?: cancel()
                 pin = value
+                recorder?.addSecret(value)
                 retData.set(value)
             }
 
@@ -391,16 +416,24 @@ internal class FinDeskHbciCallback(
                 retData.set(chosen)
             }
 
-            HBCICallback.NEED_PT_TAN -> retData.set(interaction.tan(TanChallenge(message, flickerCode = flickerFor(retData.toString()))) ?: cancel())
+            HBCICallback.NEED_PT_TAN -> {
+                val tan = interaction.tan(TanChallenge(message, flickerCode = flickerFor(retData.toString()))) ?: cancel()
+                recorder?.addSecret(tan)
+                retData.set(tan)
+            }
 
             HBCICallback.NEED_PT_PHOTOTAN -> {
                 val code = MatrixCode.tryParse(retData.toString())
-                retData.set(interaction.tan(TanChallenge(message, code?.image, code?.mimetype)) ?: cancel())
+                val tan = interaction.tan(TanChallenge(message, code?.image, code?.mimetype)) ?: cancel()
+                recorder?.addSecret(tan)
+                retData.set(tan)
             }
 
             HBCICallback.NEED_PT_QRTAN -> {
                 val code = QRCode.tryParse(retData.toString(), message)
-                retData.set(interaction.tan(TanChallenge(code?.message ?: message, code?.image, code?.mimetype)) ?: cancel())
+                val tan = interaction.tan(TanChallenge(code?.message ?: message, code?.image, code?.mimetype)) ?: cancel()
+                recorder?.addSecret(tan)
+                retData.set(tan)
             }
 
             HBCICallback.NEED_PT_DECOUPLED, HBCICallback.NEED_PT_DECOUPLED_RETRY ->

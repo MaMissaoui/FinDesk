@@ -42,6 +42,10 @@ data class SettingsState(
     val restorePassphraseFor: java.io.File? = null,
     val restorePassphraseWrong: Boolean = false,
     val isEncrypted: Boolean = false,
+    /** Opt-in capture of the last FinTS/HBCI dialog for support/troubleshooting. */
+    val protocolTraceEnabled: Boolean = false,
+    /** Whether a (redacted) trace is held in memory and can be saved. */
+    val hasProtocolTrace: Boolean = false,
     val profiles: List<ProfileStore.Profile> = emptyList(),
     /** Profile running now (null = default) and the one that opens at the next start. */
     val openProfile: String? = null,
@@ -96,6 +100,8 @@ class SettingsViewModel(
                 hasPendingRestore = backupService.hasPendingRestore,
                 restoredFrom = de.findesk.data.database.DatabaseFactory.restoredFrom?.absolutePath,
                 isEncrypted = de.findesk.data.database.DatabaseFactory.isEncrypted,
+                protocolTraceEnabled = settingsRepository.getValue(de.findesk.banking.ProtocolTraceStore.SETTING_KEY) == "true",
+                hasProtocolTrace = de.findesk.banking.ProtocolTraceStore.last() != null,
                 profiles = profileStore.list(),
                 openProfile = openProfile,
                 nextProfile = profileStore.active().slug,
@@ -114,6 +120,25 @@ class SettingsViewModel(
         settingsRepository.setValue(Currencies.KEY_PRIMARY, code)
         auditLogRepository.log("SET_PRIMARY_CURRENCY", "user", code)
         _state.update { it.copy(primaryCurrency = code) }
+    }
+
+    /** Opt-in: capture the next FinTS/HBCI dialog (redacted) so it can be saved for support. */
+    fun setProtocolTraceEnabled(enabled: Boolean): Job = launchSafely(onError) {
+        settingsRepository.setValue(de.findesk.banking.ProtocolTraceStore.SETTING_KEY, enabled.toString())
+        de.findesk.banking.ProtocolTraceStore.enabled = enabled
+        auditLogRepository.log("SET_PROTOCOL_TRACE", "user", if (enabled) "FinTS protocol trace enabled" else "FinTS protocol trace disabled")
+        _state.update { it.copy(protocolTraceEnabled = enabled) }
+    }
+
+    /** Saves the captured (redacted) protocol trace to [target] so the user can attach it to a report. */
+    fun saveProtocolTrace(target: java.io.File): Job = launchSafely(onError) {
+        if (de.findesk.banking.ProtocolTraceStore.last() == null) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorNoProtocolTrace]) }
+            return@launchSafely
+        }
+        de.findesk.banking.ProtocolTraceStore.save(target, de.findesk.util.AppInfo.VERSION)
+        auditLogRepository.log("PROTOCOL_TRACE_SAVED", "user", "FinTS protocol trace saved: ${target.name}")
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageProtocolTraceSaved, target.name)) }
     }
 
     fun validateCategory(name: String, color: String, excludeId: Int? = null): String? = when {

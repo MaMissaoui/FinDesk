@@ -63,7 +63,7 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
         val taken = props.stringPropertyNames().map { it.removePrefix(NAME_PREFIX) }.toSet() + DEFAULT_KEY
         val slug = generateSequence(1) { it + 1 }.map { if (it == 1) base else "$base-$it" }
             .first { it !in taken && !profileDir(rootDir, it).exists() }
-        val dir = profileDir(rootDir, slug).apply { mkdirs() }
+        val dir = FileSecurity.secureDirectory(profileDir(rootDir, slug))
         props.setProperty(NAME_PREFIX + slug, clean)
         save(props)
         return Profile(slug, clean, dir)
@@ -121,7 +121,7 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
 
     /** Written to a temp file and moved into place, so a crash never leaves a half-written list. */
     private fun save(props: Properties) {
-        rootDir.mkdirs()
+        FileSecurity.secureDirectory(rootDir)
         val tmp = File.createTempFile("profiles", ".tmp", rootDir)
         try {
             tmp.writer(Charsets.UTF_8).use { props.store(it, "FinDesk profiles") }

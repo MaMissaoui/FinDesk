@@ -279,6 +279,35 @@ fun SettingsScreen(
         }
 
         item {
+            SectionCard(s[StringKey.ProtocolTraceTitle], Modifier.fillMaxWidth()) {
+                Text(
+                    s[StringKey.ProtocolTraceHint],
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s[StringKey.ProtocolTraceEnable], modifier = Modifier.weight(1f))
+                    Switch(checked = state.protocolTraceEnabled, onCheckedChange = { vm.setProtocolTraceEnabled(it) })
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        enabled = state.hasProtocolTrace,
+                        onClick = {
+                            FileDialogs.saveFile(s[StringKey.ProtocolTraceSave], "findesk-fints-trace-${java.time.LocalDate.now()}.txt")?.let { vm.saveProtocolTrace(it) }
+                        },
+                    ) { Text(s[StringKey.ProtocolTraceSave]) }
+                    Text(
+                        if (state.hasProtocolTrace) s[StringKey.ProtocolTraceAvailable] else s[StringKey.ProtocolTraceNone],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        item {
             SectionCard(s[StringKey.AuditLogLatest], Modifier.fillMaxWidth()) {
                 state.auditLog.forEach { e ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {

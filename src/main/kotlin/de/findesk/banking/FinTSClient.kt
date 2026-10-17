@@ -143,6 +143,8 @@ class FinTSClient(
         }
         _connectionStatus.value = status
         _syncProgress.value = SyncProgress(step, 0.1f)
+        // Refreshed from the settings here so a trace is captured even if Settings was never opened
+        ProtocolTraceStore.enabled = settingsRepository.getValue(ProtocolTraceStore.SETTING_KEY) == "true"
         try {
             val result = block(connection)
             gateway.lastTanMethod?.takeIf { it != bankAccess.tanMethod }?.let {

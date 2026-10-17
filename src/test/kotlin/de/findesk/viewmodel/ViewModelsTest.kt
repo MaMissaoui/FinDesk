@@ -218,4 +218,38 @@ class ViewModelsTest {
         assertNull(data.transactionRepo.findItems().first { it.partnerName == "REWE" }.categoryId)
         vm.close()
     }
+
+    @Test
+    fun `protocol trace setting persists and saves the captured trace`() = runBlocking {
+        de.findesk.banking.ProtocolTraceStore.clear()
+        val vm = SettingsViewModel(dataDirectory = tmp.absolutePath)
+        vm.load().join()
+        try {
+            vm.setProtocolTraceEnabled(true).join()
+            assertTrue(vm.state.value.protocolTraceEnabled)
+            assertTrue(de.findesk.banking.ProtocolTraceStore.enabled)
+            assertTrue(SettingsViewModel(dataDirectory = tmp.absolutePath).also { it.load().join() }.state.value.protocolTraceEnabled)
+
+            val out = File(tmp, "trace.txt")
+            vm.saveProtocolTrace(out).join()
+            assertFalse(out.exists())
+            assertNotNull(vm.state.value.error)
+
+            de.findesk.banking.ProtocolTraceStore.publish(
+                de.findesk.banking.ProtocolTrace(
+                    java.time.LocalDateTime.of(2026, 1, 1, 0, 0),
+                    "Test Bank",
+                    "12345678",
+                    "300",
+                    listOf(de.findesk.banking.TraceLine(1, "userId=1111111111")),
+                ),
+            )
+            vm.saveProtocolTrace(out).join()
+            assertTrue(out.readText().contains("bank: Test Bank"))
+        } finally {
+            de.findesk.banking.ProtocolTraceStore.clear()
+            de.findesk.banking.ProtocolTraceStore.enabled = false
+            vm.close()
+        }
+    }
 }

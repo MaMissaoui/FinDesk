@@ -2,6 +2,7 @@ package de.findesk.data.backup
 
 import de.findesk.data.database.DatabaseCrypto
 import de.findesk.data.database.DatabaseFactory
+import de.findesk.util.FileSecurity
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -82,6 +83,8 @@ class BackupService(
                     }
                 }
             }
+            // A backup holds the encrypted database plus plaintext documents/passports; keep it owner-only
+            FileSecurity.secureFile(target)
             return info
         } finally {
             tmpDb.delete()

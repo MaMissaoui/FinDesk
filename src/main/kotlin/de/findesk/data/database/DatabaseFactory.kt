@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource
 import de.findesk.data.backup.BackupService
 import de.findesk.data.table.*
 import de.findesk.util.AppPaths
+import de.findesk.util.FileSecurity
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.StdOutSqlLogger
@@ -74,7 +75,9 @@ object DatabaseFactory {
         if (preparedDir != File(dataDir).absoluteFile) applyPendingRestore(File(dataDir))
         preparedDir = null
         val db = databaseFile(File(dataDir))
+        FileSecurity.secureDirectory(File(dataDir))
         DatabaseCrypto.open(db, passphrase).close()
+        FileSecurity.secureDatabaseFile(db)
 
         // A keyed open runs the KDF (~100 ms), so connections are pooled instead of opened per transaction
         val newPool = HikariDataSource(
@@ -135,9 +138,7 @@ object DatabaseFactory {
 
     private fun getDefaultDataDir(): String {
         val appDir = AppPaths.dataDir
-        if (!appDir.exists()) {
-            appDir.mkdirs()
-        }
+        FileSecurity.secureDirectory(appDir)
         return appDir.absolutePath
     }
 
