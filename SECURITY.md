@@ -40,8 +40,10 @@ stores everything on your machine. The most relevant areas are:
   print sensitive values.
 - The HBCI4Java log callback keeps only error-level lines during normal
   operation; higher levels may contain message dumps and are dropped.
-- The **protocol trace** feature is opt-in, captured in memory only, redacted
-  (PIN/TAN/passphrase/account numbers) and never uploaded automatically.
+- The **protocol trace** feature is opt-in, captured in memory only and never
+  uploaded automatically. PIN/TAN/passphrase/user id/account numbers are masked;
+  the bank's answers (names, purposes, amounts, balances) are not, so the saved
+  file is owner-only and users are told to review it before sharing.
 - Money-moving operations (transfers, scheduled transfers, standing orders) go
   through a single, guarded code path that requires explicit confirmation and
   an EUR account, and writes an audit-log entry.

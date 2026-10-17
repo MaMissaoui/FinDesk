@@ -1,5 +1,6 @@
 package de.findesk.banking
 
+import de.findesk.util.FileSecurity
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -28,6 +29,7 @@ data class ProtocolTrace(
         appendLine("hbci-version: $hbciVersion")
         appendLine("entries: ${lines.size}")
         appendLine("note: sensitive values (user id, PIN, TAN, account numbers, passphrase) are masked as '${BankingRedactor.MASK}'")
+        appendLine("note: the bank's answers are NOT masked (names, purposes, amounts, balances); read this file before sharing it")
         appendLine("".padEnd(72, '-'))
         lines.forEach { appendLine("[${levelName(it.level)}] ${it.message}") }
     }
@@ -105,6 +107,9 @@ object ProtocolTraceStore {
     fun save(target: File, appVersion: String) {
         val trace = last ?: throw IllegalStateException("No protocol trace captured yet")
         target.parentFile?.mkdirs()
+        // Restricted before anything is written: the trace holds the bank's answers, like the database does
+        target.writeText("")
+        FileSecurity.secureFile(target)
         target.writeText(trace.render(appVersion))
     }
 }
