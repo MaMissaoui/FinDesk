@@ -25,7 +25,6 @@ class FinTSClient(
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
     private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
     private val gateway: FinTSGateway = Hbci4JavaGateway(),
-    private val tanManager: TanManager = TanManager(),
     private val passportDir: File = File(AppPaths.dataDir, "passports"),
 ) {
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
@@ -139,7 +138,6 @@ class FinTSClient(
         val connection = when (val c = connectionFor(bankAccess)) {
             is BankingResult.Success -> c.data
             is BankingResult.Error -> return@withContext c
-            is BankingResult.TanRequired -> return@withContext c
         }
         _connectionStatus.value = status
         _syncProgress.value = SyncProgress(step, 0.1f)
@@ -191,31 +189,9 @@ class FinTSClient(
         settingsRepository.delete("fints.passport.$bankAccessId")
     }
 
-    /**
-     * Create a hash for transaction duplicate detection
-     */
-    fun createTransactionHash(
-        date: LocalDate,
-        amount: BigDecimal,
-        partnerName: String?,
-        purpose: String?,
-    ): String = transactionHash(date, amount, partnerName, purpose)
-
-    /**
-     * TAN methods commonly offered by German banks. The bank's actual list is requested during the dialog.
-     */
-    fun getTanMethods(): List<TanMethod> = tanManager.getSupportedMethods()
-
-    data class SyncResult(
-        val accountsSynced: Int,
-        val transactionsImported: Int,
-        val duplicatesSkipped: Int,
-    )
-
     data class TransferResult(
         val transactionId: String,
         val status: String,
-        val tanRequired: Boolean = false,
     )
 
     companion object {

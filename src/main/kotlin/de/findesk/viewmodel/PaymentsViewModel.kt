@@ -147,8 +147,6 @@ class PaymentsViewModel(
                         review = if (result.code == "CANCELLED" || result.code == BankingService.OUTCOME_UNKNOWN) null else it.review,
                         error = if (result.code == "CANCELLED") AppStrings[StringKey.MessageTransferCancelled] else result.message,
                     )
-
-                    is BankingResult.TanRequired -> it.copy(isSending = false, error = AppStrings[StringKey.TanRequired])
                 }
             }
         }
@@ -163,7 +161,6 @@ class PaymentsViewModel(
                 when (result) {
                     is BankingResult.Success -> it.copy(isLoadingStandingOrders = false, standingOrders = result.data)
                     is BankingResult.Error -> it.copy(isLoadingStandingOrders = false, error = if (result.code == "CANCELLED") null else result.message)
-                    is BankingResult.TanRequired -> it.copy(isLoadingStandingOrders = false, error = AppStrings[StringKey.TanRequired])
                 }
             }
         }
@@ -207,8 +204,6 @@ class PaymentsViewModel(
                         deleteReview = if (result.code == "CANCELLED" || result.code == BankingService.OUTCOME_UNKNOWN) null else it.deleteReview,
                         error = if (result.code == "CANCELLED") null else result.message,
                     )
-
-                    is BankingResult.TanRequired -> it.copy(isSending = false, error = AppStrings[StringKey.TanRequired])
                 }
             }
         }
