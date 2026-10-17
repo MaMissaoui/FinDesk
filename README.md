@@ -1,208 +1,161 @@
-# FinDesk - Your Financial Workspace
+# FinDesk – Your Financial Workspace
 
-A modern personal financial workspace that unifies multi-banking, transactions, documents and tax-relevant information in a secure local desktop application.
+A free, local-first personal finance desktop application that unifies
+multi-banking (FinTS/HBCI), transactions, documents and tax-relevant
+information in one place. Similar in spirit to
+[Hibiscus](https://github.com/willuhn/hibiscus), [GBanking](https://github.com/GBanking)
+and [Pecunia](https://pecunia.zum-quellcode.de/), it keeps all of your data on
+your own machine — no account, no cloud, no telemetry.
+
+> **Status:** early development. The FinTS integration is currently verified
+> against simulated banks and the public Subsembly/FinAPI test endpoints only.
+> Try your first real-bank sync carefully and with a single account.
 
 ## Features
 
-- **Multi-Banking**: Connect multiple bank accounts via FinTS/HBCI
-- **Transaction Management**: Import, categorize, and track all transactions
-- **Document Management**: Upload receipts, invoices, and statements with OCR
-- **Tax Reports**: Generate annual tax summaries and export to PDF/CSV
-- **Auto-Categorization**: Rule-based automatic transaction categorization
-- **Local & Secure**: All data stored locally on your machine
+- **Multi-banking** – connect multiple accounts via FinTS 3.0 PIN/TAN (HBCI),
+  including pushTAN/decoupled, photoTAN, QR-TAN, chipTAN (optical and manual)
+  and SMS-TAN.
+- **Transactions** – fetch statements from the bank, import CAMT, MT940, OFX,
+  QIF and CSV files, and de-duplicate automatically.
+- **Categorization** – rule-based auto-categorization with a manual review.
+- **Documents** – attach receipts, invoices and statements, with OCR for images
+  and scanned PDFs.
+- **Reports & tax** – yearly summaries with PDF and CSV export.
+- **Local and encrypted** – the database is encrypted with SQLCipher (AES-256);
+  nothing leaves your machine.
 
-## Technology Stack
+## Technology stack
 
 | Component | Technology |
 |-----------|------------|
-| Language | Kotlin JVM 2.1.10 |
-| UI Framework | Compose Desktop 1.7.3 |
-| Database | SQLite + Exposed ORM |
-| Banking | HBCI4Java (FinTS) |
+| Language | Kotlin JVM (JDK 21) |
+| UI | Compose Desktop (Material 3) |
+| Database | SQLite via SQLCipher + Exposed ORM |
+| Banking | HBCI4Java (FinTS 3.0 PIN/TAN) |
 | OCR | Tesseract (tess4j) + Apache PDFBox |
-| Banking | HBCI4Java 4.x (FinTS 3.0 PIN/TAN) |
-| Build | Gradle |
+| Build | Gradle (Kotlin DSL) |
 
-## Quick Start
+## Requirements
 
-### Prerequisites
+- **JDK 21+**
+- **Tesseract** (optional, for OCR of images and scanned PDFs):
+  - macOS: `brew install tesseract tesseract-lang`
+  - Debian/Ubuntu: `apt install tesseract-ocr tesseract-ocr-deu`
 
-- **JDK 21+** (OpenJDK or Oracle)
-- **Gradle** (wrapper included)
-- **Tesseract** (optional, for OCR of images and scanned PDFs): `brew install tesseract tesseract-lang` on macOS, `apt install tesseract-ocr tesseract-ocr-deu` on Debian/Ubuntu. PDFs with a text layer work without it.
+  PDFs that already contain a text layer work without Tesseract.
 
-### Run the Application
+## Quick start
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/FinDesk.git
+git clone https://github.com/MaMissaoui/FinDesk.git
 cd FinDesk
-
-# Run the application
 ./gradlew run
 ```
 
-### Run Tests
+Run against a throwaway data directory instead of your real one:
 
 ```bash
-./gradlew test
+FINDESK_HOME=/tmp/findesk-dev ./gradlew run --no-daemon
 ```
 
-### Build Distribution Packages
+## Tests
 
-#### macOS
 ```bash
-# DMG installer
-./gradlew packageDmg
-
-# Output: build/compose/binaries/main/dmg/FinDesk-1.0.0.dmg
+./gradlew test          # full suite
+./gradlew ktlintCheck   # lint
 ```
 
-#### Windows
-```bash
-# MSI installer
-./gradlew packageMsi
-
-# Portable EXE
-./gradlew packageExe
-
-# Output: build/compose/binaries/main/msi/FinDesk-1.0.0.msi
-# Output: build/compose/binaries/main/exe/FinDesk-1.0.0.exe
-```
-
-#### Linux
-```bash
-# Debian/Ubuntu package
-./gradlew packageDeb
-
-# Fedora/RHEL package
-./gradlew packageRpm
-
-# Output: build/compose/binaries/main/deb/findesk_1.0.0-1_amd64.deb
-# Output: build/compose/binaries/main/rpm/findesk-1.0.0-1.x86_64.rpm
-```
+## Build installers
 
 Packages are built for the operating system you run the build on.
 
-## Project Structure
-
-```
-FinDesk/
-├── src/
-│   ├── main/
-│   │   ├── kotlin/de/findesk/
-│   │   │   ├── Main.kt                 # Entry point
-│   │   │   ├── data/
-│   │   │   │   ├── database/           # Database connection
-│   │   │   │   ├── entity/             # DAO entities
-│   │   │   │   └── table/              # Table definitions
-│   │   │   ├── repository/             # Data access layer
-│   │   │   ├── viewmodel/              # State management
-│   │   │   ├── banking/                # FinTS/HBCI integration
-│   │   │   ├── document/               # Document & OCR services
-│   │   │   └── ui/
-│   │   │       ├── theme/              # Colors, typography
-│   │   │       ├── navigation/         # Screen routing
-│   │   │       ├── components/         # Reusable UI components
-│   │   │       └── screens/            # Feature screens
-│   │   └── resources/
-│   │       └── icons/                  # Application icons
-│   └── test/
-│       └── kotlin/de/findesk/
-│           └── repository/             # Unit tests
-├── docs/
-│   ├── FinDesk.html                   # Design document
-│   ├── IMPLEMENTATION_PLAN.md          # Phase plan
-│   └── IMPLEMENTATION_COMPLETE.md      # Summary
-├── build.gradle.kts                    # Build configuration
-└── README.md                           # This file
+```bash
+./gradlew packageDmg    # macOS  -> build/compose/binaries/main/dmg/FinDesk-1.0.0.dmg
+./gradlew packageMsi    # Windows (MSI)
+./gradlew packageExe    # Windows (portable EXE)
+./gradlew packageDeb    # Debian/Ubuntu
+./gradlew packageRpm    # Fedora/RHEL
 ```
 
-## Screenshots
+## Data, privacy and security
 
-### Dashboard
-![Dashboard](docs/screenshots/dashboard.png)
+- All data lives in a single directory: `~/.findesk`
+  (`%USERPROFILE%\.findesk` on Windows). Override it with the `FINDESK_HOME`
+  environment variable. Multiple profiles are supported under
+  `~/.findesk/profiles/<name>/`.
+- The database (`findesk.db`) is encrypted with SQLCipher. The passphrase is
+  entered at startup, is never stored on disk in plain text and is never logged.
+- PINs and TANs are requested per sync and never persisted or logged. The
+  database key is passed to the driver only through connection properties.
+- `documents/` (attached files) is **not** encrypted.
 
-### Transactions
-![Transactions](docs/screenshots/transactions.png)
+See [SECURITY.md](SECURITY.md) for the threat model and how to report issues.
 
-### Documents
-![Documents](docs/screenshots/documents.png)
+## Online banking (FinTS)
 
-## Configuration
+Add your bank by BLZ; name, BIC and the FinTS server are filled in from the
+bundled bank directory. Enter your online-banking user ID under the bank's
+connection settings and press **Sync**. FinDesk asks for your PIN on every sync
+and never stores it. Transfers are only sent after a review step and explicit
+confirmation.
 
-### Data Directory
+### Troubleshooting with a protocol trace
 
-All data lives in one directory: `~/.findesk` (`%USERPROFILE%\.findesk` on Windows). Set the `FINDESK_HOME` environment variable to use another location, for example a portable install or a throwaway copy for testing.
+If a sync fails and you want help, FinDesk can record the FinTS/HBCI dialog so
+it can be attached to a bug report:
 
-### Online Banking (FinTS)
+1. Open **Settings → Online banking** and enable **Collect FinTS protocol trace**.
+2. Reproduce the problem (e.g. press **Sync**).
+3. In **Settings**, press **Save protocol trace** and attach the resulting
+   `.txt` file to your issue.
 
-Add your bank by BLZ. Name, BIC and FinTS server are filled in from the bundled bank directory. Then set your online banking user ID under the bank's connection settings and press **Sync**. FinDesk asks for your PIN on every sync and never stores it. TAN procedures (pushTAN/decoupled, photoTAN, QR-TAN, chipTAN optical and manual, SMS-TAN) are prompted as the bank requires. Transfers are only sent after a review step and explicit confirmation.
+Traces are captured in memory only, redacted (PINs, TANs, the connection
+passphrase and account numbers are masked as `X`), and are **never** uploaded
+automatically — you always save and share the file yourself.
 
-> The FinTS integration has been tested against simulated banks only. Try your first sync with care.
+## Project structure
 
-### Keyboard Shortcuts
+```
+src/main/kotlin/de/findesk/
+├── Main.kt              # entry point
+├── banking/             # FinTS/HBCI integration (HBCI4Java port)
+├── data/                # database, tables and DAO entities
+├── repository/          # data access layer
+├── viewmodel/           # state management
+├── document/            # document, OCR and reporting services
+├── importer/            # CAMT/MT940/OFX/QIF/CSV parsers
+├── model/               # transaction-safe snapshot models
+├── i18n/                # EN/DE/FR localization
+└── ui/                  # theme, navigation, components, screens
+docs/                    # architecture, plan and design documents
+```
 
-`Ctrl`/`⌘` + `1`–`7` opens Dashboard, Accounts, Transactions, Payments, Documents, Reports and Settings; `Ctrl`/`⌘` + `,` opens Settings.
+Localization: the UI ships in English, German and French
+(`de.findesk.i18n`).
 
-### Database Location
-The SQLite database is stored at:
-- **macOS/Linux**: `~/.findesk/findesk.db`
-- **Windows**: `%USERPROFILE%\.findesk\findesk.db`
+## Rendering screenshots
 
-### Document Storage
-Uploaded documents are stored at:
-- **macOS/Linux**: `~/.findesk/documents/`
-- **Windows**: `%USERPROFILE%\.findesk\documents\`
-
-## Development
-
-### Building from Source
+Screens can be rendered headlessly (no window) for review or docs:
 
 ```bash
-# Build the project
-./gradlew build
-
-# Run tests
-./gradlew test
-
-# Clean build
-./gradlew clean build
-
-# Run with debug logging
-./gradlew run --debug
+./gradlew test --tests '*ScreenshotTest' -Pscreenshots=build/screenshots
 ```
 
-### Creating Icons
+## Contributing
 
-Place your application icons in `src/main/resources/icons/`:
-- **macOS**: `icon.icns`
-- **Windows**: `icon.ico`
-- **Linux**: `icon.png` (512x512 recommended)
-
-### Code Style
-
-The project follows Kotlin coding conventions:
-- 4 spaces indentation
-- camelCase for variables and functions
-- PascalCase for classes and interfaces
-- UPPER_SNAKE_CASE for constants
+See [CONTRIBUTING.md](CONTRIBUTING.md). Please run
+`./gradlew ktlintCheck test` before opening a pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License – see [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-- [JetBrains Compose](https://www.jetbrains.com/lp/compose-multiplatform/) - UI framework
-- [Exposed](https://github.com/JetBrains/Exposed) - ORM library
-- [HBCI4Java](https://hbci4java.kapott.org/) - Banking library
-- [Tesseract](https://github.com/tesseract-ocr/tesseract) - OCR engine
-
-## Support
-
-For support, email support@findesk.de or open an issue on GitHub.
-
----
-
-**FinDesk** - Your Financial Workspace. Finances. Clear. Local.
+- [HBCI4Java](https://github.com/hbci4j/hbci4java) – FinTS/HBCI library (LGPL-2.1)
+- [JetBrains Compose](https://www.jetbrains.com/lp/compose-multiplatform/) – UI toolkit (Apache-2.0)
+- [Exposed](https://github.com/JetBrains/Exposed) – ORM (Apache-2.0)
+- [Apache PDFBox](https://pdfbox.apache.org/) – PDF parsing (Apache-2.0)
+- [Tesseract](https://github.com/tesseract-ocr/tesseract) / [tess4j](http://tess4j.sourceforge.net/) – OCR (Apache-2.0)
+- [SQLCipher](https://www.zetetic.net/sqlcipher/) – database encryption (BSD-style)
