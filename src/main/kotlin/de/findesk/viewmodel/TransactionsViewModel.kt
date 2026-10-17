@@ -298,10 +298,11 @@ class TransactionsViewModel(
     fun autoCategorizeTransactions(): Job = launchSafely(onError) {
         val uncategorized = transactionRepository.findItems(TransactionFilter(uncategorizedOnly = true))
         var updated = 0
+        val rules = ruleRepository.matcher()
         uncategorized.forEach { txn ->
-            val matched = ruleRepository.matchTransaction(txn.purpose, txn.partnerName)
+            val matched = rules.categoryFor(txn.purpose, txn.partnerName)
             if (matched != null) {
-                transactionRepository.updateCategory(txn.id, matched.id.value)
+                transactionRepository.updateCategory(txn.id, matched)
                 updated++
             }
         }

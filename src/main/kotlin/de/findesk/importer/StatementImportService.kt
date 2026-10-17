@@ -85,25 +85,22 @@ class StatementImportService(
             hashes(account.iban, bookings).map { (b, h) -> de.findesk.repository.BookingDedup.Candidate(b, b.date, b.amount, h) },
             transactionRepository,
         )
-        var imported = 0
-        var categorized = 0
-        plan.toImport.forEach { candidate ->
+        val rules = ruleRepository.matcher()
+        val rows = plan.toImport.map { candidate ->
             val booking = candidate.item
-            val hash = candidate.hash
-            val category = ruleRepository.matchTransaction(booking.purpose, booking.partnerName)
-            transactionRepository.create(
+            de.findesk.repository.NewTransaction(
                 accountId = accountId,
                 date = booking.date,
                 amount = booking.amount,
                 currency = account.currency,
                 partnerName = booking.partnerName?.take(255),
                 purpose = booking.purpose,
-                categoryId = category?.id?.value,
-                hash = hash,
+                categoryId = rules.categoryFor(booking.purpose, booking.partnerName),
+                hash = candidate.hash,
             )
-            imported++
-            if (category != null) categorized++
         }
+        val imported = transactionRepository.createAll(rows)
+        val categorized = rows.count { it.categoryId != null }
 
         // Newest booking with a balance; within a day the file order is the booking order
         val latestBalance = bookings.withIndex()

@@ -22,6 +22,18 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
 
+/** A booking to insert with [TransactionRepository.createAll]. */
+data class NewTransaction(
+    val accountId: Int,
+    val date: LocalDate,
+    val amount: BigDecimal,
+    val currency: String,
+    val partnerName: String?,
+    val purpose: String?,
+    val categoryId: Int?,
+    val hash: String,
+)
+
 interface TransactionRepository {
     fun findAll(): List<Transaction>
     fun findById(id: Int): Transaction?
@@ -42,6 +54,9 @@ interface TransactionRepository {
         documentId: Int? = null,
         hash: String,
     ): Transaction
+
+    /** Inserts all [bookings] in one database transaction: all or none, and far faster than one commit per booking. */
+    fun createAll(bookings: List<NewTransaction>): Int
     fun updateCategory(id: Int, categoryId: Int?): Transaction?
     fun updateDocument(id: Int, documentId: Int?): Transaction?
     fun delete(id: Int): Boolean
@@ -128,6 +143,13 @@ class TransactionRepositoryImpl : TransactionRepository {
             this.hash = hash
             this.createdAt = LocalDateTime.now()
         }
+    }
+
+    override fun createAll(bookings: List<NewTransaction>): Int = transaction {
+        bookings.forEach { b ->
+            create(b.accountId, b.date, b.amount, b.currency, b.partnerName, b.purpose, b.categoryId, hash = b.hash)
+        }
+        bookings.size
     }
 
     override fun updateCategory(id: Int, categoryId: Int?): Transaction? = transaction {
