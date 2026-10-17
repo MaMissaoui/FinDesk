@@ -1,5 +1,8 @@
 # FinDesk Implementation Summary - Phases 2-4
 
+> **Superseded (2026-10-17).** This is a snapshot from 2026-10-03 and does not reflect the current code.
+> `IMPLEMENTATION_PLAN.md` is the source of truth.
+
 ## Overview
 This document summarizes the implementation of Phases 2-4 of the FinDesk application, transforming it from a basic Compose Desktop skeleton into a fully structured financial workspace.
 

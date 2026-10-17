@@ -1,5 +1,8 @@
 # FinDesk - Implementation Complete
 
+> **Superseded (2026-10-17).** This is a snapshot from 2026-10-03 and does not reflect the current code
+> (the "all phases complete" status was already known to be wrong). `IMPLEMENTATION_PLAN.md` is the source of truth.
+
 ## Overview
 All 6 phases of the FinDesk application have been successfully implemented, transforming the project from a basic Compose Desktop skeleton into a fully-featured financial workspace application.
 

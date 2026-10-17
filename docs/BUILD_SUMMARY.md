@@ -1,5 +1,8 @@
 # FinDesk Build Summary
 
+> **Superseded (2026-10-17).** This is a snapshot from 2026-10-03 and does not reflect the current code.
+> `IMPLEMENTATION_PLAN.md` is the source of truth; `CLAUDE.md` describes how to build and run.
+
 ## ✅ Build Status: SUCCESSFUL
 
 All code compiles and tests pass successfully.

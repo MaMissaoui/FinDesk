@@ -39,7 +39,8 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] TAN handling: procedure/medium selection (remembered), TAN entry, photoTAN/QR images, decoupled (app) confirmation.
 - [x] SEPA transfer with review, explicit confirmation and Verification-of-Payee confirmation (abort unless confirmed).
 - [x] Payments screen, Sync per bank, connection settings, offline BLZ lookup (name, BIC, FinTS URL).
-- [ ] **First real-bank test.** Everything is tested against fakes and a closed local port only. Try a sync with one real login and watch the result before relying on it.
+- [x] **Live protocol check.** `Hbci4JavaGatewayLiveTest` is opt-in (skipped unless `FINDESK_FINTS_ONLINE_URL` is set, so never in CI) and drives the real HBCI4Java stack against a live *test* FinTS server. Verified against the Subsembly FinTS Dummy (`https://fints.subsembly.net/fints`, BLZ 99000354, PIN 123456): TLS and the dialog handshake reach the server, which answers at the FinTS level (`Nachricht ist nicht verschlüsselt`) and is classified as a bank answer, not a transport failure. No free public test account allows a full login: the Subsembly *Benutzerkennung* is issued on request, and the B+S Banksysteme Demobank FinTS3 (BLZ 70000997, `123456`/`88333`) is reachable only through finAPI. Real endpoints (Deutsche Bank, GAD) reject unregistered client products.
+- [ ] **First real-bank sync.** Still unverified end-to-end with a real login: run a sync with one small real account and watch the result before relying on it.
 - [x] chipTAN optical: flicker animation via HBCI4Java's FlickerRenderer, with speed and size controls.
 - [x] Standing orders (list, create, delete) and scheduled transfers via DauerSEPA*/TermUebSEPA; same confirm/review/EUR/audit guards as transfers. Unverified against a real bank.
 
@@ -53,6 +54,17 @@ The earlier "all phases complete" status was wrong. This is what the code actual
     - [x] Schema update without Exposed's createMissingTablesAndColumns (with driver 3.50.2+ it emitted `ALTER TABLE … MODIFY`).
     - Not covered: `documents/` stays unencrypted (the unlock screen points to FileVault/BitLocker); passport files are protected indirectly (their passphrase lives in the DB). Plaintext copies made before encryption (pre-restore folders, profiles-deleted, older backups, the 2026-10-04 reset backup) stay plaintext.
 - [x] Budget tracking per category: dashboard card with spent/limit, over-budget and ahead-of-pace warnings.
+
+**Audit 2026-10-17** (fixes across views, banking and data integrity)
+
+- [x] Verification-of-Payee bug: the gateway never wrote `HAVE_VOP_RESULT=true` into the returned buffer, so a confirmed payee was re-treated as unconfirmed. The flag is now set after `confirmPayee`, with a regression test.
+- [x] Currency mixing: adding a manual transaction on a foreign-currency account always stored EUR; `getMonthlyTotal`/`getMonthlyByCategory` summed across currencies. Both are now scoped to the account's currency.
+- [x] Data integrity: indices on the frequently filtered columns (transactions, documents, audit log, rules, accounts, bank access); `CategoryRepository.delete` unlinks transactions and deletes their rules; `BankAccessRepository.delete` cascades to accounts, transactions and documents (shared `deleteBankAccessCascade`); deleting a transaction unlinks its documents.
+- [x] Banking hygiene: one `BankingService.sendOrder` guard path for all order types (explicit confirmation, validation, EUR account, audit log incl. rejected attempts); `deleteStandingOrder` routes through it; `FinTSClient.deleteStoredCredentials` + `BankingService.removeBankAccess` delete the passport and settings when a bank login is removed; audit entries for `updateConnection` and `deleteRule`.
+- [x] Localisation: EN/DE/FR strings for all user-visible status, error and progress text in view models, banking, documents, reports, import and UI components, via a non-Compose `de.findesk.i18n.AppStrings` accessor kept in sync by `Main.kt`. Audit-log details stay English (records, not UI). Also fixed the dropped `%s` in the `EditCategory`/`EditRule`/`OpenPreview` accessibility labels.
+- [x] Payment status tracking: `payment_orders` table records every order sent to a bank (action, account, recipient, amount, purpose/date/schedule, bank reference, status) before sending, and stores the bank's answer (accepted/rejected/TAN required/cancelled); shown in the Payments screen.
+- [x] Bank capability detection: after a successful dialog the login's supported business transactions (BPD/UPD job names) are detected (`BankCapabilities`), stored on the bank access (`bank_access.capabilities`, null = unknown) and used to refuse scheduled transfers and standing orders the login doesn't offer, before anything is sent. Immediate transfers stay the bank's decision.
+- [ ] Bank-specific overrides: hbci4j rewriter/`feature.*` options and Hibiscus-style per-BLZ workarounds; research done (rewriter modules, `Feature` flags, per-BLZ handling), no code yet.
 
 ---
 
@@ -92,6 +104,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
   - `OcrTextsTable` - OCR extracted text
   - `SettingsTable` - Application settings
   - `PluginsTable` - Plugin registry
+  - `PaymentOrdersTable` - Locally recorded payment orders and their status
   - `AuditLogTable` - Security audit trail
 - [x] Entity classes with relationships
 - [x] Repository interfaces and implementations
@@ -162,7 +175,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] **Transaction Import:** MT940 with CAMT fallback (parsed by HBCI4Java), hash dedup incl. bank id/running balance, rules
 - [x] **Payment System (SEPA):** single transfers with review + confirmation + Verification of Payee; audit-logged
   - [x] Standing orders and scheduled transfers (unverified against a real bank)
-  - [ ] Payment status tracking
+  - [x] Payment status tracking (`payment_orders`: bank reference and status, shown in Payments)
 - [x] **TAN Management:** procedure/medium selection (remembered), TAN dialog, photoTAN/QR image, decoupled confirmation
   - [x] chipTAN optical flicker code
 - [x] Credentials: PIN never stored; passport passphrase random per bank (settings table)
@@ -218,9 +231,14 @@ Database Layer (Exposed ORM + SQLite)
 - Kotlin JVM 2.1.10
 - Compose Desktop 1.7.3
 - Exposed ORM 0.61.0
-- SQLite JDBC 3.47.1.0
-- HBCI4Java (Phase 5)
-- Tesseract (Phase 6)
+- SQLite JDBC 3.53.4.0 (SQLCipher via `io.github.willena:sqlite-jdbc`, same `org.sqlite` package as xerial — do not add both)
+- HBCI4Java `com.github.hbci4j:hbci4j-core` 4.1.17
+- Tesseract via tess4j, PDFBox
+
+### Localisation
+- EN/DE/FR, switchable in Settings. UI strings go through `de.findesk.i18n` (`StringKey`, `Translations`); `TranslationsCompletenessTest` requires every key in all three languages.
+- View models and services build user-visible text via `de.findesk.i18n.AppStrings`, kept in sync by `Main.kt`; it defaults to English (what tests see).
+- Audit-log details and low-level repository/SQLite exception messages stay English on purpose (they are records and diagnostics, not UI copy).
 
 ### Project Structure
 ```
@@ -245,8 +263,8 @@ src/main/kotlin/de/findesk/
 
 ---
 
-*Last Updated: October 3, 2026*
-*Current Phase: Work queue complete except the items left open above*
+*Last Updated: October 17, 2026*
+*Current Phase: Work queue complete except the items left open above (first real-bank test, plugin system, bank-specific handling)*
 
 ---
 

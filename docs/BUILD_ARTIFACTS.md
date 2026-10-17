@@ -1,5 +1,7 @@
 # FinDesk Build Artifacts
 
+> **Superseded (2026-10-17).** Snapshot from 2026-10-03. `CLAUDE.md` has the current packaging commands.
+
 ## ✅ Build Status: ALL BUILDS SUCCESSFUL
 
 ---
