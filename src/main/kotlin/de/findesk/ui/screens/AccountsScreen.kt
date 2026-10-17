@@ -4,7 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,6 +19,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.findesk.banking.BankDirectory
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
@@ -127,6 +130,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     }
     if (showAddBank) {
         AddBankDialog(
+            search = vm::searchBanks,
             lookup = vm::lookupBank,
             validate = vm::validateBankAccess,
             onDismiss = { showAddBank = false },
@@ -264,12 +268,14 @@ private fun BankCard(
 }
 
 @Composable
-private fun AddBankDialog(
-    lookup: (String) -> de.findesk.banking.BankDirectory.Entry?,
+internal fun AddBankDialog(
+    search: (String) -> List<BankDirectory.Entry>,
+    lookup: (String) -> BankDirectory.Entry?,
     validate: (String, String) -> String?,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, String) -> Unit,
 ) {
+    var query by remember { mutableStateOf("") }
     var bankName by remember { mutableStateOf("") }
     var blz by remember { mutableStateOf("") }
     var bic by remember { mutableStateOf("") }
@@ -277,12 +283,50 @@ private fun AddBankDialog(
     var touched by remember { mutableStateOf(false) }
     val error = validate(bankName, blz)
     val s = strings()
+    // Recompute per keystroke; it is an in-memory scan over the bundled bank directory.
+    val suggestions = remember(query) { if (query.isBlank()) emptyList() else search(query) }
+    // The bank the entered BLZ resolves to, used to propose a FinTS connection.
+    val knownBank = remember(blz) { if (blz.length == 8) lookup(blz) else null }
+
+    fun applySuggestion(entry: BankDirectory.Entry) {
+        blz = entry.blz
+        bankName = entry.name
+        bic = entry.bic
+        query = ""
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s[StringKey.AddBank]) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.widthIn(max = 480.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(s[StringKey.BankSearchHint]) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                when {
+                    query.isBlank() -> Unit
+
+                    suggestions.isEmpty() -> Text(
+                        s[StringKey.BankSearchNoMatch],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    else -> Column(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
+                    ) {
+                        suggestions.forEach { entry ->
+                            BankSuggestionRow(entry, onSelect = { applySuggestion(entry) })
+                        }
+                    }
+                }
+                Text(s[StringKey.BankManualEntry], style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     blz,
                     { input ->
@@ -295,23 +339,12 @@ private fun AddBankDialog(
                         }
                     },
                     label = { Text(s[StringKey.BlzDigits]) },
-                    supportingText = {
-                        lookup(blz)?.let {
-                            Text(
-                                "${it.name}, ${it.city}" + if (it.pinTanUrl == null) {
-                                    " · ${s[StringKey.NoFintsServer]}"
-                                } else {
-                                    " · ${s[StringKey.OnlineSyncAvailable]}"
-                                },
-                            )
-                        }
-                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(bic, { bic = it }, label = { Text(s[StringKey.BicOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(bic, { bic = it.uppercase() }, label = { Text(s[StringKey.BicOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.OnlineUserIdOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                ConnectionProposal(knownBank, blz)
                 if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
@@ -323,6 +356,58 @@ private fun AddBankDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
+}
+
+/** One clickable bank suggestion, with the BLZ/city/BIC that disambiguate branches of the same bank. */
+@Composable
+private fun BankSuggestionRow(entry: BankDirectory.Entry, onSelect: () -> Unit) {
+    val s = strings()
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clickable(onClickLabel = s[StringKey.BankUseSuggestion], role = Role.Button, onClick = onSelect),
+    ) {
+        Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(entry.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text(
+                    listOf(entry.city, entry.blz, entry.bic).filter { it.isNotBlank() }.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (entry.hasOnlineBanking) s[StringKey.OnlineSyncAvailable] else s[StringKey.NoFintsServer],
+                style = MaterialTheme.typography.labelSmall,
+                color = if (entry.hasOnlineBanking) amountColor(false) else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Shows which FinTS server the entered BLZ resolves to, so the connection is known before saving. */
+@Composable
+private fun ConnectionProposal(bank: BankDirectory.Entry?, blz: String) {
+    val s = strings()
+    when {
+        bank?.hasOnlineBanking == true -> Text(
+            s.format(StringKey.BankFintsProposed, bank.pinTanUrl.orEmpty()),
+            style = MaterialTheme.typography.bodySmall,
+            color = amountColor(false),
+        )
+
+        bank != null -> Text(s[StringKey.NoFintsServer], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        blz.length == 8 -> Text(
+            s.format(StringKey.BankUnknownBlz, blz),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Composable

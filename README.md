@@ -117,8 +117,12 @@ See [SECURITY.md](SECURITY.md) for the threat model and how to report issues.
 
 ## Online banking (FinTS)
 
-Add your bank by BLZ; name, BIC and the FinTS server are filled in from the
-bundled bank directory. Enter your online-banking user ID under the bank's
+Add your bank by searching for it — by name, BLZ, BIC or IBAN. Suggestions show
+the matching branch (city, BLZ, BIC) and whether the bundled bank directory
+lists a FinTS server; picking one fills in name, BLZ, BIC and proposes the FinTS
+endpoint. Prefer to type the BLZ directly? That still works, and the bank name,
+BIC and FinTS server are filled in when it matches. Banks outside the directory
+can be added manually. Enter your online-banking user ID under the bank's
 connection settings and press **Sync**. FinDesk asks for your PIN on every sync
 and never stores it. Transfers are only sent after a review step and explicit
 confirmation.
