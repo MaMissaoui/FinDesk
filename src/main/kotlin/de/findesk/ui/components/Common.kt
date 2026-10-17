@@ -1,5 +1,7 @@
 package de.findesk.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,6 +17,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -252,5 +255,33 @@ object FileDialogs {
         val ext = defaultName.substringAfterLast('.', "")
         val withExt = if (ext.isNotEmpty() && !name.endsWith(".$ext", ignoreCase = true)) "$name.$ext" else name
         return File(dialog.directory, withExt)
+    }
+}
+
+/**
+ * Says why a control is disabled: on hover as a tooltip, and to screen readers as its state. Pass null when the
+ * control is enabled (or disabled for an obvious reason, like work in progress) and [content] is shown unchanged.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun DisabledReason(reason: String?, content: @Composable () -> Unit) {
+    if (reason == null) {
+        content()
+        return
+    }
+    TooltipArea(
+        tooltip = {
+            Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 2.dp) {
+                Text(
+                    reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        },
+        delayMillis = 300,
+    ) {
+        Box(Modifier.semantics { stateDescription = reason }) { content() }
     }
 }

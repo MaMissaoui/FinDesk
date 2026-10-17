@@ -61,15 +61,17 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f).semantics { heading() },
             )
-            OutlinedButton(
-                enabled = state.accounts.isNotEmpty(),
-                onClick = {
-                    FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
-                },
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(s[StringKey.Import])
+            DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
+                OutlinedButton(
+                    enabled = state.accounts.isNotEmpty(),
+                    onClick = {
+                        FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
+                    },
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(s[StringKey.Import])
+                }
             }
             Spacer(Modifier.width(8.dp))
             OutlinedButton(onClick = { vm.autoCategorizeTransactions() }) {
@@ -78,19 +80,23 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                 Text(s[StringKey.AutoCategorize])
             }
             Spacer(Modifier.width(8.dp))
-            OutlinedButton(
-                onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
-                enabled = state.transactions.isNotEmpty(),
-            ) {
-                Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(s[StringKey.ExportCsv])
+            DisabledReason(s[StringKey.HintNothingToExport].takeIf { state.transactions.isEmpty() }) {
+                OutlinedButton(
+                    onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
+                    enabled = state.transactions.isNotEmpty(),
+                ) {
+                    Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(s[StringKey.ExportCsv])
+                }
             }
             Spacer(Modifier.width(8.dp))
-            Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text(s[StringKey.Add])
+            DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
+                Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(s[StringKey.Add])
+                }
             }
         }
 

@@ -220,8 +220,16 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
                 Modifier.fillMaxWidth(),
                 actions = {
                     if (state.isLoadingStandingOrders) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    TextButton(enabled = from != null && standingOk && !state.isLoadingStandingOrders && !state.isSending, onClick = { from?.let(vm::loadStandingOrders) }) {
-                        Text(s[StringKey.LoadFromBank])
+                    DisabledReason(
+                        when {
+                            from == null -> s[StringKey.HintNeedsAccount]
+                            !standingOk -> s[StringKey.NotOfferedByBank]
+                            else -> null
+                        },
+                    ) {
+                        TextButton(enabled = from != null && standingOk && !state.isLoadingStandingOrders && !state.isSending, onClick = { from?.let(vm::loadStandingOrders) }) {
+                            Text(s[StringKey.LoadFromBank])
+                        }
                     }
                 },
             ) {

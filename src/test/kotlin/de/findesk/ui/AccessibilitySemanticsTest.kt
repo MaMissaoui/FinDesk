@@ -1,5 +1,6 @@
 package de.findesk.ui
 
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
@@ -14,11 +15,13 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.runComposeUiTest
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
+import de.findesk.ui.components.DisabledReason
 import de.findesk.ui.components.DonutChart
 import de.findesk.ui.components.MessageBanner
 import de.findesk.ui.components.SectionCard
@@ -126,6 +129,27 @@ class AccessibilitySemanticsTest {
 
         onNodeWithText("Section Title")
             .assert(hasHeading())
+    }
+
+    @Test
+    fun `a disabled button says why, to screen readers and on hover`() = runComposeUiTest {
+        setContent {
+            CompositionLocalProvider(LocalStrings provides strings) {
+                FinDeskTheme {
+                    DisabledReason("Add an account first") {
+                        Button(onClick = {}, enabled = false) { Text("Import") }
+                    }
+                }
+            }
+        }
+
+        onNode(androidx.compose.ui.test.SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Add an account first"))
+            .assertExists()
+        onNodeWithText("Add an account first").assertDoesNotExist()
+
+        onNodeWithText("Import").performMouseInput { moveTo(center) }
+        mainClock.advanceTimeBy(1_000)
+        onNodeWithText("Add an account first").assertExists()
     }
 }
 

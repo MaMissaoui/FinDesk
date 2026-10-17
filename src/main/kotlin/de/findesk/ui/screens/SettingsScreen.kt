@@ -177,7 +177,11 @@ fun SettingsScreen(
             SectionCard(
                 s[StringKey.AutoCategorizationRules],
                 Modifier.fillMaxWidth(),
-                actions = { TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) } },
+                actions = {
+                    DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
+                        TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
+                    }
+                },
             ) {
                 Text(
                     s[StringKey.RulesHint],
