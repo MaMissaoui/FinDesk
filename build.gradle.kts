@@ -67,11 +67,16 @@ compose.desktop {
             vendor = "FinDesk"
             copyright = "© 2026 FinDesk. All rights reserved."
 
+            // Declared at this level (not inside the per-OS blocks): the plugin registers
+            // `package<Format>` tasks only for the formats whose OS matches the build host, so
+            // `packageDistributionForCurrentOS` resolves to DMG on macOS, MSI/EXE on Windows and
+            // DEB/RPM on Linux. Formats listed inside an OS block are ignored for other hosts.
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb, TargetFormat.Rpm)
+
             // macOS
             macOS {
                 bundleID = "de.findesk.app"
                 iconFile.set(project.file("src/main/resources/icon-512.png"))
-                targetFormats(TargetFormat.Dmg)
             }
 
             // Windows
@@ -82,7 +87,6 @@ compose.desktop {
                 menuGroup = "FinDesk"
                 shortcut = true
                 iconFile.set(project.file("src/main/resources/icon-512.png"))
-                targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             }
 
             // Linux
@@ -92,7 +96,6 @@ compose.desktop {
                 appCategory = "Office"
                 packageName = "findesk"
                 iconFile.set(project.file("src/main/resources/icon-512.png"))
-                targetFormats(TargetFormat.Deb, TargetFormat.Rpm)
             }
         }
 
