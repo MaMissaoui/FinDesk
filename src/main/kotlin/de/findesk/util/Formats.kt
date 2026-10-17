@@ -30,6 +30,12 @@ object Formats {
         return "$sign$symbol$abs"
     }
 
+    /** Whole currency units for chart axes: "€4,000" / "€4.000". */
+    fun wholeMoney(amount: BigDecimal, currency: String = "EUR"): String {
+        val abs = DecimalFormat("#,##0", DecimalFormatSymbols(AppStrings.current.language.locale)).format(amount.abs().setScale(0, RoundingMode.HALF_UP))
+        return (if (amount.signum() < 0) "-" else "") + symbolFor(currency) + abs
+    }
+
     fun date(date: LocalDate): String = date.format(dateFormatter)
 
     /** Parses what users type in date fields: "05.11.2026" or "5.11.2026". */

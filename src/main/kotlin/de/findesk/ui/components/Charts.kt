@@ -82,27 +82,51 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
     }
 }
 
-/** Grouped income/expense bars per month. */
+/** The smallest 1, 2, 2.5 or 5 times a power of ten that is at least [value], so axis labels read as round numbers. */
+internal fun niceCeiling(value: Double): Double {
+    if (value <= 0.0) return 1.0
+    val magnitude = Math.pow(10.0, Math.floor(Math.log10(value)))
+    return listOf(1.0, 2.0, 2.5, 5.0, 10.0).first { it * magnitude >= value * (1 - 1e-9) } * magnitude
+}
+
+/** Grouped income/expense bars per month, on an axis from 0 to a round maximum. */
 @Composable
 fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier = Modifier, currency: String = "EUR") {
-    val max = months.flatMap { listOf(it.income, it.expenses) }.maxOrNull()?.toFloat()?.takeIf { it > 0f } ?: 1f
+    val top = niceCeiling(months.flatMap { listOf(it.income, it.expenses) }.maxOfOrNull { it.toDouble() } ?: 0.0)
     val grid = MaterialTheme.colorScheme.outlineVariant
     val description = buildBarsDescription(title, months, currency, strings())
+    val axisWidth = 64.dp
+    // Gridlines sit at the vertical centre of their labels
+    val labelInset = 8.dp
 
     Column(modifier.semantics { contentDescription = description }) {
-        Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            val groupWidth = size.width / months.size.coerceAtLeast(1)
-            val barWidth = groupWidth * 0.3f
-            drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
-            months.forEachIndexed { i, m ->
-                val x = i * groupWidth + groupWidth * 0.18f
-                val incomeH = m.income.toFloat() / max * size.height
-                val expenseH = m.expenses.toFloat() / max * size.height
-                drawRoundRect(Success, Offset(x, size.height - incomeH), Size(barWidth, incomeH), CornerRadius(3f, 3f))
-                drawRoundRect(Error, Offset(x + barWidth + 2f, size.height - expenseH), Size(barWidth, expenseH), CornerRadius(3f, 3f))
+        Row(Modifier.fillMaxWidth().weight(1f)) {
+            Column(Modifier.width(axisWidth).fillMaxHeight().padding(end = 8.dp), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.End) {
+                listOf(top, top / 2, 0.0).forEach {
+                    Text(
+                        Formats.wholeMoney(BigDecimal.valueOf(it), currency),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
+            Canvas(Modifier.weight(1f).fillMaxHeight().padding(vertical = labelInset)) {
+                val groupWidth = size.width / months.size.coerceAtLeast(1)
+                val barWidth = groupWidth * 0.3f
+                listOf(0f, 0.5f).forEach { f -> drawLine(grid, Offset(0f, size.height * f), Offset(size.width, size.height * f), strokeWidth = 1f) }
+                months.forEachIndexed { i, m ->
+                    val x = i * groupWidth + groupWidth * 0.18f
+                    val incomeH = (m.income.toDouble() / top).toFloat() * size.height
+                    val expenseH = (m.expenses.toDouble() / top).toFloat() * size.height
+                    drawRoundRect(Success, Offset(x, size.height - incomeH), Size(barWidth, incomeH), CornerRadius(3f, 3f))
+                    drawRoundRect(Error, Offset(x + barWidth + 2f, size.height - expenseH), Size(barWidth, expenseH), CornerRadius(3f, 3f))
+                }
+                drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
             }
         }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(start = axisWidth, top = 2.dp)) {
             months.forEach { m ->
                 Text(
                     Month.of(m.month).getDisplayName(TextStyle.SHORT, strings().language.locale),
