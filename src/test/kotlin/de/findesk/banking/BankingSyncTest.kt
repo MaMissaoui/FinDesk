@@ -3,6 +3,8 @@ package de.findesk.banking
 import de.findesk.TestData
 import de.findesk.TestDatabase
 import de.findesk.data.database.DatabaseFactory
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.SettingsRepositoryImpl
 import de.findesk.viewmodel.BankingPrompt
@@ -49,6 +51,7 @@ private class FakeGateway : FinTSGateway {
     val transfers = mutableListOf<Pair<String, TransferOrder>>()
     var failWith: Exception? = null
     override var lastTanMethod: String? = null
+    override var lastCapabilities: BankCapabilities? = null
 
     override fun fetchAll(connection: FinTSConnection, interaction: BankingInteraction, since: (String) -> LocalDate?, to: LocalDate): List<AccountSnapshot> {
         failWith?.let { throw it }
@@ -160,6 +163,62 @@ class BankingSyncTest {
     }
 
     @Test
+    fun `sync stores the login's supported transactions`() = runBlocking {
+        gateway.lastCapabilities = BankCapabilities(setOf(BankCapabilities.JOB_BALANCE, BankCapabilities.JOB_STANDING_LIST))
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        val stored = BankCapabilities.parse(data.bankAccessRepo.findItem(bankId)!!.capabilities)
+        assertNotNull(stored)
+        assertTrue(stored!!.supportsBalance)
+        assertTrue(stored.supportsStandingOrders)
+        assertFalse(stored.supportsScheduledTransfer)
+    }
+
+    @Test
+    fun `operations a known login does not offer are refused locally`() = runBlocking {
+        // A login that reported only balance access when it synced
+        data.bankAccessRepo.updateCapabilities(bankId, BankCapabilities.JOB_BALANCE)
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val accountId = data.accountRepo.findAllItems().single().id
+        val order = TransferOrder("Vermieter GmbH", "DE44500105175407324931", null, BigDecimal("850.00"), "Miete")
+        val monthly = StandingOrderSchedule.of(LocalDate.of(2026, 11, 1), StandingOrderInterval.MONTHLY, 1)
+
+        val scheduled = service.scheduleTransfer(accountId, order, today.plusDays(5), ScriptedInteraction(), confirmed = true)
+        assertEquals("INVALID", (scheduled as BankingResult.Error).code)
+        assertEquals(AppStrings[StringKey.ErrorOrderNotOffered], scheduled.message)
+
+        val created = service.createStandingOrder(accountId, order, monthly, ScriptedInteraction(), confirmed = true)
+        assertEquals("INVALID", (created as BankingResult.Error).code)
+
+        val listed = service.loadStandingOrders(accountId, ScriptedInteraction())
+        assertEquals("UNSUPPORTED", (listed as BankingResult.Error).code)
+
+        assertTrue(gateway.scheduled.isEmpty() && gateway.created.isEmpty(), "nothing may reach a bank that doesn't offer it")
+
+        // An immediate transfer is not gated by capabilities: it stays the bank's decision
+        assertTrue(service.initiateTransfer(accountId, order, ScriptedInteraction(), confirmed = true) is BankingResult.Success)
+    }
+
+    @Test
+    fun `payments view model exposes known capabilities for gating`() = runBlocking {
+        data.bankAccessRepo.updateCapabilities(bankId, "${BankCapabilities.JOB_BALANCE},${BankCapabilities.JOB_SCHEDULED_TRANSFER}")
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        val vm = de.findesk.viewmodel.PaymentsViewModel(bankingService = service)
+        vm.load().join()
+
+        val caps = vm.state.value.bankCapabilities[bankId]
+        assertNotNull(caps)
+        assertTrue(caps!!.supportsScheduledTransfer)
+        assertFalse(caps.supportsStandingOrders, "the screen hides standing orders this login does not offer")
+        vm.close()
+    }
+
+    @Test
     fun `second sync overlaps the last one and skips known bookings`() = runBlocking {
         val first = booking(giro, today.minusDays(3), "-20.00", "Shop", "A", balanceAfter = "980.00")
         gateway.snapshots = listOf(snapshot(giro, "980.00", first))
@@ -249,7 +308,7 @@ class BankingSyncTest {
         vm.confirmAndSend().join()
         assertEquals(today.plusDays(3), gateway.scheduled.single().third)
         assertTrue(gateway.transfers.isEmpty(), "a scheduled transfer is not sent as an immediate one")
-        assertEquals(listOf("SCHEDULED_TRANSFER", "STANDING_ORDER_CREATE"), vm.state.value.recentTransfers.map { it.action })
+        assertEquals(listOf("SCHEDULED_TRANSFER", "STANDING_ORDER_CREATE").sorted(), vm.state.value.paymentOrders.map { it.action }.sorted())
         vm.close()
     }
 
@@ -320,10 +379,12 @@ class BankingSyncTest {
         assertEquals("INVALID", (service.scheduleTransfer(accountId, order, today, ScriptedInteraction(), confirmed = true) as BankingResult.Error).code)
         assertEquals("INVALID", (service.scheduleTransfer(accountId, order.copy(amount = BigDecimal.ZERO), today.plusDays(5), ScriptedInteraction(), confirmed = true) as BankingResult.Error).code)
         assertTrue(gateway.scheduled.isEmpty())
+        // Rejected attempts are audit-logged too, not just the sent ones
+        assertTrue(AuditLogRepositoryImpl().findByAction("SCHEDULED_TRANSFER").any { it.details!!.contains("failed: The order was not confirmed") })
 
         assertTrue(service.scheduleTransfer(accountId, order, today.plusDays(5), ScriptedInteraction(), confirmed = true) is BankingResult.Success)
         assertEquals(Triple(giro, order, today.plusDays(5)), gateway.scheduled.single())
-        assertTrue(AuditLogRepositoryImpl().findByAction("SCHEDULED_TRANSFER").single().details!!.contains("on ${today.plusDays(5)}: sent"))
+        assertTrue(AuditLogRepositoryImpl().findByAction("SCHEDULED_TRANSFER").any { it.details!!.contains("on ${today.plusDays(5)}: sent") })
     }
 
     @Test
@@ -349,7 +410,7 @@ class BankingSyncTest {
         val created = service.createStandingOrder(accountId, order, monthly, ScriptedInteraction(), confirmed = true)
         assertEquals("order-1", (created as BankingResult.Success).data)
         assertEquals(Triple(giro, order, monthly), gateway.created.single())
-        assertTrue(AuditLogRepositoryImpl().findByAction("STANDING_ORDER_CREATE").single().details!!.contains("monthly from 2026-11-01 on day 1: sent"))
+        assertTrue(AuditLogRepositoryImpl().findByAction("STANDING_ORDER_CREATE").any { it.details!!.contains("monthly from 2026-11-01 on day 1: sent") })
 
         // Listing is read-only and needs no confirmation
         val existing = StandingOrder("order-1", giro, order, monthly, nextDate = LocalDate.of(2026, 11, 1))
@@ -362,7 +423,7 @@ class BankingSyncTest {
         assertTrue(gateway.deleted.isEmpty())
         assertTrue(service.deleteStandingOrder(accountId, existing, ScriptedInteraction(), confirmed = true) is BankingResult.Success)
         assertEquals(listOf(existing), gateway.deleted)
-        assertTrue(AuditLogRepositoryImpl().findByAction("STANDING_ORDER_DELETE").single().details!!.contains("(id order-1)"))
+        assertTrue(AuditLogRepositoryImpl().findByAction("STANDING_ORDER_DELETE").any { it.details!!.contains("(id order-1)") })
     }
 
     @Test
@@ -478,7 +539,8 @@ class HbciCallbackTest {
         assertEquals("Bitte TAN eingeben", ui.tanChallenges.single().message)
 
         ask(cb, HBCICallback.NEED_PT_DECOUPLED, msg = "Bitte in der App freigeben")
-        ask(cb, HBCICallback.HAVE_VOP_RESULT, msg = "Name stimmt überein")
+        // A confirmed payee must be written back as "true"; HBCI4Java aborts the order on an empty buffer.
+        assertEquals("true", ask(cb, HBCICallback.HAVE_VOP_RESULT, msg = "Name stimmt überein"))
         assertEquals(1, ui.payeeAsked)
 
         assertThrows<BankingCancelledException> {

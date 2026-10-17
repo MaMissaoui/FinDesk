@@ -85,4 +85,19 @@ class BankAccessRepositoryTest {
         val all = repository.findAll()
         assertTrue(all.size >= 2)
     }
+
+    @Test
+    fun `test update capabilities`() {
+        val created = repository.create("CapBank", "33333333", "CAPBDEFF", "u3")
+        assertNull(repository.findItem(created.id.value)!!.capabilities)
+
+        val updated = repository.updateCapabilities(created.id.value, "SaldoReq,UebSEPA")
+
+        assertEquals("SaldoReq,UebSEPA", updated!!.capabilities)
+        assertEquals("SaldoReq,UebSEPA", repository.findItem(created.id.value)!!.capabilities)
+
+        // A blank value clears the column, back to "capabilities unknown"
+        repository.updateCapabilities(created.id.value, "  ")
+        assertNull(repository.findItem(created.id.value)!!.capabilities)
+    }
 }

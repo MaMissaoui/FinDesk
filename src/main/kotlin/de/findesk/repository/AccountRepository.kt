@@ -97,7 +97,8 @@ class AccountRepositoryImpl : AccountRepository {
     }
 
     override fun delete(id: Int): Boolean = transaction {
-        Account.findById(id)?.delete() != null
+        // Deleting only the row would orphan transactions and document links.
+        deleteAccountCascade(id)
     }
 
     override fun getTotalBalance(currency: String): BigDecimal = transaction {

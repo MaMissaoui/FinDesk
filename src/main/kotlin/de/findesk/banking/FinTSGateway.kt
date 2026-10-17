@@ -134,4 +134,7 @@ interface FinTSGateway {
 
     /** The TAN method chosen during the last dialog, so it can be remembered. */
     val lastTanMethod: String? get() = null
+
+    /** The login's supported business transactions, detected during the last dialog, if any. */
+    val lastCapabilities: BankCapabilities? get() = null
 }

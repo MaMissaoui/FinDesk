@@ -1,5 +1,7 @@
 package de.findesk.banking
 
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import org.hbci4java.HBCI4JavaBankAccount
 import org.hbci4java.HBCI4JavaClient
 import org.hbci4java.HBCI4JavaConfig
@@ -35,12 +37,17 @@ class Hbci4JavaGateway : FinTSGateway {
     override var lastTanMethod: String? = null
         private set
 
+    @Volatile
+    override var lastCapabilities: BankCapabilities? = null
+        private set
+
     override fun fetchAll(
         connection: FinTSConnection,
         interaction: BankingInteraction,
         since: (iban: String) -> LocalDate?,
         to: LocalDate,
     ): List<AccountSnapshot> = withHandler(connection, interaction) { handler ->
+        lastCapabilities = null
         val kontos = handler.passport.accounts.orEmpty().toList()
 
         class Pending(val konto: Konto, val from: LocalDate?) {
@@ -60,11 +67,17 @@ class Hbci4JavaGateway : FinTSGateway {
             }.getOrNull()
             // MT940 if the bank offers it, otherwise CAMT. Decided up front: a second dialog would resend the PIN
             if (p.from != null) {
-                p.umsatz = statementJob(handler, "KUmsAll", p.konto, p.from, to) ?: statementJob(handler, "KUmsAllCamt", p.konto, p.from, to)
+                val first = statementJob(handler, "KUmsAll", p.konto, p.from, to)
+                val chosen = if (first.first != null) first else statementJob(handler, "KUmsAllCamt", p.konto, p.from, to)
+                p.umsatz = chosen.first
+                p.statementError = chosen.second
             }
         }
         // A failed dialog (e.g. rejected PIN) must not be followed by anything that sends the PIN again
         checkStatus(handler.execute().let { it.isOK to it.errorString })
+
+        // What this login can do, from the bank's BPD/UPD; stored so we only offer supported operations
+        lastCapabilities = BankCapabilities.detect { job -> runCatching { handler.isSupported(job) }.getOrDefault(false) }
 
         pending.map { p ->
             val account = p.konto.toAccount(connection)
@@ -76,22 +89,26 @@ class Hbci4JavaGateway : FinTSGateway {
             val transactions = if (ums != null && ums.isOK) ums.flatData.orEmpty().map { it.toTransaction(account) } else emptyList()
             val error = when {
                 p.from == null -> null
-                ums == null -> "Statements not supported for this account"
-                !ums.isOK -> ums.jobStatus?.toString()?.trim()?.ifEmpty { null } ?: "The bank rejected the statement request"
+                p.umsatz == null -> p.statementError ?: AppStrings[StringKey.StatementsNotSupported]
+                ums == null || !ums.isOK -> ums?.jobStatus?.toString()?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejectedStatements]
                 else -> null
             }
             AccountSnapshot(account, balance, transactions, error)
         }
     }
 
-    private fun statementJob(handler: HBCIHandler, gv: String, konto: Konto, from: LocalDate, to: LocalDate): HBCIJob<*>? = runCatching {
+    private fun statementJob(handler: HBCIHandler, gv: String, konto: Konto, from: LocalDate, to: LocalDate): Pair<HBCIJob<*>?, String?> = runCatching {
         handler.newJob(gv).apply {
             setParam("my", konto)
             setParam("startdate", from.toDate())
             setParam("enddate", to.toDate())
             addToQueue()
         }
-    }.getOrNull()
+    }.fold(
+        onSuccess = { it to null },
+        // A bank simply not offering the job shouldn't look like an error; anything else should be shown
+        onFailure = { e -> null to e.message?.takeIf { e !is JobNotSupportedException } },
+    )
 
     override fun transfer(
         connection: FinTSConnection,
@@ -191,7 +208,7 @@ class Hbci4JavaGateway : FinTSGateway {
         val job = handler.newJob("DauerSEPADel").apply {
             setOrderParams(handler.findKonto(existing.fromIban), existing.order)
             setScheduleParams(existing.schedule)
-            setParam("orderid", requireNotNull(existing.orderId) { "The bank did not report an id for this standing order" })
+            setParam("orderid", requireNotNull(existing.orderId) { AppStrings[StringKey.ErrorNoStandingOrderId] })
             addToQueue()
         }
         checkStatus(handler.execute().let { it.isOK to it.errorString })
@@ -246,24 +263,24 @@ class Hbci4JavaGateway : FinTSGateway {
     private fun unwrap(e: Throwable, callback: FinDeskHbciCallback): Throwable {
         generateSequence(e) { it.cause }.firstOrNull { it is BankingCancelledException }?.let { return it }
         if (generateSequence(e) { it.cause }.any { it is JobNotSupportedException }) {
-            return UnsupportedOperationException("Your bank does not offer this order type over FinTS for this account.", e)
+            return UnsupportedOperationException(AppStrings[StringKey.ErrorOrderNotOffered], e)
         }
         val networkFailure = generateSequence(e) { it.cause }.any { it is java.io.IOException } ||
             callback.diagnostics.any { it.contains("Senden der HBCI-Nachricht") || it.contains("IOException") }
         if (networkFailure) {
-            return IllegalStateException("Could not reach the bank's FinTS server. Check the server URL and your internet connection.", e)
+            return IllegalStateException(AppStrings[StringKey.ErrorBankUnreachable], e)
         }
         val bankText = callback.bankMessages.lastOrNull() ?: callback.diagnostics.lastOrNull()?.substringAfter("Exception: ")
         val root = generateSequence(e) { it.cause }.last()
-        return IllegalStateException(bankText ?: root.message ?: e.message ?: "FinTS dialog failed", e)
+        return IllegalStateException(bankText ?: root.message ?: e.message ?: AppStrings[StringKey.ErrorDialogFailed], e)
     }
 
     private fun checkStatus(status: Pair<Boolean, String?>) {
-        if (!status.first) throw IllegalStateException(status.second?.trim()?.ifEmpty { null } ?: "The bank rejected the request")
+        if (!status.first) throw IllegalStateException(status.second?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejected])
     }
 
     private fun checkJob(result: HBCIJobResult) {
-        if (!result.isOK) throw IllegalStateException(result.jobStatus?.toString()?.trim()?.ifEmpty { null } ?: "The bank rejected the order")
+        if (!result.isOK) throw IllegalStateException(result.jobStatus?.toString()?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejected])
     }
 
     private fun HBCIHandler.findKonto(iban: String): Konto = passport.accounts.orEmpty().firstOrNull { it.iban.equals(iban, ignoreCase = true) }
@@ -387,10 +404,15 @@ internal class FinDeskHbciCallback(
             }
 
             HBCICallback.NEED_PT_DECOUPLED, HBCICallback.NEED_PT_DECOUPLED_RETRY ->
-                if (!interaction.confirmDecoupled(message.ifEmpty { "Please confirm the order in your banking app." })) cancel()
+                if (!interaction.confirmDecoupled(message.ifEmpty { AppStrings[StringKey.ConfirmInBankingApp] })) cancel()
 
-            HBCICallback.HAVE_VOP_RESULT ->
-                if (!interaction.confirmPayee(message.ifEmpty { retData.toString() })) cancel("Transfer cancelled after payee verification")
+            HBCICallback.HAVE_VOP_RESULT -> {
+                // HBCI4Java reads this buffer back with StringUtil.toBoolean() and aborts on false,
+                // so a confirmed payee must be written back or every VoP transfer would fail.
+                val confirmed = interaction.confirmPayee(message.ifEmpty { retData.toString() })
+                if (!confirmed) cancel(AppStrings[StringKey.ErrorPayeeCancelled])
+                retData.set("true")
+            }
 
             HBCICallback.HAVE_INST_MSG -> interaction.info(message)
 
@@ -401,7 +423,7 @@ internal class FinDeskHbciCallback(
 
             HBCICallback.WRONG_PIN -> {
                 pin = null
-                bankMessages += "The bank rejected the PIN"
+                bankMessages += AppStrings[StringKey.ErrorBankRejectedPin]
             }
 
             else -> Unit // NEED_INFOPOINT_ACK etc.: acknowledge by leaving retData unchanged
@@ -442,7 +464,7 @@ internal class FinDeskHbciCallback(
         }
     }
 
-    private fun cancel(message: String = "Cancelled by user"): Nothing = throw BankingCancelledException(message)
+    private fun cancel(message: String = AppStrings[StringKey.ErrorCancelledByUser]): Nothing = throw BankingCancelledException(message)
 
     private fun StringBuffer.set(value: String) {
         setLength(0)

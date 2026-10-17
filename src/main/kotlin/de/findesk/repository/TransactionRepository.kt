@@ -17,6 +17,7 @@ import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -45,8 +46,8 @@ interface TransactionRepository {
     fun updateDocument(id: Int, documentId: Int?): Transaction?
     fun delete(id: Int): Boolean
     fun findByHash(hash: String): Transaction?
-    fun getMonthlyTotal(year: Int, month: Int): BigDecimal
-    fun getMonthlyByCategory(year: Int, month: Int): Map<String, BigDecimal>
+    fun getMonthlyTotal(year: Int, month: Int, currency: String): BigDecimal
+    fun getMonthlyByCategory(year: Int, month: Int, currency: String): Map<String, BigDecimal>
 
     /** Filtered, newest-first snapshot safe to use outside a transaction. */
     fun findItems(filter: TransactionFilter = TransactionFilter(), limit: Int? = null): List<TransactionItem>
@@ -142,6 +143,8 @@ class TransactionRepositoryImpl : TransactionRepository {
     }
 
     override fun delete(id: Int): Boolean = transaction {
+        // Documents linked to the booking would dangle otherwise; SQLite doesn't enforce the FK.
+        DocumentsTable.update({ DocumentsTable.linkedTransactionId eq id }) { it[linkedTransactionId] = null }
         Transaction.findById(id)?.delete() != null
     }
 
@@ -149,19 +152,19 @@ class TransactionRepositoryImpl : TransactionRepository {
         Transaction.find { TransactionsTable.hash eq hash }.firstOrNull()
     }
 
-    override fun getMonthlyTotal(year: Int, month: Int): BigDecimal = transaction {
+    override fun getMonthlyTotal(year: Int, month: Int, currency: String): BigDecimal = transaction {
         val startDate = LocalDate.of(year, month, 1)
         val endDate = startDate.plusMonths(1).minusDays(1)
         Transaction.find {
-            (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate)
+            (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate) and (TransactionsTable.currency eq currency)
         }.sumOf { it.amount }
     }
 
-    override fun getMonthlyByCategory(year: Int, month: Int): Map<String, BigDecimal> = transaction {
+    override fun getMonthlyByCategory(year: Int, month: Int, currency: String): Map<String, BigDecimal> = transaction {
         val startDate = LocalDate.of(year, month, 1)
         val endDate = startDate.plusMonths(1).minusDays(1)
         Transaction.find {
-            (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate)
+            (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate) and (TransactionsTable.currency eq currency)
         }.groupBy { it.category?.name ?: "Uncategorized" }
             .mapValues { (_, transactions) -> transactions.sumOf { it.amount } }
     }

@@ -2,9 +2,14 @@ package de.findesk.repository
 
 import de.findesk.data.entity.Category
 import de.findesk.data.table.CategoriesTable
+import de.findesk.data.table.RulesTable
+import de.findesk.data.table.TransactionsTable
 import de.findesk.model.CategoryItem
 import de.findesk.model.toItem
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.math.BigDecimal
 
 interface CategoryRepository {
@@ -68,6 +73,9 @@ class CategoryRepositoryImpl : CategoryRepository {
     }
 
     override fun delete(id: Int): Boolean = transaction {
+        // Unlink transactions and rules first; nothing else enforces the reference.
+        TransactionsTable.update({ TransactionsTable.categoryId eq id }) { it[categoryId] = null }
+        RulesTable.deleteWhere { RulesTable.categoryId eq id }
         Category.findById(id)?.delete() != null
     }
 

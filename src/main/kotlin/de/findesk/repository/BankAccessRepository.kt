@@ -24,6 +24,9 @@ interface BankAccessRepository {
     /** Stores the FinTS server URL and/or the chosen TAN method (null leaves a value unchanged). */
     fun updateConnection(id: Int, serverUrl: String? = null, tanMethod: String? = null, userId: String? = null): BankAccessItem?
 
+    /** Stores the login's supported business transactions (see BankCapabilities). */
+    fun updateCapabilities(id: Int, capabilities: String): BankAccessItem?
+
     /** Deletes the bank access together with its accounts and their transactions. */
     fun deleteWithAccounts(id: Int): Boolean
 }
@@ -59,7 +62,8 @@ class BankAccessRepositoryImpl : BankAccessRepository {
     }
 
     override fun delete(id: Int): Boolean = transaction {
-        BankAccess.findById(id)?.delete() != null
+        // Deleting only the row would orphan its accounts and their transactions.
+        deleteBankAccessCascade(id)
     }
 
     override fun updateLastSync(id: Int): BankAccess? = transaction {
@@ -72,13 +76,7 @@ class BankAccessRepositoryImpl : BankAccessRepository {
         BankAccess.all().map { it.toItem() }
     }
 
-    override fun deleteWithAccounts(id: Int): Boolean = transaction {
-        AccountsTable.select(AccountsTable.id)
-            .where { AccountsTable.bankAccessId eq id }
-            .map { it[AccountsTable.id].value }
-            .forEach { deleteAccountCascade(it) }
-        BankAccessTable.deleteWhere { BankAccessTable.id eq id } > 0
-    }
+    override fun deleteWithAccounts(id: Int): Boolean = transaction { deleteBankAccessCascade(id) }
 
     override fun findItem(id: Int): BankAccessItem? = transaction { BankAccess.findById(id)?.toItem() }
 
@@ -89,4 +87,17 @@ class BankAccessRepositoryImpl : BankAccessRepository {
             tanMethod?.let { this.tanMethod = it }
         }?.toItem()
     }
+
+    override fun updateCapabilities(id: Int, capabilities: String): BankAccessItem? = transaction {
+        BankAccess.findById(id)?.apply { this.capabilities = capabilities.trim().ifEmpty { null } }?.toItem()
+    }
+}
+
+/** Must run inside a transaction. Deletes the bank access with its accounts and their transactions. */
+private fun deleteBankAccessCascade(id: Int): Boolean {
+    AccountsTable.select(AccountsTable.id)
+        .where { AccountsTable.bankAccessId eq id }
+        .map { it[AccountsTable.id].value }
+        .forEach { deleteAccountCascade(it) }
+    return BankAccessTable.deleteWhere { BankAccessTable.id eq id } > 0
 }

@@ -1,12 +1,16 @@
 package de.findesk.viewmodel
 
+import de.findesk.banking.BankCapabilities
 import de.findesk.banking.BankDirectory
 import de.findesk.banking.BankingResult
 import de.findesk.banking.BankingService
 import de.findesk.banking.StandingOrder
 import de.findesk.banking.StandingOrderSchedule
 import de.findesk.banking.TransferOrder
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.model.AccountItem
+import de.findesk.model.PaymentOrderItem
 import de.findesk.repository.*
 import de.findesk.util.Iban
 import kotlinx.coroutines.CoroutineScope
@@ -36,7 +40,10 @@ data class PaymentsState(
     val isLoadingStandingOrders: Boolean = false,
     /** Standing order the user asked to delete, waiting for confirmation. */
     val deleteReview: StandingOrder? = null,
-    val recentTransfers: List<AuditEntry> = emptyList(),
+    /** Locally recorded orders sent to a bank, newest first, with the bank's answer. */
+    val paymentOrders: List<PaymentOrderItem> = emptyList(),
+    /** Known capabilities per bank access id; an absent entry means "unknown" (nothing is hidden). */
+    val bankCapabilities: Map<Int, BankCapabilities> = emptyMap(),
     val isSending: Boolean = false,
     val error: String? = null,
     val message: String? = null,
@@ -44,8 +51,9 @@ data class PaymentsState(
 
 class PaymentsViewModel(
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
-    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val bankingService: BankingService = BankingService(),
+    private val paymentOrderRepository: PaymentOrderRepository = PaymentOrderRepositoryImpl(),
+    private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
     val bankingInteraction: UiBankingInteraction = UiBankingInteraction(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
@@ -62,9 +70,11 @@ class PaymentsViewModel(
     private fun refresh() {
         _state.update {
             it.copy(
-                accounts = accountRepository.findAllItems().filter { it.currency == "EUR" }, // SEPA is EUR only
-                recentTransfers = ORDER_ACTIONS.flatMap(auditLogRepository::findByAction).sortedByDescending { e -> e.timestamp }.take(20)
-                    .map { e -> AuditEntry(e.timestamp, e.action, e.details) },
+                accounts = accountRepository.findAllItems().filter { a -> a.currency == "EUR" }, // SEPA is EUR only
+                paymentOrders = paymentOrderRepository.findRecentItems(20),
+                bankCapabilities = bankAccessRepository.findAllItems()
+                    .mapNotNull { bank -> BankCapabilities.parse(bank.capabilities)?.let { caps -> bank.id to caps } }
+                    .toMap(),
             )
         }
     }
@@ -110,17 +120,17 @@ class PaymentsViewModel(
             }
             refresh()
             val sent = when {
-                review.schedule != null -> "Standing order to ${order.recipientName} set up"
-                review.date != null -> "Transfer to ${order.recipientName} scheduled for ${de.findesk.util.Formats.date(review.date)}"
-                else -> "Transfer to ${order.recipientName} sent"
+                review.schedule != null -> AppStrings.format(StringKey.MessageStandingOrderSetUp, order.recipientName)
+                review.date != null -> AppStrings.format(StringKey.MessageTransferScheduled, order.recipientName, de.findesk.util.Formats.date(review.date))
+                else -> AppStrings.format(StringKey.MessageTransferSent, order.recipientName)
             }
             // A new standing order makes the loaded list stale
             if (result is BankingResult.Success && review.schedule != null) _state.update { it.copy(standingOrders = null) }
             _state.update {
                 when (result) {
                     is BankingResult.Success -> it.copy(isSending = false, review = null, message = sent)
-                    is BankingResult.Error -> it.copy(isSending = false, review = if (result.code == "CANCELLED") null else it.review, error = if (result.code == "CANCELLED") "Transfer cancelled" else result.message)
-                    is BankingResult.TanRequired -> it.copy(isSending = false, error = "TAN required")
+                    is BankingResult.Error -> it.copy(isSending = false, review = if (result.code == "CANCELLED") null else it.review, error = if (result.code == "CANCELLED") AppStrings[StringKey.MessageTransferCancelled] else result.message)
+                    is BankingResult.TanRequired -> it.copy(isSending = false, error = AppStrings[StringKey.TanRequired])
                 }
             }
         }
@@ -135,7 +145,7 @@ class PaymentsViewModel(
                 when (result) {
                     is BankingResult.Success -> it.copy(isLoadingStandingOrders = false, standingOrders = result.data)
                     is BankingResult.Error -> it.copy(isLoadingStandingOrders = false, error = if (result.code == "CANCELLED") null else result.message)
-                    is BankingResult.TanRequired -> it.copy(isLoadingStandingOrders = false, error = "TAN required")
+                    is BankingResult.TanRequired -> it.copy(isLoadingStandingOrders = false, error = AppStrings[StringKey.TanRequired])
                 }
             }
         }
@@ -171,19 +181,15 @@ class PaymentsViewModel(
                         isSending = false,
                         deleteReview = null,
                         standingOrders = it.standingOrders?.minus(existing),
-                        message = "Standing order to ${existing.order.recipientName} deleted",
+                        message = AppStrings.format(StringKey.MessageStandingOrderDeleted, existing.order.recipientName),
                     )
 
                     is BankingResult.Error -> it.copy(isSending = false, deleteReview = if (result.code == "CANCELLED") null else it.deleteReview, error = if (result.code == "CANCELLED") null else result.message)
 
-                    is BankingResult.TanRequired -> it.copy(isSending = false, error = "TAN required")
+                    is BankingResult.TanRequired -> it.copy(isSending = false, error = AppStrings[StringKey.TanRequired])
                 }
             }
         }
-    }
-
-    companion object {
-        private val ORDER_ACTIONS = listOf("TRANSFER", "SCHEDULED_TRANSFER", "STANDING_ORDER_CREATE", "STANDING_ORDER_DELETE")
     }
 
     override fun close() {

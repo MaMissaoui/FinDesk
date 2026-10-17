@@ -21,6 +21,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
+import de.findesk.model.PaymentOrderStatus
 import de.findesk.ui.components.*
 import de.findesk.util.Formats
 import de.findesk.util.Iban
@@ -55,6 +56,14 @@ fun PaymentsScreen() {
         Execution.NOW -> true
         Execution.ON_DATE -> date != null
         Execution.STANDING -> date != null && (lastDateText.isBlank() || lastDate != null)
+    }
+    // Only gate when the login is known not to support it; unknown capabilities keep everything enabled
+    val capabilities = from?.let { state.bankCapabilities[it.bankAccessId] }
+    val scheduledOk = capabilities?.supportsScheduledTransfer != false
+    val standingOk = capabilities?.supportsStandingOrders != false
+    LaunchedEffect(scheduledOk, standingOk) {
+        if (execution == Execution.ON_DATE && !scheduledOk) execution = Execution.NOW
+        if (execution == Execution.STANDING && !standingOk) execution = Execution.NOW
     }
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -123,8 +132,16 @@ fun PaymentsScreen() {
                     Text(s[StringKey.Execution], style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Execution.entries.forEach { e ->
-                            FilterChip(selected = execution == e, onClick = { execution = e }, label = { Text(s[e.label]) })
+                            val supported = when (e) {
+                                Execution.ON_DATE -> scheduledOk
+                                Execution.STANDING -> standingOk
+                                Execution.NOW -> true
+                            }
+                            FilterChip(selected = execution == e, enabled = supported, onClick = { execution = e }, label = { Text(s[e.label]) })
                         }
+                    }
+                    if (!scheduledOk || !standingOk) {
+                        Text(s[StringKey.NotOfferedByBank], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (execution != Execution.NOW) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -161,7 +178,8 @@ fun PaymentsScreen() {
                         }
                     }
                     Button(
-                        enabled = from != null && name.isNotBlank() && ibanOk && parsedAmount != null && parsedAmount.signum() > 0 && scheduleOk && !state.isSending,
+                        enabled = from != null && name.isNotBlank() && ibanOk && parsedAmount != null && parsedAmount.signum() > 0 && scheduleOk && !state.isSending &&
+                            (execution != Execution.ON_DATE || scheduledOk) && (execution != Execution.STANDING || standingOk),
                         onClick = {
                             val order = TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose)
                             when (execution) {
@@ -193,13 +211,14 @@ fun PaymentsScreen() {
                 Modifier.fillMaxWidth(),
                 actions = {
                     if (state.isLoadingStandingOrders) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    TextButton(enabled = from != null && !state.isLoadingStandingOrders && !state.isSending, onClick = { from?.let(vm::loadStandingOrders) }) {
+                    TextButton(enabled = from != null && standingOk && !state.isLoadingStandingOrders && !state.isSending, onClick = { from?.let(vm::loadStandingOrders) }) {
                         Text(s[StringKey.LoadFromBank])
                     }
                 },
             ) {
                 val orders = state.standingOrders?.takeIf { state.standingOrdersAccount == from?.id }
                 when {
+                    !standingOk -> Text(s[StringKey.NotOfferedByBank], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     orders == null -> Text(s[StringKey.StandingOrdersHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     orders.isEmpty() -> Text(s[StringKey.NoStandingOrders], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -221,10 +240,24 @@ fun PaymentsScreen() {
                 }
             }
             SectionCard(s[StringKey.RecentTransfersLabel], Modifier.fillMaxWidth()) {
-                if (state.recentTransfers.isEmpty()) Text(s[StringKey.NoneYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
-                state.recentTransfers.forEach { e ->
-                    Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                if (state.paymentOrders.isEmpty()) Text(s[StringKey.NoneYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                state.paymentOrders.forEach { order ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(order.recipientName ?: s.paymentAction(order.action), style = MaterialTheme.typography.bodySmall)
+                        order.amount?.let { Text(Formats.money(it, order.currency), style = MaterialTheme.typography.bodySmall) }
+                        Text(
+                            s.paymentStatus(order.status),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = paymentStatusColor(order.status),
+                        )
+                    }
+                    Text(
+                        "${s.paymentAction(order.action)} · ${Formats.dateTime(order.createdAt)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    order.bankOrderId?.let { Text("${s[StringKey.PaymentOrderId]}: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    order.message?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
                     HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 }
             }
@@ -330,4 +363,12 @@ private fun ReviewRow(label: String, value: String) {
         Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
         Text(value)
     }
+}
+
+@Composable
+private fun paymentStatusColor(status: String) = when (status) {
+    PaymentOrderStatus.ACCEPTED -> de.findesk.ui.theme.Success
+    PaymentOrderStatus.REJECTED -> MaterialTheme.colorScheme.error
+    PaymentOrderStatus.PENDING, PaymentOrderStatus.TAN_REQUIRED -> MaterialTheme.colorScheme.tertiary
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }

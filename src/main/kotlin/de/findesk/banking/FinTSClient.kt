@@ -1,5 +1,7 @@
 package de.findesk.banking
 
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
 import de.findesk.util.AppPaths
@@ -45,12 +47,12 @@ class FinTSClient(
      */
     fun connectionFor(bankAccess: BankAccessItem): BankingResult<FinTSConnection> {
         val serverUrl = bankAccess.serverUrl?.takeIf { it.isNotBlank() } ?: BankDirectory.lookup(bankAccess.blz)?.pinTanUrl
-            ?: return BankingResult.Error("NO_SERVER", "No FinTS server known for BLZ ${bankAccess.blz}. Enter the bank's FinTS URL.")
+            ?: return BankingResult.Error("NO_SERVER", AppStrings.format(StringKey.ErrorNoFintsServer, bankAccess.blz))
         runCatching { FinDeskHbciCallback.hostFor(serverUrl) }.onFailure {
-            return BankingResult.Error("BAD_SERVER", it.message ?: "Invalid FinTS server URL")
+            return BankingResult.Error("BAD_SERVER", it.message ?: AppStrings[StringKey.ErrorBadServerUrl])
         }
         if (bankAccess.userId.isBlank()) {
-            return BankingResult.Error("NO_USER", "Enter your online banking user ID (Anmeldename/Legitimations-ID) for ${bankAccess.bankName}.")
+            return BankingResult.Error("NO_USER", AppStrings.format(StringKey.ErrorEnterUserId, bankAccess.bankName))
         }
         return BankingResult.Success(
             FinTSConnection(
@@ -74,7 +76,7 @@ class FinTSClient(
         interaction: BankingInteraction,
         since: (iban: String) -> LocalDate?,
         to: LocalDate = LocalDate.now(),
-    ): BankingResult<List<AccountSnapshot>> = run(bankAccessId, ConnectionStatus.SYNCING, "Connecting to bank…") { connection ->
+    ): BankingResult<List<AccountSnapshot>> = run(bankAccessId, ConnectionStatus.SYNCING, AppStrings[StringKey.ProgressConnecting]) { connection ->
         gateway.fetchAll(connection, interaction, since, to)
     }
 
@@ -86,7 +88,7 @@ class FinTSClient(
         interaction: BankingInteraction,
         fromIban: String,
         order: TransferOrder,
-    ): BankingResult<TransferResult> = run(bankAccessId, ConnectionStatus.CONNECTING, "Sending transfer…") { connection ->
+    ): BankingResult<TransferResult> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressSendingTransfer]) { connection ->
         gateway.transfer(connection, interaction, fromIban, order)
     }
 
@@ -96,7 +98,7 @@ class FinTSClient(
         fromIban: String,
         order: TransferOrder,
         date: java.time.LocalDate,
-    ): BankingResult<TransferResult> = run(bankAccessId, ConnectionStatus.CONNECTING, "Sending scheduled transfer…") { connection ->
+    ): BankingResult<TransferResult> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressSendingScheduled]) { connection ->
         gateway.scheduledTransfer(connection, interaction, fromIban, order, date)
     }
 
@@ -104,7 +106,7 @@ class FinTSClient(
         bankAccessId: Int,
         interaction: BankingInteraction,
         fromIban: String,
-    ): BankingResult<List<StandingOrder>> = run(bankAccessId, ConnectionStatus.CONNECTING, "Loading standing orders…") { connection ->
+    ): BankingResult<List<StandingOrder>> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressLoadingStandingOrders]) { connection ->
         gateway.listStandingOrders(connection, interaction, fromIban)
     }
 
@@ -114,7 +116,7 @@ class FinTSClient(
         fromIban: String,
         order: TransferOrder,
         schedule: StandingOrderSchedule,
-    ): BankingResult<String?> = run(bankAccessId, ConnectionStatus.CONNECTING, "Sending standing order…") { connection ->
+    ): BankingResult<String?> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressSendingStandingOrder]) { connection ->
         gateway.createStandingOrder(connection, interaction, fromIban, order, schedule)
     }
 
@@ -122,7 +124,7 @@ class FinTSClient(
         bankAccessId: Int,
         interaction: BankingInteraction,
         existing: StandingOrder,
-    ): BankingResult<Unit> = run(bankAccessId, ConnectionStatus.CONNECTING, "Deleting standing order…") { connection ->
+    ): BankingResult<Unit> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressDeletingStandingOrder]) { connection ->
         gateway.deleteStandingOrder(connection, interaction, existing)
     }
 
@@ -133,7 +135,7 @@ class FinTSClient(
         block: (FinTSConnection) -> T,
     ): BankingResult<T> = withContext(Dispatchers.IO) {
         val bankAccess = bankAccessRepository.findItem(bankAccessId)
-            ?: return@withContext BankingResult.Error("NOT_FOUND", "Bank connection $bankAccessId not found")
+            ?: return@withContext BankingResult.Error("NOT_FOUND", AppStrings.format(StringKey.ErrorConnectionNotFound, bankAccessId))
         val connection = when (val c = connectionFor(bankAccess)) {
             is BankingResult.Success -> c.data
             is BankingResult.Error -> return@withContext c
@@ -146,14 +148,17 @@ class FinTSClient(
             gateway.lastTanMethod?.takeIf { it != bankAccess.tanMethod }?.let {
                 bankAccessRepository.updateConnection(bankAccessId, tanMethod = it)
             }
+            gateway.lastCapabilities?.let {
+                bankAccessRepository.updateCapabilities(bankAccessId, it.serialize())
+            }
             _connectionStatus.value = ConnectionStatus.CONNECTED
             BankingResult.Success(result)
         } catch (e: BankingCancelledException) {
             _connectionStatus.value = ConnectionStatus.DISCONNECTED
-            BankingResult.Error("CANCELLED", e.message ?: "Cancelled")
+            BankingResult.Error("CANCELLED", e.message ?: AppStrings[StringKey.ErrorCancelled])
         } catch (e: Exception) {
             _connectionStatus.value = ConnectionStatus.ERROR
-            BankingResult.Error("FINTS_ERROR", e.message ?: "FinTS dialog failed")
+            BankingResult.Error("FINTS_ERROR", e.message ?: AppStrings[StringKey.ErrorDialogFailed])
         } finally {
             _syncProgress.value = null
         }
@@ -171,6 +176,12 @@ class FinTSClient(
         val passphrase = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
         settingsRepository.setValue(key, passphrase)
         return passphrase
+    }
+
+    /** Removes the bank's stored passport file and passphrase; call when the bank access is deleted. */
+    fun deleteStoredCredentials(bankAccessId: Int) {
+        File(passportDir, "bank-$bankAccessId.dat").delete()
+        settingsRepository.delete("fints.passport.$bankAccessId")
     }
 
     /**

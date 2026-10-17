@@ -44,4 +44,4 @@ data class TanChallenge(
 }
 
 /** Thrown when the user cancels a banking prompt. */
-class BankingCancelledException(message: String = "Cancelled by user") : RuntimeException(message)
+class BankingCancelledException(message: String = de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ErrorCancelledByUser]) : RuntimeException(message)

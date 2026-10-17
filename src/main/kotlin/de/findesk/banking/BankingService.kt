@@ -1,6 +1,9 @@
 package de.findesk.banking
 
 import de.findesk.data.entity.BankAccess
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
+import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
 import de.findesk.util.Iban
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +24,7 @@ class BankingService(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
+    private val paymentOrderRepository: PaymentOrderRepository = PaymentOrderRepositoryImpl(),
     private val today: () -> LocalDate = { LocalDate.now() },
 ) {
     private val _isLoading = MutableStateFlow(false)
@@ -51,11 +55,11 @@ class BankingService(
         val warnings: List<String>,
     ) {
         fun summary(): String = buildString {
-            append("Synced $accountsSynced account(s)")
-            if (accountsAdded > 0) append(", $accountsAdded new")
-            append(": $imported new transaction(s)")
-            if (categorized > 0) append(", $categorized auto-categorized")
-            if (duplicates > 0) append(", $duplicates already known")
+            append(AppStrings.format(StringKey.SyncSummary, accountsSynced))
+            if (accountsAdded > 0) append(AppStrings.format(StringKey.SyncSummaryNew, accountsAdded))
+            append(AppStrings.format(StringKey.SyncSummaryTransactions, imported))
+            if (categorized > 0) append(AppStrings.format(StringKey.SyncSummaryCategorized, categorized))
+            if (duplicates > 0) append(AppStrings.format(StringKey.SyncSummaryDuplicates, duplicates))
         }
     }
 
@@ -76,6 +80,19 @@ class BankingService(
     }
 
     /**
+     * Removes a bank login with its accounts, transactions and the stored FinTS passport/passphrase.
+     */
+    suspend fun removeBankAccess(bankAccessId: Int): Boolean = withContext(Dispatchers.IO) {
+        val name = bankAccessRepository.findItem(bankAccessId)?.bankName
+        val removed = bankAccessRepository.deleteWithAccounts(bankAccessId)
+        if (removed) {
+            finTSClient.deleteStoredCredentials(bankAccessId)
+            auditLogRepository.log("DELETE_BANK_ACCESS", "user", "Deleted bank access ${bankAccessId}${name?.let { " ($it)" }.orEmpty()}")
+        }
+        removed
+    }
+
+    /**
      * Sync one bank login: accounts (matched by IBAN, new ones are created), balances and bookings.
      */
     suspend fun syncBankConnection(bankAccessId: Int, interaction: BankingInteraction): BankingResult<SyncReport> {
@@ -83,7 +100,7 @@ class BankingService(
         _error.value = null
         try {
             val bankAccess = withContext(Dispatchers.IO) { bankAccessRepository.findItem(bankAccessId) }
-                ?: return BankingResult.Error("NOT_FOUND", "Bank connection not found")
+                ?: return BankingResult.Error("NOT_FOUND", AppStrings[StringKey.ErrorBankConnectionNotFound])
             val known = withContext(Dispatchers.IO) { accountRepository.findAllItems() }.filter { it.bankAccessId == bankAccessId }
             val now = today()
             val defaultStart = now.minusDays(INITIAL_SYNC_DAYS)
@@ -108,7 +125,7 @@ class BankingService(
                 var categorized = 0
                 val warnings = mutableListOf<String>()
                 snapshots.filter { it.account.iban.isNotBlank() }.forEachIndexed { i, snap ->
-                    finTSClient.reportProgress("Saving ${snap.account.iban.takeLast(4)}…", 0.5f + 0.5f * i / snapshots.size, i, snapshots.size)
+                    finTSClient.reportProgress(AppStrings.format(StringKey.ProgressSavingAccount, snap.account.iban.takeLast(4)), 0.5f + 0.5f * i / snapshots.size, i, snapshots.size)
                     val iban = Iban.normalize(snap.account.iban)
                     val existing = known.firstOrNull { it.iban.equals(iban, true) }
                     val accountId = existing?.id ?: accountRepository.create(
@@ -135,7 +152,7 @@ class BankingService(
             }
         } catch (e: Exception) {
             _error.value = e.message
-            return BankingResult.Error("SYNC_FAILED", e.message ?: "Sync failed")
+            return BankingResult.Error("SYNC_FAILED", e.message ?: AppStrings[StringKey.ErrorSyncFailed])
         } finally {
             _isLoading.value = false
         }
@@ -179,26 +196,35 @@ class BankingService(
 
     /** Validates a transfer before anything is sent; returns an error message or null. */
     fun validateTransfer(order: TransferOrder): String? = when {
-        order.recipientName.isBlank() -> "Recipient name is required"
-        order.recipientName.length > MAX_NAME_LENGTH -> "Recipient name is longer than $MAX_NAME_LENGTH characters"
-        !Iban.isValid(order.recipientIban) -> "Recipient IBAN is not valid"
-        order.amount.signum() <= 0 -> "Amount must be greater than zero"
-        order.amount.scale() > 2 && order.amount.stripTrailingZeros().scale() > 2 -> "Amount can have at most 2 decimals"
-        order.purpose.length > MAX_PURPOSE_LENGTH -> "Purpose is longer than $MAX_PURPOSE_LENGTH characters"
+        order.recipientName.isBlank() -> AppStrings[StringKey.ErrorRecipientNameRequired]
+        order.recipientName.length > MAX_NAME_LENGTH -> AppStrings.format(StringKey.ErrorRecipientNameTooLong, MAX_NAME_LENGTH)
+        !Iban.isValid(order.recipientIban) -> AppStrings[StringKey.ErrorRecipientIbanInvalid]
+        order.amount.signum() <= 0 -> AppStrings[StringKey.ErrorAmountGreaterThanZero]
+        order.amount.scale() > 2 && order.amount.stripTrailingZeros().scale() > 2 -> AppStrings[StringKey.ErrorAmountMaxDecimals]
+        order.purpose.length > MAX_PURPOSE_LENGTH -> AppStrings.format(StringKey.ErrorPurposeTooLong, MAX_PURPOSE_LENGTH)
         else -> null
     }
 
     /** Checks a standing order's schedule; returns an error message or null. */
     fun validateSchedule(schedule: StandingOrderSchedule): String? = when {
-        schedule.interval == null -> "This interval is not supported"
-        !schedule.firstDate.isAfter(today()) -> "The first execution must be after today"
-        schedule.lastDate != null && schedule.lastDate.isBefore(schedule.firstDate) -> "The last execution is before the first"
-        schedule.timeUnit == "M" && schedule.executionDay !in 1..31 && schedule.executionDay != 99 -> "The execution day must be between 1 and 31"
-        schedule.timeUnit == "W" && schedule.executionDay !in 1..7 -> "The execution day must be between 1 (Monday) and 7 (Sunday)"
+        schedule.interval == null -> AppStrings[StringKey.ErrorIntervalUnsupported]
+        !schedule.firstDate.isAfter(today()) -> AppStrings[StringKey.ErrorFirstExecutionFuture]
+        schedule.lastDate != null && schedule.lastDate.isBefore(schedule.firstDate) -> AppStrings[StringKey.ErrorLastBeforeFirst]
+        schedule.timeUnit == "M" && schedule.executionDay !in 1..31 && schedule.executionDay != 99 -> AppStrings[StringKey.ErrorExecutionDayMonth]
+        schedule.timeUnit == "W" && schedule.executionDay !in 1..7 -> AppStrings[StringKey.ErrorExecutionDayWeek]
         else -> null
     }
 
-    fun validateExecutionDate(date: LocalDate): String? = if (!date.isAfter(today())) "The execution date must be after today" else null
+    fun validateExecutionDate(date: LocalDate): String? = if (!date.isAfter(today())) AppStrings[StringKey.ErrorExecutionDateFuture] else null
+
+    /**
+     * Error if the bank login is known not to support [job]; null when it does or when its capabilities are
+     * unknown (never synced, or the bank reported nothing), in which case the bank decides.
+     */
+    private fun unsupported(bankAccessId: Int, job: String): String? {
+        val capabilities = BankCapabilities.parse(bankAccessRepository.findItem(bankAccessId)?.capabilities) ?: return null
+        return if (capabilities.supports(job)) null else AppStrings[StringKey.ErrorOrderNotOffered]
+    }
 
     /**
      * Initiate a SEPA transfer. Moves real money: [confirmed] must reflect an explicit user confirmation
@@ -220,7 +246,16 @@ class BankingService(
         date: LocalDate,
         interaction: BankingInteraction,
         confirmed: Boolean,
-    ): BankingResult<FinTSClient.TransferResult> = sendOrder("SCHEDULED_TRANSFER", fromAccountId, order, confirmed, validateExecutionDate(date), " on $date") { account, o ->
+    ): BankingResult<FinTSClient.TransferResult> = sendOrder(
+        "SCHEDULED_TRANSFER",
+        fromAccountId,
+        order,
+        confirmed,
+        validateExecutionDate(date),
+        " on $date",
+        requestedDate = date,
+        accountCheck = { account -> unsupported(account.bankAccessId, BankCapabilities.JOB_SCHEDULED_TRANSFER) },
+    ) { account, o ->
         finTSClient.scheduleTransfer(account.bankAccessId, interaction, account.iban, o, date)
     }
 
@@ -239,6 +274,9 @@ class BankingService(
         validateSchedule(schedule),
         " ${schedule.interval?.name?.lowercase() ?: "${schedule.step}${schedule.timeUnit}"} from ${schedule.firstDate} on day ${schedule.executionDay}" +
             (schedule.lastDate?.let { " until $it" } ?: ""),
+        schedule = "${schedule.interval?.name?.lowercase() ?: "${schedule.step}${schedule.timeUnit}"} from ${schedule.firstDate} on day ${schedule.executionDay}" +
+            (schedule.lastDate?.let { " until $it" } ?: ""),
+        accountCheck = { account -> unsupported(account.bankAccessId, BankCapabilities.JOB_STANDING_NEW) },
     ) { account, o ->
         finTSClient.createStandingOrder(account.bankAccessId, interaction, account.iban, o, schedule)
     }
@@ -246,37 +284,44 @@ class BankingService(
     /** Read-only: the account's standing orders as the bank reports them. */
     suspend fun loadStandingOrders(fromAccountId: Int, interaction: BankingInteraction): BankingResult<List<StandingOrder>> {
         val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
-            ?: return BankingResult.Error("NOT_FOUND", "Account not found")
+            ?: return BankingResult.Error("NOT_FOUND", AppStrings[StringKey.ErrorAccountNotFound])
+        unsupported(account.bankAccessId, BankCapabilities.JOB_STANDING_LIST)?.let { return BankingResult.Error("UNSUPPORTED", it) }
         return finTSClient.listStandingOrders(account.bankAccessId, interaction, account.iban)
     }
 
-    /** Deletes a standing order, which stops its future payments. Needs [confirmed] like any order. */
+    /** Deletes a standing order, which stops its future payments. Same guards as other orders. */
     suspend fun deleteStandingOrder(
         fromAccountId: Int,
         existing: StandingOrder,
         interaction: BankingInteraction,
         confirmed: Boolean,
     ): BankingResult<Unit> {
-        if (!confirmed) return BankingResult.Error("NOT_CONFIRMED", "Deleting the standing order was not confirmed")
-        if (existing.orderId == null || !existing.canDelete) return BankingResult.Error("INVALID", "The bank does not allow deleting this standing order here")
-        val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
-            ?: return BankingResult.Error("NOT_FOUND", "Account not found")
-        if (!Iban.normalize(existing.fromIban).equals(account.iban, ignoreCase = true)) return BankingResult.Error("INVALID", "The standing order belongs to another account")
-        val result = finTSClient.deleteStandingOrder(account.bankAccessId, interaction, existing)
-        withContext(Dispatchers.IO) {
-            auditLogRepository.log(
-                "STANDING_ORDER_DELETE",
-                "user",
-                "${existing.order.amount.toPlainString()} EUR from …${account.iban.takeLast(4)} to ${existing.order.recipientName} (id ${existing.orderId}): ${outcome(result)}",
-            )
+        val check = if (existing.orderId == null || !existing.canDelete) AppStrings[StringKey.ErrorCannotDeleteStandingOrder] else null
+        return sendOrder(
+            action = "STANDING_ORDER_DELETE",
+            fromAccountId = fromAccountId,
+            order = existing.order,
+            confirmed = confirmed,
+            check = check,
+            describe = " (id ${existing.orderId})",
+            // The bank may report names/purposes longer than we accept when sending; don't re-validate those
+            validateOrder = false,
+            accountCheck = { account ->
+                if (!Iban.normalize(existing.fromIban).equals(account.iban, ignoreCase = true)) {
+                    AppStrings[StringKey.ErrorStandingOrderOtherAccount]
+                } else {
+                    unsupported(account.bankAccessId, BankCapabilities.JOB_STANDING_DELETE)
+                }
+            },
+        ) { account, _ ->
+            finTSClient.deleteStandingOrder(account.bankAccessId, interaction, existing)
         }
-        if (result is BankingResult.Error) _error.value = result.message
-        return result
     }
 
     /**
-     * Shared guard for everything that moves money: explicit confirmation of the exact order, a valid order (and
-     * [check], e.g. the schedule), an EUR source account. Every attempt is audit-logged with its outcome.
+     * Shared guard for everything that changes an order at the bank: explicit confirmation of the exact order, a valid
+     * order (and [check], e.g. the schedule), an EUR source account and any [accountCheck]. Every attempt, including
+     * the rejected ones, is audit-logged with its outcome.
      */
     private suspend fun <T> sendOrder(
         action: String,
@@ -285,28 +330,48 @@ class BankingService(
         confirmed: Boolean,
         check: String?,
         describe: String,
+        validateOrder: Boolean = true,
+        accountCheck: ((de.findesk.model.AccountItem) -> String?)? = null,
+        requestedDate: LocalDate? = null,
+        schedule: String? = null,
         send: suspend (de.findesk.model.AccountItem, TransferOrder) -> BankingResult<T>,
     ): BankingResult<T> {
-        if (!confirmed) return BankingResult.Error("NOT_CONFIRMED", "The order was not confirmed")
-        validateTransfer(order)?.let { return BankingResult.Error("INVALID", it) }
-        check?.let { return BankingResult.Error("INVALID", it) }
+        val normalized = order.copy(recipientIban = Iban.normalize(order.recipientIban), recipientName = order.recipientName.trim())
+
+        suspend fun deny(code: String, message: String, accountIban: String? = null): BankingResult<T> {
+            withContext(Dispatchers.IO) { auditOrder(action, normalized, accountIban, describe, "failed: $message") }
+            return BankingResult.Error(code, message)
+        }
+
+        if (!confirmed) return deny("NOT_CONFIRMED", AppStrings[StringKey.ErrorOrderNotConfirmed])
+        if (validateOrder) validateTransfer(order)?.let { return deny("INVALID", it) }
+        check?.let { return deny("INVALID", it) }
 
         _isLoading.value = true
         _error.value = null
         try {
             val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
-                ?: return BankingResult.Error("NOT_FOUND", "Account not found")
+                ?: return deny("NOT_FOUND", AppStrings[StringKey.ErrorAccountNotFound])
+            accountCheck?.let { it(account)?.let { message -> return deny("INVALID", message, account.iban) } }
             // SEPA credit transfers are EUR only; the order amount is in EUR, so another account currency would be wrong
-            if (account.currency != "EUR") return BankingResult.Error("CURRENCY", "SEPA transfers can only be sent from EUR accounts (this account is in ${account.currency})")
-            val normalized = order.copy(recipientIban = Iban.normalize(order.recipientIban), recipientName = order.recipientName.trim())
-            val result = send(account, normalized)
-            withContext(Dispatchers.IO) {
-                auditLogRepository.log(
-                    action,
-                    "user",
-                    "${normalized.amount.toPlainString()} EUR from …${account.iban.takeLast(4)} to ${normalized.recipientName} …${normalized.recipientIban.takeLast(4)}$describe: ${outcome(result)}",
+            if (account.currency != "EUR") return deny("CURRENCY", AppStrings.format(StringKey.ErrorSepaEurOnly, account.currency), account.iban)
+            // Recorded before sending so a crash mid-dialog still leaves a trace; the bank's answer updates it
+            val recordId = withContext(Dispatchers.IO) {
+                paymentOrderRepository.create(
+                    action = action,
+                    accountIban = account.iban,
+                    recipientName = normalized.recipientName,
+                    recipientIban = normalized.recipientIban,
+                    amount = normalized.amount,
+                    currency = account.currency,
+                    purpose = normalized.purpose,
+                    requestedDate = requestedDate,
+                    schedule = schedule,
                 )
             }
+            val result = send(account, normalized)
+            withContext(Dispatchers.IO) { paymentOrderRepository.complete(recordId, statusOf(result), bankOrderId(result), resultMessage(result)) }
+            withContext(Dispatchers.IO) { auditOrder(action, normalized, account.iban, describe, outcome(result)) }
             if (result is BankingResult.Error) _error.value = result.message
             return result
         } finally {
@@ -314,11 +379,41 @@ class BankingService(
         }
     }
 
+    /** Audit-log line for an order attempt; [accountIban] is null while the account isn't known yet. */
+    private fun auditOrder(action: String, order: TransferOrder, accountIban: String?, describe: String, outcome: String) {
+        val from = accountIban?.let { "from …${it.takeLast(4)} " }.orEmpty()
+        auditLogRepository.log(
+            action,
+            "user",
+            "${order.amount.toPlainString()} EUR ${from}to ${order.recipientName} …${order.recipientIban.takeLast(4)}$describe: $outcome",
+        )
+    }
+
     private fun outcome(result: BankingResult<*>): String = when (result) {
         is BankingResult.Success -> "sent"
         is BankingResult.Error -> "failed: ${result.message}"
         is BankingResult.TanRequired -> "TAN required"
     }
+
+    /** Recorded status of an attempt, from the bank's answer. */
+    private fun statusOf(result: BankingResult<*>): String = when (result) {
+        is BankingResult.Success -> PaymentOrderStatus.ACCEPTED
+        is BankingResult.TanRequired -> PaymentOrderStatus.TAN_REQUIRED
+        is BankingResult.Error -> if (result.code == "CANCELLED") PaymentOrderStatus.CANCELLED else PaymentOrderStatus.REJECTED
+    }
+
+    /** The reference the bank gave for the order, when it reports one. */
+    private fun bankOrderId(result: BankingResult<*>): String? = when (result) {
+        is BankingResult.Success -> when (val data = result.data) {
+            is FinTSClient.TransferResult -> data.transactionId
+            is String -> data
+            else -> null
+        }
+
+        else -> null
+    }
+
+    private fun resultMessage(result: BankingResult<*>): String? = (result as? BankingResult.Error)?.message
 
     data class ImportResult(
         val imported: Int,
