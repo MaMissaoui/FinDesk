@@ -285,9 +285,7 @@ class Hbci4JavaGateway : FinTSGateway {
         if (generateSequence(e) { it.cause }.any { it is JobNotSupportedException }) {
             return UnsupportedOperationException(AppStrings[StringKey.ErrorOrderNotOffered], e)
         }
-        val networkFailure = generateSequence(e) { it.cause }.any { it is java.io.IOException } ||
-            callback.diagnostics.any { it.contains("Senden der HBCI-Nachricht") || it.contains("IOException") }
-        if (networkFailure) {
+        if (BankingFailures.isNetworkFailure(e, callback.diagnostics)) {
             return IllegalStateException(AppStrings[StringKey.ErrorBankUnreachable], e)
         }
         val bankText = callback.bankMessages.lastOrNull() ?: callback.diagnostics.lastOrNull()?.substringAfter("Exception: ")
