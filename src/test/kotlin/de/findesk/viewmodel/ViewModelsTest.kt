@@ -47,6 +47,8 @@ class ViewModelsTest {
         assertEquals(2, s.uncategorizedCount, "Kiosk and the uncategorized salary")
         assertEquals(listOf("Food", "Uncategorized"), s.expensesByCategory.map { it.label })
         assertEquals("#4CAF50", s.expensesByCategory.first().color)
+        // Uncategorized is always neutral grey, never a palette colour a category could also have
+        assertEquals(DashboardViewModel.UNCATEGORIZED_COLOR, s.expensesByCategory.last().color)
         assertEquals(listOf("Spenden"), s.taxDeductionsByCategory.map { it.label })
         assertEquals(6, s.lastMonths.size)
         assertEquals(BigDecimal("100.00"), s.lastMonths.first { it.month == 1 }.expenses)
