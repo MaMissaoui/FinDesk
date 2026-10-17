@@ -9,16 +9,23 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
+import de.findesk.banking.TransferOrder
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.Translations
+import de.findesk.model.PaymentAction
+import de.findesk.model.PaymentOrderStatus
 import de.findesk.plaintextDatabase
+import de.findesk.repository.AccountRepositoryImpl
+import de.findesk.repository.BankAccessRepositoryImpl
+import de.findesk.repository.PaymentOrderRepositoryImpl
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
+import de.findesk.viewmodel.PaymentsViewModel
 import de.findesk.viewmodel.UnlockMode
 import de.findesk.viewmodel.UnlockViewModel
 import kotlinx.coroutines.runBlocking
@@ -26,6 +33,7 @@ import org.jetbrains.skia.EncodedImageFormat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty
 import java.io.File
+import java.math.BigDecimal
 import java.nio.file.Files
 
 /**
@@ -83,6 +91,29 @@ class ScreenshotTest {
         gate("gate-6-leftover-copies", UnlockMode.UNLOCK, leftovers = true)
     }
 
+    /**
+     * The payment review dialog warning about an earlier order with no confirmed outcome (the bank's answer was lost),
+     * so sending it again may pay twice. The order history behind it shows that order as "Outcome unknown".
+     */
+    @Test
+    fun `render the payment review with an unconfirmed earlier order`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-payments").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        val order = TransferOrder("Vermieter GmbH", "DE02120300000000202051", null, BigDecimal("850.00"), "Miete Oktober")
+        val payments = PaymentOrderRepositoryImpl()
+        val earlier = payments.create(PaymentAction.TRANSFER, "DE89370400440532013000", order.recipientName, order.recipientIban, order.amount, "EUR", order.purpose, null, null)
+        payments.complete(earlier, PaymentOrderStatus.UNKNOWN, message = "Read timed out")
+
+        fun reviewing(): PaymentsViewModel = PaymentsViewModel().apply {
+            runBlocking { load().join() }
+            review(state.value.accounts.single(), order)
+            check(state.value.review?.unconfirmed != null) { "the review should point at the unconfirmed order" }
+        }
+        render("payments-review-unconfirmed", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::reviewing) }
+        render("payments-review-unconfirmed-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::reviewing) }
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {
@@ -110,8 +141,8 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean) {
-        CompositionLocalProvider(LocalStrings provides Translations.of(AppLanguage.EN)) {
+    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null) {
+        CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                     Sidebar(currentScreen = screen, onScreenSelected = {})
@@ -123,7 +154,7 @@ class ScreenshotTest {
                                 Screen.DASHBOARD -> DashboardScreen()
                                 Screen.ACCOUNTS -> AccountsScreen()
                                 Screen.TRANSACTIONS -> TransactionsScreen()
-                                Screen.PAYMENTS -> PaymentsScreen()
+                                Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
                                 Screen.DOCUMENTS -> DocumentsScreen()
                                 Screen.REPORTS -> ReportsScreen()
                                 Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {}, language = AppLanguage.EN, onLanguageChange = {})
