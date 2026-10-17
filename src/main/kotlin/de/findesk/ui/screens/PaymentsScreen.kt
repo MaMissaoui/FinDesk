@@ -27,9 +27,10 @@ import de.findesk.util.Formats
 import de.findesk.util.Iban
 import de.findesk.viewmodel.PaymentsViewModel
 
+/** [createViewModel] lets the screenshot test open the screen with a prepared review. */
 @Composable
-fun PaymentsScreen() {
-    val vm = rememberViewModel { PaymentsViewModel() }
+fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewModel() }) {
+    val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
     LaunchedEffect(Unit) { vm.load() }
