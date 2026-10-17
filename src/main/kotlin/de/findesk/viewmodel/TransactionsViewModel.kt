@@ -232,9 +232,10 @@ class TransactionsViewModel(
     fun createRule(pattern: String, categoryId: Int): Job = launchSafely(onError) {
         ruleRepository.create(pattern, categoryId, priority = 5)
         val uncategorized = transactionRepository.findItems(TransactionFilter(uncategorizedOnly = true))
+        val matcher = RuleMatcher(listOf(pattern to categoryId))
         var applied = 0
         uncategorized.forEach { t ->
-            if (de.findesk.repository.ruleMatches(pattern, listOfNotNull(t.purpose, t.partnerName).joinToString(" "))) {
+            if (matcher.categoryFor(t.purpose, t.partnerName) != null) {
                 transactionRepository.updateCategory(t.id, categoryId)
                 applied++
             }
