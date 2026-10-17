@@ -2,6 +2,8 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 
 plugins {
@@ -179,9 +181,72 @@ fun ByteArray.containsBytes(needle: ByteArray): Boolean {
     return false
 }
 
+// The DMG's *volume* icon (/.VolumeIcon.icns, shown in Finder for the mounted disk) is the half of the
+// icon that Compose cannot set: it passes --icon only when it builds the app image, and jpackage builds
+// the DMG from that image with its own JavaApp.icns (Duke) as the volume icon. There is no DSL option for
+// it and the plugin wipes jpackage's --resource-dir, so the finished DMG is patched instead: converted
+// to read-write, mounted, the icon replaced, and compressed again. jpackage already sets the volume's
+// custom-icon flag, so only the file changes. See https://github.com/MaMissaoui/FinDesk/issues/3.
+val dmgDir = layout.buildDirectory.dir("compose/binaries/main/dmg")
+val isMacHost = System.getProperty("os.name").lowercase().contains("mac")
+
+fun runTool(vararg command: String) {
+    val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+    val output = process.inputStream.bufferedReader().readText()
+    check(process.waitFor() == 0) { "${command.joinToString(" ")} failed:\n$output" }
+}
+
+/** Mounts [dmg] at a fresh directory, runs [action] on the mount point and always detaches it again. */
+fun <T> withMountedDmg(dmg: File, readOnly: Boolean, action: (File) -> T): T {
+    val mount = layout.buildDirectory.dir("tmp/dmg-mount").get().asFile.apply {
+        deleteRecursively()
+        mkdirs()
+    }
+    runTool("hdiutil", "attach", "-nobrowse", "-noautoopen", if (readOnly) "-readonly" else "-readwrite", "-mountpoint", mount.path, dmg.path)
+    try {
+        return action(mount)
+    } finally {
+        runTool("hdiutil", "detach", mount.path, "-force")
+    }
+}
+
+fun singleDmg(): File {
+    val dmgs = dmgDir.get().asFile.listFiles().orEmpty().filter { it.extension == "dmg" }
+    check(dmgs.size == 1) { "Expected one DMG in ${dmgDir.get().asFile}, found ${dmgs.map { it.name }}" }
+    return dmgs.single()
+}
+
+val setDmgVolumeIcon = tasks.register("setDmgVolumeIcon") {
+    group = "distribution"
+    description = "Replaces jpackage's default (Duke) volume icon in the packaged DMG with the FinDesk icon"
+    onlyIf { isMacHost }
+    inputs.file(iconIcns)
+    doLast {
+        val dmg = singleDmg()
+        val tmp = layout.buildDirectory.dir("tmp/dmg-icon").get().asFile.apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        val writable = File(tmp, "rw.dmg")
+        runTool("hdiutil", "convert", dmg.path, "-format", "UDRW", "-o", writable.path)
+        withMountedDmg(writable, readOnly = false) { mount ->
+            val volumeIcon = File(mount, ".VolumeIcon.icns")
+            check(volumeIcon.isFile) { "${dmg.name} has no .VolumeIcon.icns; jpackage's DMG layout changed" }
+            Files.copy(iconIcns.toPath(), volumeIcon.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+        val compressed = File(tmp, "out.dmg")
+        runTool("hdiutil", "convert", writable.path, "-format", "UDZO", "-imagekey", "zlib-level=9", "-o", compressed.path)
+        Files.move(compressed.toPath(), dmg.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        tmp.deleteRecursively()
+        println("Volume icon set: ${dmg.name} now shows ${iconIcns.name}")
+    }
+}
+
+tasks.matching { it.name == "packageDmg" }.configureEach { finalizedBy(setDmgVolumeIcon) }
+
 tasks.register("verifyInstallerIcon") {
     group = "distribution"
-    description = "Fails if the packaged app image carries jpackage's Duke fallback instead of the repository's icon"
+    description = "Fails if the packaged app image (or a built DMG's volume) carries jpackage's Duke fallback instead of the repository's icon"
     dependsOn("createDistributable")
     inputs.files(iconIcns, iconIco, iconPng)
     doLast {
@@ -197,6 +262,12 @@ tasks.register("verifyInstallerIcon") {
             val packaged = icns.single()
             check(sha256(packaged) == sha256(iconIcns)) { "The app image ships ${packaged.path} (${sha256(packaged)}), not ${iconIcns.name} (${sha256(iconIcns)})" }
             println("Icon OK: ${packaged.name} in the app image matches ${iconIcns.name}")
+            // The DMG carries its own copy as the volume icon (see setDmgVolumeIcon), checked when one was built
+            dmgDir.get().asFile.listFiles().orEmpty().filter { it.extension == "dmg" }.forEach { dmg ->
+                val volumeIcon = withMountedDmg(dmg, readOnly = true) { mount -> sha256(File(mount, ".VolumeIcon.icns")) }
+                check(volumeIcon == sha256(iconIcns)) { "${dmg.name} has volume icon $volumeIcon, not ${iconIcns.name} (${sha256(iconIcns)})" }
+                println("Icon OK: the volume icon of ${dmg.name} matches ${iconIcns.name}")
+            }
         } else if (launchers.isNotEmpty()) {
             check(launchers.size == 1) { "Expected one launcher in the app image, found ${launchers.map { it.path }}" }
             val launcher = launchers.single()
