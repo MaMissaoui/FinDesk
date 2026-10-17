@@ -66,6 +66,11 @@ class BackupService(
             connect(File(dataDir, DB_NAME)).use { c ->
                 c.createStatement().use { it.execute("VACUUM INTO '${tmpDb.absolutePath.replace("'", "''")}'") }
             }
+            // Refused up front rather than written: stageRestore would reject it, leaving a backup that can't be restored
+            val files = listOf(tmpDb) + CONTENT_DIRS.flatMap { File(dataDir, it).listFiles()?.filter(File::isFile).orEmpty() }
+            require(files.all { it.length() <= MAX_ENTRY_BYTES } && files.sumOf { it.length() } <= maxRestoreBytes) {
+                "Backup is too large to restore"
+            }
             val transactions = countRows(tmpDb, "transactions")
             val documentFiles = File(dataDir, "documents").listFiles()?.count { it.isFile } ?: 0
             val info = BackupInfo(LocalDateTime.now().toString(), appVersion, transactions, documentFiles)
