@@ -119,7 +119,6 @@ class BankingService(
             val snapshots = when (val r = finTSClient.fetchAll(bankAccessId, interaction, since, now)) {
                 is BankingResult.Success -> r.data
                 is BankingResult.Error -> return r.also { _error.value = it.message }
-                is BankingResult.TanRequired -> return r
             }
 
             return withContext(Dispatchers.IO) {
@@ -407,14 +406,11 @@ class BankingService(
     private fun outcome(result: BankingResult<*>): String = when (result) {
         is BankingResult.Success -> "sent"
         is BankingResult.Error -> if (result.code == OUTCOME_UNKNOWN) "outcome unknown: ${result.message}" else "failed: ${result.message}"
-        is BankingResult.TanRequired -> "TAN required"
     }
 
     /** Recorded status of an attempt, from the bank's answer. */
     private fun statusOf(result: BankingResult<*>): String = when (result) {
         is BankingResult.Success -> PaymentOrderStatus.ACCEPTED
-
-        is BankingResult.TanRequired -> PaymentOrderStatus.TAN_REQUIRED
 
         is BankingResult.Error -> when (result.code) {
             "CANCELLED" -> PaymentOrderStatus.CANCELLED

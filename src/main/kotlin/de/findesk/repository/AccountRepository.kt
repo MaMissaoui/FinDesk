@@ -18,7 +18,6 @@ import java.time.LocalDateTime
 interface AccountRepository {
     fun findAll(): List<Account>
     fun findById(id: Int): Account?
-    fun findByBankAccess(bankAccessId: Int): List<Account>
     fun findByIban(iban: String): Account?
     fun findByType(type: String): List<Account>
     fun create(
@@ -48,10 +47,6 @@ class AccountRepositoryImpl : AccountRepository {
 
     override fun findById(id: Int): Account? = transaction {
         Account.findById(id)
-    }
-
-    override fun findByBankAccess(bankAccessId: Int): List<Account> = transaction {
-        Account.find { AccountsTable.bankAccessId eq bankAccessId }.toList()
     }
 
     override fun findByIban(iban: String): Account? = transaction {

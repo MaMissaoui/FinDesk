@@ -13,7 +13,6 @@ interface RuleRepository {
     fun findById(id: Int): Rule?
     fun findByCategory(categoryId: Int): List<Rule>
     fun findAutoApplyRules(): List<Rule>
-    fun findByPriority(): List<Rule>
     fun create(pattern: String, categoryId: Int, priority: Int = 0, autoApply: Boolean = true): Rule
     fun update(id: Int, pattern: String? = null, categoryId: Int? = null, priority: Int? = null, autoApply: Boolean? = null): Rule?
     fun delete(id: Int): Boolean
@@ -39,12 +38,6 @@ class RuleRepositoryImpl : RuleRepository {
 
     override fun findAutoApplyRules(): List<Rule> = transaction {
         Rule.find { RulesTable.autoApply eq true }
-            .orderBy(RulesTable.priority to SortOrder.DESC)
-            .toList()
-    }
-
-    override fun findByPriority(): List<Rule> = transaction {
-        Rule.all()
             .orderBy(RulesTable.priority to SortOrder.DESC)
             .toList()
     }

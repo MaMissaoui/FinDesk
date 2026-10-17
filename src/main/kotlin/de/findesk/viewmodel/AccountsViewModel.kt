@@ -198,8 +198,6 @@ class AccountsViewModel(
                     }
 
                     is BankingResult.Error -> _state.update { it.copy(error = if (r.code == "CANCELLED") null else r.message) }
-
-                    is BankingResult.TanRequired -> _state.update { it.copy(error = AppStrings[StringKey.TanRequired]) }
                 }
             } finally {
                 progressJob.cancel()

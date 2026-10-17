@@ -9,18 +9,16 @@ import java.time.LocalDate
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class FinTSClientTest {
     private lateinit var client: FinTSClient
-    private lateinit var tanManager: TanManager
 
     @BeforeAll
     fun setup() {
         TestDatabase.init()
         client = FinTSClient()
-        tanManager = TanManager()
     }
 
     @Test
     fun `test create transaction hash`() {
-        val hash1 = client.createTransactionHash(
+        val hash1 = FinTSClient.transactionHash(
             date = LocalDate.of(2026, 10, 1),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
@@ -31,7 +29,7 @@ class FinTSClientTest {
         assertTrue(hash1.isNotEmpty())
 
         // Same input should produce same hash
-        val hash2 = client.createTransactionHash(
+        val hash2 = FinTSClient.transactionHash(
             date = LocalDate.of(2026, 10, 1),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
@@ -43,14 +41,14 @@ class FinTSClientTest {
 
     @Test
     fun `test different inputs produce different hashes`() {
-        val hash1 = client.createTransactionHash(
+        val hash1 = FinTSClient.transactionHash(
             date = LocalDate.of(2026, 10, 1),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
             purpose = "Shopping",
         )
 
-        val hash2 = client.createTransactionHash(
+        val hash2 = FinTSClient.transactionHash(
             date = LocalDate.of(2026, 10, 2),
             amount = BigDecimal("-49.99"),
             partnerName = "REWE",
@@ -63,54 +61,6 @@ class FinTSClientTest {
     @Test
     fun `test connection status starts as disconnected`() {
         assertEquals(ConnectionStatus.DISCONNECTED, client.connectionStatus.value)
-    }
-
-    @Test
-    fun `test tan manager supported methods`() {
-        val methods = tanManager.getSupportedMethods()
-
-        assertNotNull(methods)
-        assertTrue(methods.isNotEmpty())
-        assertTrue(methods.any { it.name.contains("chipTAN") })
-        assertTrue(methods.any { it.name.contains("photoTAN") })
-        assertTrue(methods.any { it.name.contains("pushTAN") })
-        assertTrue(methods.any { it.name.contains("SMS") })
-    }
-
-    @Test
-    fun `test tan manager request and submit`() {
-        var receivedTan: String? = null
-
-        tanManager.requestTan(
-            method = TanMethod(id = "900", name = "SMS-TAN"),
-            challenge = "Please enter TAN",
-        ) { tan ->
-            receivedTan = tan
-        }
-
-        assertNotNull(tanManager.pendingTanRequest.value)
-
-        tanManager.submitTan("123456")
-
-        assertEquals("123456", receivedTan)
-        assertNull(tanManager.pendingTanRequest.value)
-    }
-
-    @Test
-    fun `test tan manager cancel`() {
-        var receivedTan: String? = "notnull"
-
-        tanManager.requestTan(
-            method = TanMethod(id = "900", name = "SMS-TAN"),
-            challenge = "Test",
-        ) { tan ->
-            receivedTan = tan
-        }
-
-        tanManager.cancelTan()
-
-        assertNull(receivedTan)
-        assertNull(tanManager.pendingTanRequest.value)
     }
 
     @Test

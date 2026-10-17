@@ -72,7 +72,6 @@ data class FinTSTransaction(
 sealed class BankingResult<out T> {
     data class Success<T>(val data: T) : BankingResult<T>()
     data class Error(val code: String, val message: String) : BankingResult<Nothing>()
-    data class TanRequired(val tanMethod: TanMethod, val challenge: String?) : BankingResult<Nothing>()
 }
 
 /**

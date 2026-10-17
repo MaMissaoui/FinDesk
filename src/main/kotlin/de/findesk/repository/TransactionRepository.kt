@@ -37,10 +37,7 @@ data class NewTransaction(
 interface TransactionRepository {
     fun findAll(): List<Transaction>
     fun findById(id: Int): Transaction?
-    fun findByAccount(accountId: Int): List<Transaction>
-    fun findByDateRange(startDate: LocalDate, endDate: LocalDate): List<Transaction>
     fun findByCategory(categoryId: Int): List<Transaction>
-    fun findByAmountRange(minAmount: BigDecimal, maxAmount: BigDecimal): List<Transaction>
     fun searchByText(searchText: String): List<Transaction>
     fun findRecent(limit: Int = 50): List<Transaction>
     fun create(
@@ -58,11 +55,8 @@ interface TransactionRepository {
     /** Inserts all [bookings] in one database transaction: all or none, and far faster than one commit per booking. */
     fun createAll(bookings: List<NewTransaction>): Int
     fun updateCategory(id: Int, categoryId: Int?): Transaction?
-    fun updateDocument(id: Int, documentId: Int?): Transaction?
     fun delete(id: Int): Boolean
     fun findByHash(hash: String): Transaction?
-    fun getMonthlyTotal(year: Int, month: Int, currency: String): BigDecimal
-    fun getMonthlyByCategory(year: Int, month: Int, currency: String): Map<String, BigDecimal>
 
     /** Filtered, newest-first snapshot safe to use outside a transaction. */
     fun findItems(filter: TransactionFilter = TransactionFilter(), limit: Int? = null): List<TransactionItem>
@@ -80,28 +74,10 @@ class TransactionRepositoryImpl : TransactionRepository {
         Transaction.findById(id)
     }
 
-    override fun findByAccount(accountId: Int): List<Transaction> = transaction {
-        Transaction.find { TransactionsTable.accountId eq accountId }
-            .orderBy(TransactionsTable.date to SortOrder.DESC)
-            .toList()
-    }
-
-    override fun findByDateRange(startDate: LocalDate, endDate: LocalDate): List<Transaction> = transaction {
-        Transaction.find {
-            (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate)
-        }.orderBy(TransactionsTable.date to SortOrder.DESC).toList()
-    }
-
     override fun findByCategory(categoryId: Int): List<Transaction> = transaction {
         Transaction.find { TransactionsTable.categoryId eq categoryId }
             .orderBy(TransactionsTable.date to SortOrder.DESC)
             .toList()
-    }
-
-    override fun findByAmountRange(minAmount: BigDecimal, maxAmount: BigDecimal): List<Transaction> = transaction {
-        Transaction.find {
-            (TransactionsTable.amount greaterEq minAmount) and (TransactionsTable.amount lessEq maxAmount)
-        }.orderBy(TransactionsTable.date to SortOrder.DESC).toList()
     }
 
     override fun searchByText(searchText: String): List<Transaction> = transaction {
@@ -158,12 +134,6 @@ class TransactionRepositoryImpl : TransactionRepository {
         }
     }
 
-    override fun updateDocument(id: Int, documentId: Int?): Transaction? = transaction {
-        Transaction.findById(id)?.apply {
-            document = documentId?.let { de.findesk.data.entity.Document.findById(it) }
-        }
-    }
-
     override fun delete(id: Int): Boolean = transaction {
         // Documents linked to the booking would dangle otherwise; SQLite doesn't enforce the FK.
         DocumentsTable.update({ DocumentsTable.linkedTransactionId eq id }) { it[linkedTransactionId] = null }
@@ -172,23 +142,6 @@ class TransactionRepositoryImpl : TransactionRepository {
 
     override fun findByHash(hash: String): Transaction? = transaction {
         Transaction.find { TransactionsTable.hash eq hash }.firstOrNull()
-    }
-
-    override fun getMonthlyTotal(year: Int, month: Int, currency: String): BigDecimal = transaction {
-        val startDate = LocalDate.of(year, month, 1)
-        val endDate = startDate.plusMonths(1).minusDays(1)
-        Transaction.find {
-            (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate) and (TransactionsTable.currency eq currency)
-        }.sumOf { it.amount }
-    }
-
-    override fun getMonthlyByCategory(year: Int, month: Int, currency: String): Map<String, BigDecimal> = transaction {
-        val startDate = LocalDate.of(year, month, 1)
-        val endDate = startDate.plusMonths(1).minusDays(1)
-        Transaction.find {
-            (TransactionsTable.date greaterEq startDate) and (TransactionsTable.date lessEq endDate) and (TransactionsTable.currency eq currency)
-        }.groupBy { it.category?.name ?: "Uncategorized" }
-            .mapValues { (_, transactions) -> transactions.sumOf { it.amount } }
     }
 
     override fun findItems(filter: TransactionFilter, limit: Int?): List<TransactionItem> = transaction {

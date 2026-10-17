@@ -17,9 +17,6 @@ import java.time.LocalDateTime
 interface DocumentRepository {
     fun findAll(): List<Document>
     fun findById(id: Int): Document?
-    fun findByTransaction(transactionId: Int): List<Document>
-    fun findUnlinked(): List<Document>
-    fun searchByFileName(fileName: String): List<Document>
     fun create(
         fileName: String,
         filePath: String,
@@ -47,18 +44,6 @@ class DocumentRepositoryImpl : DocumentRepository {
 
     override fun findById(id: Int): Document? = transaction {
         Document.findById(id)
-    }
-
-    override fun findByTransaction(transactionId: Int): List<Document> = transaction {
-        Document.find { DocumentsTable.linkedTransactionId eq transactionId }.toList()
-    }
-
-    override fun findUnlinked(): List<Document> = transaction {
-        Document.find { DocumentsTable.linkedTransactionId.isNull() }.toList()
-    }
-
-    override fun searchByFileName(fileName: String): List<Document> = transaction {
-        Document.find { DocumentsTable.fileName like "%$fileName%" }.toList()
     }
 
     override fun create(
