@@ -172,6 +172,9 @@ class AccountsViewModel(
     /** Bank name, BIC and FinTS URL from the bundled directory, for pre-filling the add-bank dialog. */
     fun lookupBank(blz: String): BankDirectory.Entry? = BankDirectory.lookup(blz)
 
+    /** Bank suggestions for the add-bank dialog, matched on name, BLZ, BIC or a German IBAN. */
+    fun searchBanks(query: String): List<BankDirectory.Entry> = BankDirectory.search(query)
+
     fun updateConnection(bankAccessId: Int, userId: String, serverUrl: String): Job = launchSafely(onError) {
         bankAccessRepository.updateConnection(bankAccessId, serverUrl = serverUrl, userId = userId)
         auditLogRepository.log("UPDATE_BANK_CONNECTION", "user", "Updated connection settings of bank access $bankAccessId")

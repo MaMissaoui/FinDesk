@@ -12,7 +12,6 @@ import de.findesk.i18n.StringKey
 import de.findesk.model.AccountItem
 import de.findesk.model.PaymentOrderItem
 import de.findesk.repository.*
-import de.findesk.util.Iban
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,11 +80,8 @@ class PaymentsViewModel(
 
     fun validate(order: TransferOrder): String? = bankingService.validateTransfer(order)
 
-    /** BIC for a German recipient IBAN (BLZ = characters 5-12), if known. */
-    fun bicFor(iban: String): String? {
-        val n = Iban.normalize(iban)
-        return if (n.startsWith("DE") && n.length == 22) BankDirectory.lookup(n.substring(4, 12))?.bic?.takeIf { it.isNotBlank() } else null
-    }
+    /** BIC for a German recipient IBAN, if the bank directory knows it. */
+    fun bicFor(iban: String): String? = BankDirectory.byIban(iban)?.bic?.takeIf { it.isNotBlank() }
 
     /** Step 1: validate and show the review. Nothing is sent. */
     fun review(from: AccountItem, order: TransferOrder, date: java.time.LocalDate? = null, schedule: StandingOrderSchedule? = null) {
