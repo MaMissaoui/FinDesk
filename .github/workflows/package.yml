@@ -7,6 +7,10 @@ on:
   release:
     types: [published]
   pull_request:
+    # Installers are expensive to build and never affected by prose changes
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   workflow_dispatch:
 
 concurrency:
