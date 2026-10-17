@@ -92,7 +92,7 @@ class RuleRepositoryImpl : RuleRepository {
 
 /**
  * Auto-apply rules compiled once, in priority order: the first rule whose pattern is found in purpose and partner
- * name wins; an invalid regex matches as a plain substring, like [ruleMatches].
+ * name wins. Matching ignores case, and an invalid regex matches as a plain substring instead of throwing.
  */
 class RuleMatcher(rules: List<Pair<String, Int>>) {
     private val compiled: List<Pair<(String) -> Boolean, Int>> = rules.map { (pattern, categoryId) ->
@@ -111,11 +111,4 @@ class RuleMatcher(rules: List<Pair<String, Int>>) {
         if (text.isBlank()) return null
         return compiled.firstOrNull { (matches, _) -> matches(text) }?.second
     }
-}
-
-/** Case-insensitive regex match; an invalid regex falls back to a plain substring match instead of throwing. */
-internal fun ruleMatches(pattern: String, text: String): Boolean = try {
-    pattern.toRegex(RegexOption.IGNORE_CASE).containsMatchIn(text)
-} catch (e: java.util.regex.PatternSyntaxException) {
-    text.contains(pattern, ignoreCase = true)
 }
