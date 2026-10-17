@@ -17,14 +17,23 @@ object BankingRedactor {
 
     private val IBAN = Regex("\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b")
 
+    private val FINTS_SYNTAX = Regex("[+:'?@]")
+
     fun redact(text: String, secrets: Collection<String>): String {
         var result = text
         // Longest first, so a value that contains another is masked in one go instead of leaving fragments
         secrets.asSequence()
             .filter { it.length >= MIN_SECRET_LENGTH && it.isNotBlank() }
+            .flatMap { sequenceOf(it, fintsEscaped(it)) }
             .distinct()
             .sortedByDescending { it.length }
             .forEach { result = result.replace(it, MASK) }
         return IBAN.replace(result, MASK)
     }
+
+    /**
+     * The form a value takes inside a raw FinTS message, where the syntax characters `+ : ' ? @` are escaped
+     * with `?`. A PIN like `ab+cd` appears there as `ab?+cd` and would slip past a literal match.
+     */
+    internal fun fintsEscaped(value: String): String = value.replace(FINTS_SYNTAX) { "?" + it.value }
 }

@@ -30,4 +30,19 @@ class BankingRedactorTest {
     fun `blank secrets are ignored`() {
         assertEquals("text", BankingRedactor.redact("text", listOf("", "  ")))
     }
+
+    @Test
+    fun `masks secrets in their fints-escaped form`() {
+        val line = "HNSHA:5:2+998+1234567+++ab?+cd?:e?'f???@g'"
+
+        val redacted = BankingRedactor.redact(line, listOf("ab+cd:e'f?@g"))
+
+        assertEquals("HNSHA:5:2+998+1234567+++X'", redacted)
+    }
+
+    @Test
+    fun `escapes every fints syntax character once`() {
+        assertEquals("a?+b?:c?'d??e?@f", BankingRedactor.fintsEscaped("a+b:c'd?e@f"))
+        assertEquals("plain", BankingRedactor.fintsEscaped("plain"))
+    }
 }
