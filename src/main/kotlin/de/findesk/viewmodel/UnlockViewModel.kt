@@ -2,7 +2,9 @@ package de.findesk.viewmodel
 
 import de.findesk.data.database.DatabaseCrypto
 import de.findesk.data.database.DatabaseFactory
+import de.findesk.data.database.PlaintextLeftovers
 import de.findesk.repository.AuditLogRepositoryImpl
+import de.findesk.util.AppPaths
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,6 +38,11 @@ data class UnlockState(
     val failure: String? = null,
     /** A backup was restored at this start. */
     val restored: Boolean = false,
+    /**
+     * Plaintext copies of the database left on disk by earlier restores, profile deletions or unopened
+     * profiles (see [PlaintextLeftovers]). Encryption only covers the database this start opens.
+     */
+    val plaintextLeftovers: List<PlaintextLeftovers.Leftover> = emptyList(),
     /** The database is open; the main window can be shown. */
     val opened: Boolean = false,
 )
@@ -48,6 +55,8 @@ data class UnlockState(
 class UnlockViewModel(
     private val dataDir: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    /** The data root, since the leftovers worth reporting can belong to another profile. */
+    rootDir: File = AppPaths.rootDir,
 ) : BaseViewModel(scope) {
     private val db = DatabaseFactory.databaseFile(dataDir)
 
@@ -59,6 +68,7 @@ class UnlockViewModel(
                 DatabaseCrypto.State.NEW -> UnlockMode.CREATE
             },
             restored = DatabaseFactory.restoredFrom != null,
+            plaintextLeftovers = PlaintextLeftovers.scan(rootDir, dataDir),
         ),
     )
     val state: StateFlow<UnlockState> = _state.asStateFlow()

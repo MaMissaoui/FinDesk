@@ -24,6 +24,13 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
         private const val KEY_ACTIVE = "active"
         private const val NAME_PREFIX = "name."
         private const val DEFAULT_KEY = "default"
+
+        /** Holds the data directories of the non-default profiles. */
+        const val PROFILES_DIR = "profiles"
+
+        /** A deleted profile is moved here instead of erased, so it can be recovered by hand. */
+        const val DELETED_DIR = "profiles-deleted"
+
         const val DEFAULT_NAME = "Personal"
         const val MAX_NAME_LENGTH = 40
         private val SLUG = Regex("[a-z0-9]+(-[a-z0-9]+)*")
@@ -31,7 +38,7 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
 
         fun profileDir(rootDir: File, slug: String): File {
             require(SLUG.matches(slug) && slug != DEFAULT_KEY) { "Invalid profile id: $slug" }
-            return File(File(rootDir, "profiles"), slug)
+            return File(File(rootDir, PROFILES_DIR), slug)
         }
     }
 
@@ -94,7 +101,7 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
         require(props.containsKey(NAME_PREFIX + slug)) { "Unknown profile: $slug" }
         require(slug != openSlug) { "The open profile can't be deleted" }
         val source = profileDir(rootDir, slug)
-        val target = File(File(rootDir, "profiles-deleted"), "$slug-${LocalDateTime.now().format(STAMP)}")
+        val target = File(File(rootDir, DELETED_DIR), "$slug-${LocalDateTime.now().format(STAMP)}")
         if (source.exists()) {
             target.parentFile.mkdirs()
             Files.move(source.toPath(), target.toPath())

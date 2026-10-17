@@ -16,3 +16,12 @@ object TestDatabase {
         return dir
     }
 }
+
+/**
+ * Writes a file that looks like an unencrypted SQLite database. [de.findesk.data.database.DatabaseCrypto.state]
+ * only reads the header, which is exactly what "is this copy encrypted" comes down to.
+ */
+fun plaintextDatabase(file: File): File {
+    file.parentFile?.mkdirs()
+    return file.apply { writeBytes("SQLite format 3\u0000".toByteArray(Charsets.US_ASCII) + ByteArray(64)) }
+}

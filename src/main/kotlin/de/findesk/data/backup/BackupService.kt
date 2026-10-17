@@ -39,7 +39,12 @@ class BackupService(
     companion object {
         const val DB_NAME = "findesk.db"
         private const val MANIFEST = "findesk-backup.properties"
-        private const val PENDING_DIR = "restore-pending"
+
+        /** Holds a staged restore until the next start; see `PlaintextLeftovers`. */
+        const val PENDING_DIR = "restore-pending"
+
+        /** `pre-restore-<timestamp>` folders hold the data a restore replaced. */
+        const val PRE_RESTORE_PREFIX = "pre-restore-"
         private val CONTENT_DIRS = listOf("documents", "passports")
         private const val MAX_ENTRY_BYTES = 2L * 1024 * 1024 * 1024
         private val STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
@@ -153,7 +158,7 @@ class BackupService(
             pending.deleteRecursively()
             return null
         }
-        val previous = File(dataDir, "pre-restore-${LocalDateTime.now().format(STAMP)}").apply { mkdirs() }
+        val previous = File(dataDir, "$PRE_RESTORE_PREFIX${LocalDateTime.now().format(STAMP)}").apply { mkdirs() }
         (listOf(DB_NAME, "$DB_NAME-wal", "$DB_NAME-shm") + CONTENT_DIRS).forEach { name ->
             val current = File(dataDir, name)
             if (current.exists()) Files.move(current.toPath(), File(previous, name).toPath())

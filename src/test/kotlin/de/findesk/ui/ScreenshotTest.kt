@@ -13,6 +13,7 @@ import de.findesk.data.database.DatabaseFactory
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.Translations
+import de.findesk.plaintextDatabase
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.Screen
@@ -52,7 +53,7 @@ class ScreenshotTest {
 
     @Test
     fun `render the unlock screens`() {
-        fun gate(name: String, mode: UnlockMode, language: AppLanguage = AppLanguage.EN, dark: Boolean = false, wrongAttempt: Boolean = false) {
+        fun gate(name: String, mode: UnlockMode, language: AppLanguage = AppLanguage.EN, dark: Boolean = false, wrongAttempt: Boolean = false, leftovers: Boolean = false) {
             val dir = Files.createTempDirectory("findesk-gate").toFile()
             when (mode) {
                 UnlockMode.CREATE -> {}
@@ -60,7 +61,11 @@ class ScreenshotTest {
                 UnlockMode.UNLOCK, UnlockMode.CHANGE -> DatabaseFactory.init(dir.absolutePath, "screenshot passphrase")
             }
             DatabaseFactory.init(Files.createTempDirectory("findesk-gate-other").toFile().absolutePath) // release the file
-            val vm = UnlockViewModel(dir)
+            if (leftovers) {
+                plaintextDatabase(File(dir, "pre-restore-20260101-120000/findesk.db"))
+                plaintextDatabase(File(dir, "profiles-deleted/old-20260101-120000/findesk.db"))
+            }
+            val vm = UnlockViewModel(dir, rootDir = dir)
             if (mode == UnlockMode.CHANGE) vm.showChange(true)
             if (wrongAttempt) runBlocking { vm.unlock("wrong passphrase").join() }
             render(name, width = 560, height = 720) {
@@ -75,6 +80,7 @@ class ScreenshotTest {
         gate("gate-3-unlock-wrong", UnlockMode.UNLOCK, wrongAttempt = true)
         gate("gate-4-change-dark", UnlockMode.CHANGE, dark = true)
         gate("gate-5-unlock-fr", UnlockMode.UNLOCK, language = AppLanguage.FR)
+        gate("gate-6-leftover-copies", UnlockMode.UNLOCK, leftovers = true)
     }
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
