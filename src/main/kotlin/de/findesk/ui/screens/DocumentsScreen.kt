@@ -100,7 +100,7 @@ fun DocumentsScreen() {
         Spacer(Modifier.height(16.dp))
 
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(modifier = Modifier.weight(3f).fillMaxHeight(), shape = RoundedCornerShape(12.dp)) {
+            FinDeskCard(modifier = Modifier.weight(3f).fillMaxHeight()) {
                 if (!state.isLoading && state.documents.isEmpty()) {
                     EmptyState(
                         Icons.Default.Email,
@@ -194,7 +194,7 @@ private fun DocumentDetail(
     var pickerQuery by remember(doc.id) { mutableStateOf("") }
     val s = strings()
 
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp)) {
+    FinDeskCard(modifier = modifier) {
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(doc.fileName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))

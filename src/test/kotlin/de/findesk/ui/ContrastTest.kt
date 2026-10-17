@@ -8,6 +8,7 @@ import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.ErrorDark
 import de.findesk.ui.theme.LightColorScheme
 import de.findesk.ui.theme.PrimaryBlue
+import de.findesk.ui.theme.PrimaryBlueDark
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.SuccessDark
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -41,6 +42,23 @@ class ContrastTest {
         assertContrast(DarkColorScheme.onErrorContainer, DarkColorScheme.errorContainer, "onErrorContainer on errorContainer (dark)")
     }
 
+    /** Cards draw on surfaceContainerHighest and dialogs on surfaceContainerHigh, not on surface. */
+    @Test
+    fun `text on cards and dialogs keeps 4_5 to 1`() {
+        listOf("light" to LightColorScheme, "dark" to DarkColorScheme).forEach { (name, scheme) ->
+            val success = if (name == "light") Success else SuccessDark
+            val error = if (name == "light") Error else ErrorDark
+            listOf("card" to scheme.surfaceContainerHighest, "dialog" to scheme.surfaceContainerHigh).forEach { (where, bg) ->
+                assertContrast(scheme.onSurface, bg, "onSurface on $where ($name)")
+                assertContrast(scheme.onSurfaceVariant, bg, "onSurfaceVariant on $where ($name)")
+                assertContrast(scheme.primary, bg, "primary text button on $where ($name)")
+                assertContrast(success, bg, "income amount on $where ($name)")
+                assertContrast(error, bg, "expense amount on $where ($name)")
+            }
+            assertContrast(scheme.onSurfaceVariant, scheme.surfaceVariant, "onSurfaceVariant on surfaceVariant, e.g. table header ($name)")
+        }
+    }
+
     @Test
     fun `sidebar text contrasts are sufficient`() {
         val white = Color.White
@@ -48,6 +66,7 @@ class ContrastTest {
 
         // The selected tab draws a translucent dark highlight behind the label; Compose blends in sRGB.
         assertContrast(white, Color.Black.copy(alpha = 0.2f).compositeOver(PrimaryBlue), "white label on selected sidebar tab")
+        assertContrast(white, PrimaryBlueDark, "white sidebar text on PrimaryBlueDark (dark theme)")
     }
 
     private fun assertContrast(foreground: Color, background: Color, label: String) {

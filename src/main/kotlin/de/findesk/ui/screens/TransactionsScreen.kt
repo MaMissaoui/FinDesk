@@ -143,7 +143,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
 
         Spacer(Modifier.height(16.dp))
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        FinDeskCard(modifier = Modifier.fillMaxWidth()) {
             Column {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                     HeaderCell(s[StringKey.ColDate], 1f)
