@@ -433,14 +433,15 @@ class BankingSyncTest {
         vm.close() // the user navigates away while the bank works on the order
         release.countDown()
 
-        val orders = de.findesk.repository.PaymentOrderRepositoryImpl()
+        // The audit line is the last thing the send writes, after the order's status
+        fun audited() = AuditLogRepositoryImpl().findByAction("TRANSFER").any { it.details!!.contains("sent") }
         val deadline = System.currentTimeMillis() + 5000
-        while (orders.findRecentItems().single().status == de.findesk.model.PaymentOrderStatus.PENDING && System.currentTimeMillis() < deadline) Thread.sleep(20)
-        val recorded = orders.findRecentItems().single()
+        while (!audited() && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertTrue(audited())
+        val recorded = de.findesk.repository.PaymentOrderRepositoryImpl().findRecentItems().single()
         assertEquals(de.findesk.model.PaymentOrderStatus.ACCEPTED, recorded.status)
         assertEquals("job-9", recorded.bankOrderId)
         assertEquals(1, gateway.transfers.size)
-        assertTrue(AuditLogRepositoryImpl().findByAction("TRANSFER").any { it.details!!.contains("sent") })
     }
 
     @Test
