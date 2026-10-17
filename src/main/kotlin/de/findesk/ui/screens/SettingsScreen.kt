@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -29,8 +30,10 @@ import de.findesk.ui.theme.Warning
 import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsViewModel
+import kotlinx.coroutines.launch
 import java.math.BigDecimal
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean,
@@ -52,266 +55,292 @@ fun SettingsScreen(
     var renameProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
     var confirmDeleteProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
 
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        // Only when there is something to say: an empty item still takes the list's spacing
-        if (state.message != null || state.error != null) {
-            item { MessageBanner(state.message, state.error, vm::clearMessages) }
-        }
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // In page order; the chips below jump to them
+    val sections = listOf(
+        StringKey.Appearance,
+        StringKey.Profiles,
+        StringKey.Categories,
+        StringKey.AutoCategorizationRules,
+        StringKey.DataAndOcr,
+        StringKey.BackupAndRestore,
+        StringKey.ProtocolTraceTitle,
+        StringKey.AuditLogLatest,
+    )
+    val hasBanner = state.message != null || state.error != null
 
-        item {
-            SectionCard(s[StringKey.Appearance], Modifier.fillMaxWidth()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.DarkTheme], modifier = Modifier.weight(1f))
-                    Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.Language], modifier = Modifier.weight(1f))
-                    DropdownSelector(
-                        label = language.nativeName,
-                        options = AppLanguage.entries,
-                        optionLabel = { option -> option.nativeName },
-                        onSelect = { onLanguageChange(it) },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(s[StringKey.PrimaryCurrency])
-                        Text(s[StringKey.PrimaryCurrencyHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    DropdownSelector(
-                        label = state.primaryCurrency,
-                        options = state.currencyOptions,
-                        optionLabel = { it },
-                        onSelect = { vm.setPrimaryCurrency(it) },
-                    )
-                }
+    Column(Modifier.fillMaxSize().padding(24.dp)) {
+        // The page is long: shortcuts to its sections stay above the list while it scrolls. They wrap rather than
+        // scroll sideways, so every one stays visible in a narrow window.
+        FlowRow(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            sections.forEachIndexed { i, key ->
+                // The banner, if shown, comes before the sections
+                val index = (if (hasBanner) 1 else 0) + i
+                AssistChip(onClick = { scope.launch { listState.animateScrollToItem(index) } }, label = { Text(s[key]) })
             }
         }
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Only when there is something to say: an empty item still takes the list's spacing
+            if (hasBanner) {
+                item { MessageBanner(state.message, state.error, vm::clearMessages) }
+            }
 
-        item {
-            SectionCard(
-                s[StringKey.Profiles],
-                Modifier.fillMaxWidth(),
-                actions = { TextButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
-            ) {
-                Text(s[StringKey.ProfilesHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                state.profiles.forEach { p ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
-                        if (p.slug == state.openProfile) {
-                            Text(s[StringKey.ProfileOpen], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        if (p.slug == state.nextProfile && p.slug != state.openProfile) {
-                            Text(s[StringKey.ProfileNextStart], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(8.dp))
-                        }
-                        TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
-                        IconButton(onClick = { renameProfile = p }) { Icon(Icons.Default.Edit, contentDescription = s.format(StringKey.RenameProfile, p.name)) }
-                        IconButton(enabled = !p.isDefault && p.slug != state.openProfile, onClick = { confirmDeleteProfile = p }) {
-                            Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteProfile, p.name))
-                        }
+            item {
+                SectionCard(s[StringKey.Appearance], Modifier.fillMaxWidth()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(s[StringKey.DarkTheme], modifier = Modifier.weight(1f))
+                        Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
                     }
-                }
-                if (state.nextProfile != state.openProfile) {
-                    val next = state.profiles.firstOrNull { it.slug == state.nextProfile }?.name.orEmpty()
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(s.format(StringKey.RestartToOpenProfile, next))
+                        Text(s[StringKey.Language], modifier = Modifier.weight(1f))
+                        DropdownSelector(
+                            label = language.nativeName,
+                            options = AppLanguage.entries,
+                            optionLabel = { option -> option.nativeName },
+                            onSelect = { onLanguageChange(it) },
+                        )
                     }
-                }
-            }
-        }
-
-        item {
-            SectionCard(
-                s[StringKey.Categories],
-                Modifier.fillMaxWidth(),
-                actions = { TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) } },
-            ) {
-                if (state.categories.isEmpty()) {
-                    Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                state.categories.forEach { c ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable(
-                                onClick = { editCategory = c },
-                                onClickLabel = s.format(StringKey.EditCategoryNamed, c.name),
-                                role = Role.Button,
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
-                        Spacer(Modifier.width(12.dp))
-                        Text(c.name, modifier = Modifier.weight(1f))
-                        if (c.isTaxRelevant) {
-                            CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
-                            Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s[StringKey.PrimaryCurrency])
+                            Text(s[StringKey.PrimaryCurrencyHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        c.budgetLimit?.let {
-                            Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.width(8.dp))
+                        DropdownSelector(
+                            label = state.primaryCurrency,
+                            options = state.currencyOptions,
+                            optionLabel = { it },
+                            onSelect = { vm.setPrimaryCurrency(it) },
+                        )
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    s[StringKey.Profiles],
+                    Modifier.fillMaxWidth(),
+                    actions = { TextButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
+                ) {
+                    Text(s[StringKey.ProfilesHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    state.profiles.forEach { p ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
+                            if (p.slug == state.openProfile) {
+                                Text(s[StringKey.ProfileOpen], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            if (p.slug == state.nextProfile && p.slug != state.openProfile) {
+                                Text(s[StringKey.ProfileNextStart], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
+                            IconButton(onClick = { renameProfile = p }) { Icon(Icons.Default.Edit, contentDescription = s.format(StringKey.RenameProfile, p.name)) }
+                            IconButton(enabled = !p.isDefault && p.slug != state.openProfile, onClick = { confirmDeleteProfile = p }) {
+                                Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteProfile, p.name))
+                            }
                         }
-                        IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                     }
-                    HorizontalDivider()
+                    if (state.nextProfile != state.openProfile) {
+                        val next = state.profiles.firstOrNull { it.slug == state.nextProfile }?.name.orEmpty()
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(s.format(StringKey.RestartToOpenProfile, next))
+                        }
+                    }
                 }
             }
-        }
 
-        item {
-            SectionCard(
-                s[StringKey.AutoCategorizationRules],
-                Modifier.fillMaxWidth(),
-                actions = {
-                    DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
-                        TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
+            item {
+                SectionCard(
+                    s[StringKey.Categories],
+                    Modifier.fillMaxWidth(),
+                    actions = { TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) } },
+                ) {
+                    if (state.categories.isEmpty()) {
+                        Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                },
-            ) {
-                Text(
-                    s[StringKey.RulesHint],
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                state.rules.forEach { r ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable(
-                                onClick = { editRule = r },
-                                onClickLabel = s.format(StringKey.EditRuleNamed, r.pattern),
-                                role = Role.Button,
-                            )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                        Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
-                        Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
-                        IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                    state.categories.forEach { c ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    onClick = { editCategory = c },
+                                    onClickLabel = s.format(StringKey.EditCategoryNamed, c.name),
+                                    role = Role.Button,
+                                )
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
+                            Spacer(Modifier.width(12.dp))
+                            Text(c.name, modifier = Modifier.weight(1f))
+                            if (c.isTaxRelevant) {
+                                CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            c.budgetLimit?.let {
+                                Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                        }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
                 }
             }
-        }
 
-        item {
-            SectionCard(s[StringKey.DataAndOcr], Modifier.fillMaxWidth()) {
-                InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db")
-                InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                    Icon(
-                        if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (state.isOcrAvailable) Success else Warning,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
+            item {
+                SectionCard(
+                    s[StringKey.AutoCategorizationRules],
+                    Modifier.fillMaxWidth(),
+                    actions = {
+                        DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
+                            TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
+                        }
+                    },
+                ) {
                     Text(
-                        if (state.isOcrAvailable) {
-                            s[StringKey.TesseractAvailable]
-                        } else {
-                            s[StringKey.TesseractMissing]
-                        },
-                    )
-                }
-            }
-        }
-
-        item {
-            SectionCard(s[StringKey.BackupAndRestore], Modifier.fillMaxWidth()) {
-                Text(
-                    s[StringKey.BackupHint],
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else Warning,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (state.isEncrypted) s[StringKey.EncryptionStatus] + " " + s[StringKey.BackupNote] else s[StringKey.EncryptionOff],
+                        s[StringKey.RulesHint],
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(enabled = !state.isBusy, onClick = {
-                        FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
-                    }) { Text(s[StringKey.CreateBackup]) }
-                    OutlinedButton(enabled = !state.isBusy && !state.hasPendingRestore, onClick = {
-                        FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
-                    }) { Text(s[StringKey.RestoreFromBackup]) }
-                    if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                }
-                if (state.hasPendingRestore) {
                     Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
-                        TextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
+                    state.rules.forEach { r ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    onClick = { editRule = r },
+                                    onClickLabel = s.format(StringKey.EditRuleNamed, r.pattern),
+                                    role = Role.Button,
+                                )
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
+                            Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
+                            IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                        }
+                        HorizontalDivider()
                     }
                 }
-                state.restoredFrom?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(s.format(StringKey.BackupRestoredAt, it), style = MaterialTheme.typography.bodySmall)
+            }
+
+            item {
+                SectionCard(s[StringKey.DataAndOcr], Modifier.fillMaxWidth()) {
+                    InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db")
+                    InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                        Icon(
+                            if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (state.isOcrAvailable) Success else Warning,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (state.isOcrAvailable) {
+                                s[StringKey.TesseractAvailable]
+                            } else {
+                                s[StringKey.TesseractMissing]
+                            },
+                        )
+                    }
                 }
             }
-        }
 
-        item {
-            SectionCard(s[StringKey.ProtocolTraceTitle], Modifier.fillMaxWidth()) {
-                Text(
-                    s[StringKey.ProtocolTraceHint],
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.ProtocolTraceEnable], modifier = Modifier.weight(1f))
-                    Switch(checked = state.protocolTraceEnabled, onCheckedChange = { vm.setProtocolTraceEnabled(it) })
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(
-                        enabled = state.hasProtocolTrace,
-                        onClick = {
-                            FileDialogs.saveFile(s[StringKey.ProtocolTraceSave], "findesk-fints-trace-${java.time.LocalDate.now()}.txt")?.let { vm.saveProtocolTrace(it) }
-                        },
-                    ) { Text(s[StringKey.ProtocolTraceSave]) }
+            item {
+                SectionCard(s[StringKey.BackupAndRestore], Modifier.fillMaxWidth()) {
                     Text(
-                        if (state.hasProtocolTrace) s[StringKey.ProtocolTraceAvailable] else s[StringKey.ProtocolTraceNone],
+                        s[StringKey.BackupHint],
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else Warning,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (state.isEncrypted) s[StringKey.EncryptionStatus] + " " + s[StringKey.BackupNote] else s[StringKey.EncryptionOff],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(enabled = !state.isBusy, onClick = {
+                            FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
+                        }) { Text(s[StringKey.CreateBackup]) }
+                        OutlinedButton(enabled = !state.isBusy && !state.hasPendingRestore, onClick = {
+                            FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
+                        }) { Text(s[StringKey.RestoreFromBackup]) }
+                        if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    }
+                    if (state.hasPendingRestore) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
+                            TextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
+                        }
+                    }
+                    state.restoredFrom?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(s.format(StringKey.BackupRestoredAt, it), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
-        }
 
-        item {
-            SectionCard(s[StringKey.AuditLogLatest], Modifier.fillMaxWidth()) {
-                state.auditLog.forEach { e ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(140.dp))
-                        Text(e.action, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, modifier = Modifier.width(180.dp))
-                        Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            item {
+                SectionCard(s[StringKey.ProtocolTraceTitle], Modifier.fillMaxWidth()) {
+                    Text(
+                        s[StringKey.ProtocolTraceHint],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(s[StringKey.ProtocolTraceEnable], modifier = Modifier.weight(1f))
+                        Switch(checked = state.protocolTraceEnabled, onCheckedChange = { vm.setProtocolTraceEnabled(it) })
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            enabled = state.hasProtocolTrace,
+                            onClick = {
+                                FileDialogs.saveFile(s[StringKey.ProtocolTraceSave], "findesk-fints-trace-${java.time.LocalDate.now()}.txt")?.let { vm.saveProtocolTrace(it) }
+                            },
+                        ) { Text(s[StringKey.ProtocolTraceSave]) }
+                        Text(
+                            if (state.hasProtocolTrace) s[StringKey.ProtocolTraceAvailable] else s[StringKey.ProtocolTraceNone],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            item {
+                SectionCard(s[StringKey.AuditLogLatest], Modifier.fillMaxWidth()) {
+                    state.auditLog.forEach { e ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(140.dp))
+                            Text(e.action, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, modifier = Modifier.width(180.dp))
+                            Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
