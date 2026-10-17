@@ -9,9 +9,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankingService
 import de.findesk.banking.StandingOrderInterval
@@ -273,15 +276,17 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
             title = { Text(s[if (review.schedule != null) StringKey.ConfirmStandingOrder else StringKey.ConfirmTransfer]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
-                    ReviewRow(s[StringKey.From], "${account.bankName} ${Formats.iban(account.iban)}")
-                    ReviewRow(s[StringKey.To], order.recipientName)
-                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)))
-                    order.recipientBic?.let { ReviewRow(s[StringKey.ColBalance].let { "BIC" }, it) }
-                    ReviewRow(s[StringKey.AmountEuro], Formats.money(order.amount))
-                    ReviewRow(s[StringKey.Purpose], order.purpose.ifBlank { "—" })
+                    val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.AmountEuro], s[StringKey.Purpose], s[StringKey.Execution])
+                    ReviewRow(s[StringKey.From], "${account.bankName} ${Formats.iban(account.iban)}", labels)
+                    ReviewRow(s[StringKey.To], order.recipientName, labels)
+                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)), labels)
+                    order.recipientBic?.let { ReviewRow("BIC", it, labels) }
+                    ReviewRow(s[StringKey.AmountEuro], Formats.money(order.amount), labels)
+                    ReviewRow(s[StringKey.Purpose], order.purpose.ifBlank { "—" }, labels)
                     ReviewRow(
                         s[StringKey.Execution],
                         review.schedule?.let { scheduleText(it, s) } ?: review.date?.let { s.format(StringKey.OnDate, Formats.date(it)) } ?: s[StringKey.ExecuteNow],
+                        labels,
                     )
                     review.unconfirmed?.let { earlier ->
                         Text(
@@ -318,10 +323,11 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
             title = { Text(s[StringKey.DeleteStandingOrder]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
-                    ReviewRow(s[StringKey.To], o.order.recipientName)
-                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(o.order.recipientIban)))
-                    ReviewRow(s[StringKey.AmountEuro], Formats.money(o.order.amount))
-                    ReviewRow(s[StringKey.Execution], scheduleText(o.schedule, s))
+                    val labels = labelColumnWidth(s[StringKey.To], s[StringKey.Iban], s[StringKey.AmountEuro], s[StringKey.Execution])
+                    ReviewRow(s[StringKey.To], o.order.recipientName, labels)
+                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(o.order.recipientIban)), labels)
+                    ReviewRow(s[StringKey.AmountEuro], Formats.money(o.order.amount), labels)
+                    ReviewRow(s[StringKey.Execution], scheduleText(o.schedule, s), labels)
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
@@ -365,10 +371,19 @@ private fun scheduleText(schedule: StandingOrderSchedule, s: Strings): String {
     return base + (schedule.lastDate?.let { " " + s.format(StringKey.ScheduleUntil, Formats.date(it)) } ?: "")
 }
 
+/** Width of the widest review label in the current language, so values line up and no label breaks mid-word. */
 @Composable
-private fun ReviewRow(label: String, value: String) {
+private fun labelColumnWidth(vararg labels: String): Dp {
+    val measurer = rememberTextMeasurer()
+    val style = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium)
+    val widest = labels.maxOf { measurer.measure(it, style).size.width }
+    return with(LocalDensity.current) { widest.toDp() } + 12.dp
+}
+
+@Composable
+private fun ReviewRow(label: String, value: String, labelWidth: Dp) {
     Row {
-        Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+        Text(label, fontWeight = FontWeight.Medium, softWrap = false, modifier = Modifier.width(labelWidth))
         Text(value)
     }
 }
