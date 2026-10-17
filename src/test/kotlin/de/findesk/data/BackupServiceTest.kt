@@ -151,6 +151,22 @@ class BackupServiceTest {
     }
 
     @Test
+    fun `a backup that could not be restored is refused`() {
+        val dataDir = File(tmp, "d6").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        TestData().account()
+        File(dataDir, "documents").mkdirs()
+        File(dataDir, "documents/scan.pdf").writeBytes(ByteArray(64 * 1024))
+        val target = File(tmp, "b6.zip")
+
+        val error = assertThrows<IllegalArgumentException> { BackupService(dataDir, maxRestoreBytes = 32 * 1024).createBackup(target) }
+
+        assertEquals("Backup is too large to restore", error.message)
+        assertFalse(target.exists())
+        assertTrue(dataDir.listFiles()!!.none { it.name.endsWith(".db.tmp") }, "temporary copy removed")
+    }
+
+    @Test
     fun `the backup's temporary database copy stays out of the shared temp dir`() {
         val dataDir = File(tmp, "d5").apply { mkdirs() }
         DatabaseFactory.init(dataDir.absolutePath)
