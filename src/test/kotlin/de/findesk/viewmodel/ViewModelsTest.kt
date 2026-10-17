@@ -78,7 +78,7 @@ class ViewModelsTest {
     }
 
     @Test
-    fun `manual transaction gets auto-categorized and duplicates are rejected`() = runBlocking {
+    fun `manual transaction gets auto-categorized and an identical one waits for confirmation`() = runBlocking {
         data.ruleRepo.create("edeka", food)
         val vm = TransactionsViewModel(today = { today })
         vm.addManualTransaction(account, today, BigDecimal("-12.34"), "EDEKA Center", null, null).join()
@@ -86,7 +86,28 @@ class ViewModelsTest {
         assertEquals("Food", added.categoryName)
 
         vm.addManualTransaction(account, today, BigDecimal("-12.34"), "EDEKA Center", null, null).join()
-        assertEquals("An identical transaction already exists", vm.state.value.error)
+        assertEquals(1, vm.state.value.transactions.count { it.partnerName == "EDEKA Center" }, "not added before confirming")
+        assertEquals(BigDecimal("-12.34"), vm.state.value.pendingDuplicate?.amount)
+
+        vm.dismissDuplicate()
+        assertNull(vm.state.value.pendingDuplicate)
+        assertEquals(1, vm.state.value.transactions.count { it.partnerName == "EDEKA Center" })
+        vm.close()
+    }
+
+    @Test
+    fun `a confirmed identical manual entry is added as a second booking`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        repeat(2) { vm.addManualTransaction(account, today, BigDecimal("-3.50"), "Café", "Coffee", null).join() }
+
+        vm.confirmDuplicate()!!.join()
+
+        val coffees = vm.state.value.transactions.filter { it.partnerName == "Café" }
+        assertEquals(2, coffees.size)
+        assertNull(vm.state.value.pendingDuplicate)
+        assertNull(vm.state.value.error)
+        assertEquals(2, data.transactionRepo.findAll().filter { it.partnerName == "Café" }.map { it.hash }.distinct().size, "each entry has its own hash")
+        assertNull(vm.confirmDuplicate(), "nothing left to confirm")
         vm.close()
     }
 
@@ -98,12 +119,12 @@ class ViewModelsTest {
 
         // The same booking on another account is a different booking
         vm.addManualTransaction(other, today, BigDecimal("-4.50"), "Bäckerei", "Brötchen", null).join()
-        assertNull(vm.state.value.error)
+        assertNull(vm.state.value.pendingDuplicate)
         assertEquals(2, data.transactionRepo.findItems().count { it.partnerName == "Bäckerei" })
 
         // Typed again on the first account, even with stray spaces, it is caught
         vm.addManualTransaction(account, today, BigDecimal("-4.5"), " Bäckerei ", "Brötchen ", null).join()
-        assertEquals("An identical transaction already exists", vm.state.value.error)
+        assertEquals(account, vm.state.value.pendingDuplicate?.accountId)
         assertEquals(2, data.transactionRepo.findItems().count { it.partnerName == "Bäckerei" })
         vm.close()
     }
