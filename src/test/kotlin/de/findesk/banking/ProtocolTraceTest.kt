@@ -2,7 +2,9 @@ package de.findesk.banking
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import java.nio.file.FileSystems
 import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 import java.time.LocalDateTime
 
 class ProtocolTraceTest {
@@ -33,6 +35,11 @@ class ProtocolTraceTest {
         assertNotNull(ProtocolTraceStore.last())
         ProtocolTraceStore.save(out, "1.0.0")
         assertTrue(out.readText().contains("entries: 1"))
+        assertTrue(out.readText().contains("the bank's answers are NOT masked"))
+        // The trace holds the bank's answers; other users must not read it
+        if (FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) {
+            assertEquals(setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE), Files.getPosixFilePermissions(out.toPath()))
+        }
 
         ProtocolTraceStore.publish(sample())
         ProtocolTraceStore.clear()

@@ -140,9 +140,12 @@ it can be attached to a bug report:
 3. In **Settings**, press **Save protocol trace** and attach the resulting
    `.txt` file to your issue.
 
-Traces are captured in memory only, redacted (PINs, TANs, the connection
-passphrase and account numbers are masked as `X`), and are **never** uploaded
-automatically — you always save and share the file yourself.
+Traces are captured in memory only and are **never** uploaded automatically —
+you always save and share the file yourself. PINs, TANs, the connection
+passphrase, the user id and account numbers are masked as `X`, but the trace
+contains the bank's full answers: counterparty names, purposes, amounts and
+balances. Read the file before you attach it, and remove what you don't want to
+share. The saved file is readable only by your user.
 
 ## Project structure
 
