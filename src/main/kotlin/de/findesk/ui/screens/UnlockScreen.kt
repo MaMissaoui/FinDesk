@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import de.findesk.data.database.DatabaseCrypto
+import de.findesk.data.database.PlaintextLeftovers
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.viewmodel.UnlockError
@@ -108,6 +109,23 @@ fun UnlockScreen(vm: UnlockViewModel, profileName: String?) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.tertiary,
                     )
+                }
+
+                if (state.plaintextLeftovers.isNotEmpty()) {
+                    Text(
+                        s[StringKey.PlaintextLeftoversTitle],
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(s[StringKey.PlaintextLeftoversText], style = MaterialTheme.typography.bodySmall)
+                    state.plaintextLeftovers.forEach { leftover ->
+                        Text(
+                            "${s[leftoverKindKey(leftover.kind)]} · ${leftover.path}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 if (mode == UnlockMode.CHANGE) {
@@ -210,4 +228,11 @@ private fun CheckRow(checked: Boolean, onChange: (Boolean) -> Unit, label: Strin
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+private fun leftoverKindKey(kind: PlaintextLeftovers.Kind): StringKey = when (kind) {
+    PlaintextLeftovers.Kind.PRE_RESTORE -> StringKey.PlaintextLeftoverPreRestore
+    PlaintextLeftovers.Kind.DELETED_PROFILE -> StringKey.PlaintextLeftoverDeletedProfile
+    PlaintextLeftovers.Kind.PENDING_RESTORE -> StringKey.PlaintextLeftoverPendingRestore
+    PlaintextLeftovers.Kind.OTHER_PROFILE -> StringKey.PlaintextLeftoverOtherProfile
 }

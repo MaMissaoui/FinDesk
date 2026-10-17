@@ -153,7 +153,7 @@ class DatabaseEncryptionTest {
     fun `the startup gate creates, encrypts, unlocks and changes, with audit entries`() = runBlocking {
         // New profile: choose a passphrase
         val fresh = dir("fresh")
-        UnlockViewModel(fresh).use { vm ->
+        UnlockViewModel(fresh, rootDir = fresh).use { vm ->
             assertEquals(UnlockMode.CREATE, vm.state.value.mode)
             vm.setPassphrase("too short", "too short", true).join()
             assertEquals(UnlockError.TOO_SHORT, vm.state.value.error)
@@ -173,7 +173,7 @@ class DatabaseEncryptionTest {
         DatabaseFactory.init(plain.absolutePath)
         seed("Old Data")
         DatabaseFactory.init(dir("elsewhere").absolutePath)
-        UnlockViewModel(plain).use { vm ->
+        UnlockViewModel(plain, rootDir = plain).use { vm ->
             assertEquals(UnlockMode.ENCRYPT, vm.state.value.mode)
             vm.setPassphrase(pass, pass, true).join()
             assertTrue(vm.state.value.opened)
@@ -183,7 +183,7 @@ class DatabaseEncryptionTest {
 
         // Unlock: a wrong passphrase is rejected, the right one opens
         DatabaseFactory.init(dir("elsewhere").absolutePath)
-        UnlockViewModel(plain).use { vm ->
+        UnlockViewModel(plain, rootDir = plain).use { vm ->
             assertEquals(UnlockMode.UNLOCK, vm.state.value.mode)
             vm.unlock("wrong passphrase").join()
             assertEquals(UnlockError.WRONG_PASSPHRASE, vm.state.value.error)
@@ -195,7 +195,7 @@ class DatabaseEncryptionTest {
         // Change: needs the current passphrase
         val newPass = "a brand new passphrase"
         DatabaseFactory.init(dir("elsewhere").absolutePath)
-        UnlockViewModel(plain).use { vm ->
+        UnlockViewModel(plain, rootDir = plain).use { vm ->
             vm.showChange(true)
             assertEquals(UnlockMode.CHANGE, vm.state.value.mode)
             vm.changePassphrase("wrong passphrase", newPass, newPass, true).join()

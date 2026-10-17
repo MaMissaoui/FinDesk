@@ -112,6 +112,9 @@ Packages are built for the operating system you run the build on.
 - PINs and TANs are requested per sync and never persisted or logged. The
   database key is passed to the driver only through connection properties.
 - `documents/` (attached files) is **not** encrypted.
+- Encryption covers the database FinDesk opens. Copies it left behind earlier
+  (data a restore replaced, deleted profiles, profiles not opened yet) are
+  detected and listed on the unlock screen, so you can delete them.
 
 See [SECURITY.md](SECURITY.md) for the threat model and how to report issues.
 
