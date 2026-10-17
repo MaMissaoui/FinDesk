@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ImageComposeScene
@@ -55,6 +56,8 @@ class ScreenshotTest {
             render("${screen.ordinal}-${screen.name.lowercase()}", screen, dark = false)
         }
         render("9-dashboard-dark", Screen.DASHBOARD, dark = true)
+        // Page headings sit straight on the background, so they show whether the content colour follows the theme
+        render("10-transactions-dark", Screen.TRANSACTIONS, dark = true)
         render("8-dashboard-full", Screen.DASHBOARD, dark = false, height = 1800)
         render("7-settings-full", Screen.SETTINGS, dark = false, height = 2400)
     }
@@ -146,20 +149,23 @@ class ScreenshotTest {
     private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, lockedOn: Screen? = null) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
-                Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                    Sidebar(currentScreen = screen, onScreenSelected = {}, lockedOn = lockedOn)
-                    Column(Modifier.fillMaxSize()) {
-                        TopBar(title = stringsFor(screen), isDarkTheme = dark, onThemeToggle = {})
-                        HorizontalDivider()
-                        Box(Modifier.fillMaxSize()) {
-                            when (screen) {
-                                Screen.DASHBOARD -> DashboardScreen()
-                                Screen.ACCOUNTS -> AccountsScreen()
-                                Screen.TRANSACTIONS -> TransactionsScreen()
-                                Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
-                                Screen.DOCUMENTS -> DocumentsScreen()
-                                Screen.REPORTS -> ReportsScreen()
-                                Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {}, language = AppLanguage.EN, onLanguageChange = {})
+                // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    Row(Modifier.fillMaxSize()) {
+                        Sidebar(currentScreen = screen, onScreenSelected = {}, lockedOn = lockedOn)
+                        Column(Modifier.fillMaxSize()) {
+                            TopBar(title = stringsFor(screen), isDarkTheme = dark, onThemeToggle = {})
+                            HorizontalDivider()
+                            Box(Modifier.fillMaxSize()) {
+                                when (screen) {
+                                    Screen.DASHBOARD -> DashboardScreen()
+                                    Screen.ACCOUNTS -> AccountsScreen()
+                                    Screen.TRANSACTIONS -> TransactionsScreen()
+                                    Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
+                                    Screen.DOCUMENTS -> DocumentsScreen()
+                                    Screen.REPORTS -> ReportsScreen()
+                                    Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {}, language = AppLanguage.EN, onLanguageChange = {})
+                                }
                             }
                         }
                     }

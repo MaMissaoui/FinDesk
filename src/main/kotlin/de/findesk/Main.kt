@@ -66,49 +66,52 @@ fun App(
 
     CompositionLocalProvider(LocalStrings provides strings) {
         FinDeskTheme(darkTheme = isDarkTheme) {
-            Row(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                Sidebar(
-                    currentScreen = navigationState.currentScreen,
-                    onScreenSelected = { navigationState.navigateTo(it) },
-                    profileName = profileLabel,
-                    lockedOn = navigationState.lockedOn,
-                )
-
-                Column(modifier = Modifier.fillMaxSize()) {
-                    TopBar(
-                        title = navigationState.currentScreen.title(strings),
-                        isDarkTheme = isDarkTheme,
-                        onThemeToggle = { setDarkTheme(!isDarkTheme) },
+            // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Row(modifier = Modifier.fillMaxSize()) {
+                    Sidebar(
+                        currentScreen = navigationState.currentScreen,
+                        onScreenSelected = { navigationState.navigateTo(it) },
+                        profileName = profileLabel,
+                        lockedOn = navigationState.lockedOn,
                     )
 
-                    HorizontalDivider()
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        TopBar(
+                            title = navigationState.currentScreen.title(strings),
+                            isDarkTheme = isDarkTheme,
+                            onThemeToggle = { setDarkTheme(!isDarkTheme) },
+                        )
 
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        // key() gives each visit a fresh screen (and view model) so navigation args are applied
-                        key(navigationState.currentScreen, navigationState.args, language) {
-                            when (navigationState.currentScreen) {
-                                Screen.DASHBOARD -> DashboardScreen(onNavigate = navigate)
+                        HorizontalDivider()
 
-                                Screen.ACCOUNTS -> AccountsScreen(onNavigate = navigate)
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // key() gives each visit a fresh screen (and view model) so navigation args are applied
+                            key(navigationState.currentScreen, navigationState.args, language) {
+                                when (navigationState.currentScreen) {
+                                    Screen.DASHBOARD -> DashboardScreen(onNavigate = navigate)
 
-                                Screen.TRANSACTIONS -> TransactionsScreen(args = navigationState.args)
+                                    Screen.ACCOUNTS -> AccountsScreen(onNavigate = navigate)
 
-                                Screen.PAYMENTS -> PaymentsScreen(
-                                    onSendingChange = { sending ->
-                                        if (sending) navigationState.lock(Screen.PAYMENTS) else navigationState.unlock(Screen.PAYMENTS)
-                                    },
-                                )
+                                    Screen.TRANSACTIONS -> TransactionsScreen(args = navigationState.args)
 
-                                Screen.DOCUMENTS -> DocumentsScreen()
+                                    Screen.PAYMENTS -> PaymentsScreen(
+                                        onSendingChange = { sending ->
+                                            if (sending) navigationState.lock(Screen.PAYMENTS) else navigationState.unlock(Screen.PAYMENTS)
+                                        },
+                                    )
 
-                                Screen.REPORTS -> ReportsScreen()
+                                    Screen.DOCUMENTS -> DocumentsScreen()
 
-                                Screen.SETTINGS -> SettingsScreen(
-                                    darkTheme = isDarkTheme,
-                                    onDarkThemeChange = setDarkTheme,
-                                    language = language,
-                                    onLanguageChange = onLanguageChange,
-                                )
+                                    Screen.REPORTS -> ReportsScreen()
+
+                                    Screen.SETTINGS -> SettingsScreen(
+                                        darkTheme = isDarkTheme,
+                                        onDarkThemeChange = setDarkTheme,
+                                        language = language,
+                                        onLanguageChange = onLanguageChange,
+                                    )
+                                }
                             }
                         }
                     }
