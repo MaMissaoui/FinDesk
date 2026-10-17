@@ -66,7 +66,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Bank capability detection: after a successful dialog the login's supported business transactions (BPD/UPD job names) are detected (`BankCapabilities`), stored on the bank access (`bank_access.capabilities`, null = unknown) and used to refuse scheduled transfers and standing orders the login doesn't offer, before anything is sent. Immediate transfers stay the bank's decision.
 - [ ] Bank-specific overrides: hbci4j rewriter/`feature.*` options and Hibiscus-style per-BLZ workarounds; research done (rewriter modules, `Feature` flags, per-BLZ handling), no code yet.
 - [x] Protocol trace for support/troubleshooting: opt-in capture of the FinTS/HBCI dialog (`ProtocolTraceStore`, hbci4java log level raised to 5), redacted before rendering (user id, customer id, PIN, TAN, passport passphrase, account numbers and IBAN-like tokens masked as `X`), held in memory only and exported from Settings → *FinTS protocol trace* / *Save protocol trace*. Modelled on Hibiscus' "Tracen der HBCI-Kommunikation" and its redacted-log support workflow.
-- [x] Hardening and public-repo hygiene: owner-only file permissions for the data directory, database (`-wal`/`-shm`), `documents/`, passports (re-applied after every dialog), profiles and backups (`de.findesk.util.FileSecurity`); imported document file names sanitised before use on disk; `LICENSE` (MIT), `SECURITY.md` and `CONTRIBUTING.md` added; `CLAUDE.md`/`.claude/` untracked and ignored, architecture notes moved to `docs/ARCHITECTURE.md`; the Gradle wrapper jar is tracked again; README rewritten (no broken links/placeholders).
+- [x] Release packaging in CI: `ci.yml` runs `ktlintCheck` and the tests on pull requests and `main`; `package.yml` builds the installers on the matching runner (DMG; DEB/RPM; MSI/EXE) for pull requests and attaches them to a published release. Fixing this surfaced two long-standing bugs: the per-OS `targetFormats(...)` assignments shared one property, so only the Linux tasks were registered on every host (formats now declared at the `nativeDistributions` level), and the "bank unreachable" classification only matched hbci4java's *German* send-failure text, so it failed on an English-locale JVM (`BankingFailures` now checks the cause chain for an `IOException` and matches both languages).
 
 ---
 
@@ -292,10 +292,15 @@ src/main/kotlin/de/findesk/
 
 ### Distribution Packages
 
+#### Automatically (GitHub Actions)
+`.github/workflows/package.yml` builds the installers on the matching runner and uploads them as
+artifacts on every pull request; on a published release the same files are attached to it.
+`ci.yml` runs `ktlintCheck` and the tests on pull requests and on `main`.
+
 #### Current Platform
 ```bash
-# Build installer for current OS
-./gradlew buildDistribution
+# Build every installer format configured for this OS
+./gradlew packageDistributionForCurrentOS
 ```
 
 #### macOS
@@ -320,15 +325,11 @@ src/main/kotlin/de/findesk/
 ```bash
 # Debian/Ubuntu package
 ./gradlew packageDeb
-# Output: build/compose/binaries/main/deb/findesk_1.0.0-1_amd64.deb
+# Output: build/compose/binaries/main/deb/findesk_1.0.0_amd64.deb
 
 # Fedora/RHEL package
 ./gradlew packageRpm
 # Output: build/compose/binaries/main/rpm/findesk-1.0.0-1.x86_64.rpm
-
-# Universal AppImage
-./gradlew packageAppImage
-# Output: build/compose/binaries/main/appimage/FinDesk-1.0.0.AppImage
 ```
 
 ### Output Locations
@@ -339,5 +340,4 @@ src/main/kotlin/de/findesk/
 | Windows | EXE | `build/compose/binaries/main/exe/` |
 | Linux | DEB | `build/compose/binaries/main/deb/` |
 | Linux | RPM | `build/compose/binaries/main/rpm/` |
-| Linux | AppImage | `build/compose/binaries/main/appimage/` |
 | All | JAR | `build/libs/FinDesk-0.1.0-SNAPSHOT.jar` |
