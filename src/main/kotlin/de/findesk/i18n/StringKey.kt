@@ -92,7 +92,6 @@ enum class StringKey {
     NoTransactionsYet,
 
     // Accounts
-    BankAccounts,
     AccountsTotal,
     AddBank,
     NoBanksYet,
@@ -344,7 +343,6 @@ enum class StringKey {
     PreviewOf,
 
     // Reports
-    ReportsAndTax,
     ExportPdf,
     ExportReport,
     TaxYear,

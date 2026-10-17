@@ -55,12 +55,8 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                s[StringKey.Transactions],
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f).semantics { heading() },
-            )
+            // The top bar names the screen; this row holds its actions
+            Spacer(Modifier.weight(1f))
             DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
                 OutlinedButton(
                     enabled = state.accounts.isNotEmpty(),

@@ -47,12 +47,8 @@ fun ReportsScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                s[StringKey.ReportsAndTax],
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f).semantics { heading() },
-            )
+            // The top bar names the screen; this row holds its actions
+            Spacer(Modifier.weight(1f))
             if (state.isExporting) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))

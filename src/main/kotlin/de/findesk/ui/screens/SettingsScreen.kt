@@ -53,15 +53,9 @@ fun SettingsScreen(
     var confirmDeleteProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
 
     LazyColumn(modifier = Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            Text(
-                s[StringKey.NavSettings],
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.semantics { heading() },
-            )
-            Spacer(Modifier.height(8.dp))
-            MessageBanner(state.message, state.error, vm::clearMessages)
+        // Only when there is something to say: an empty item still takes the list's spacing
+        if (state.message != null || state.error != null) {
+            item { MessageBanner(state.message, state.error, vm::clearMessages) }
         }
 
         item {
