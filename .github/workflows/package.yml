@@ -59,6 +59,13 @@ jobs:
         shell: bash
         run: ./gradlew --no-daemon ${{ matrix.task }}
 
+      # A wrong icon file does not fail the build: jpackage warns and quietly substitutes the JDK's
+      # JavaApp icon (Duke), which is how the 2026-10-17 audit found the DMG shipping Duke. The app
+      # image every installer embeds is checked against the icons in the repository before upload.
+      - name: Verify the packaged icon
+        shell: bash
+        run: ./gradlew --no-daemon verifyInstallerIcon
+
       - name: Upload installers
         uses: actions/upload-artifact@v7
         with:

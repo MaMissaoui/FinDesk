@@ -76,6 +76,20 @@ magick /tmp/s256.png /tmp/s128.png /tmp/s64.png /tmp/s32.png /tmp/s16.png \
 needed. The PNGs used inside the app (`icon-512.png`, `icon-64.png`) stay at the
 root of `src/main/resources/` because the UI loads them from the classpath.
 
+Because a wrong icon is invisible — the build succeeds and the installer simply
+ships Duke — CI verifies the packaged app image against the committed icons
+after packaging:
+
+```bash
+./gradlew createDistributable verifyInstallerIcon
+```
+
+It checks whatever app image is present (`.icns` hash on macOS, every `.ico`
+image inside the launcher on Windows, `.png` hash on Linux), so it also works on
+an artifact you copy in by hand. `createDistributable` writes the app image that
+the DMG/MSI/EXE/DEB/RPM all embed, which is why checking that one artifact
+covers every installer.
+
 ## Bank safety rules
 
 These are non-negotiable, because they protect users' money and credentials:
