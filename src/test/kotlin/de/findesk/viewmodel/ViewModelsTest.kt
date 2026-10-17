@@ -179,7 +179,7 @@ class ViewModelsTest {
         assertEquals("NETFLIX\\.COM", pattern)
 
         vm.createRule(pattern, food).join()
-        assertEquals("Rule created and applied to 2 uncategorized transaction(s)", vm.state.value.message)
+        assertEquals("Rule created and applied to 2 uncategorized transactions", vm.state.value.message)
         assertEquals(2, data.transactionRepo.findItems().count { it.partnerName!!.startsWith("NETFLIX") && it.categoryId == food })
         vm.close()
     }
