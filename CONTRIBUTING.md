@@ -3,6 +3,9 @@
 Thanks for your interest in improving FinDesk! This document describes how to
 build, test and submit changes.
 
+FinDesk is alpha software and must not be used with real bank accounts yet — see
+the [disclaimer](README.md#disclaimer) in the README.
+
 ## Getting started
 
 1. Install **JDK 21** or newer.

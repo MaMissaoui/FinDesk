@@ -3,6 +3,7 @@
 [![CI](https://github.com/MaMissaoui/FinDesk/actions/workflows/ci.yml/badge.svg)](https://github.com/MaMissaoui/FinDesk/actions/workflows/ci.yml)
 [![Package](https://github.com/MaMissaoui/FinDesk/actions/workflows/package.yml/badge.svg)](https://github.com/MaMissaoui/FinDesk/actions/workflows/package.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#disclaimer)
 
 A free, local-first personal finance desktop application that unifies
 multi-banking (FinTS/HBCI), transactions, documents and tax-relevant
@@ -11,9 +12,20 @@ information in one place. Similar in spirit to
 and [Pecunia](https://pecunia.zum-quellcode.de/), it keeps all of your data on
 your own machine — no account, no cloud, no telemetry.
 
-> **Status:** early development. The FinTS integration is currently verified
-> against simulated banks and the public Subsembly/FinAPI test endpoints only.
-> Try your first real-bank sync carefully and with a single account.
+> ## Disclaimer
+>
+> **FinDesk is ALPHA software. It is not released for production use, and it must
+> not be used with real bank accounts.**
+>
+> The FinTS/HBCI integration has never been run against a live bank — only against
+> simulated banks and the public Subsembly/FinAPI test endpoints. The database
+> schema and file formats still change between commits, so data loss or wrong
+> balances cannot be ruled out. Transfers, scheduled transfers and standing orders
+> move real money and may fail, hang or behave unexpectedly.
+>
+> Use sample data or a FinTS test/demo account. Balances and reports produced by
+> this application are unverified and must not be relied on for accounting, tax or
+> financial decisions.
 
 ## Features
 
@@ -74,7 +86,8 @@ FINDESK_HOME=/tmp/findesk-dev ./gradlew run --no-daemon
 
 Prebuilt installers for macOS (DMG), Windows (MSI/portable EXE) and Linux
 (DEB/RPM) are attached to every
-[release](https://github.com/MaMissaoui/FinDesk/releases).
+[release](https://github.com/MaMissaoui/FinDesk/releases). These are alpha
+builds — read the [disclaimer](#disclaimer) first.
 
 ## Build installers
 
