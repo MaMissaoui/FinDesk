@@ -82,7 +82,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs()) {
                 onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
                 enabled = state.transactions.isNotEmpty(),
             ) {
-                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(s[StringKey.ExportCsv])
             }

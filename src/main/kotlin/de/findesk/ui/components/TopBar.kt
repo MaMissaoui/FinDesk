@@ -48,7 +48,8 @@ fun TopBar(
             // Theme Toggle
             IconButton(onClick = onThemeToggle) {
                 Icon(
-                    imageVector = if (isDarkTheme) Icons.Default.Star else Icons.Default.FavoriteBorder,
+                    // Shows the theme a click switches to
+                    imageVector = if (isDarkTheme) AppIcons.LightMode else AppIcons.DarkMode,
                     contentDescription = strings()[StringKey.ToggleTheme],
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

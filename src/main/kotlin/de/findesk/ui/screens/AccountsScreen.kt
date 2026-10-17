@@ -78,7 +78,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
 
         if (!state.isLoading && state.bankAccesses.isEmpty()) {
             EmptyState(
-                Icons.Default.AccountBox,
+                AppIcons.AccountBalance,
                 s[StringKey.NoBanksYet],
                 s[StringKey.NoBanksDescription],
             ) { Button(onClick = { showAddBank = true }) { Text(s[StringKey.AddBank]) } }
