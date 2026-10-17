@@ -15,7 +15,18 @@ class Strings(
 ) {
     operator fun get(key: StringKey): String = values[key] ?: Translations.en[key] ?: key.name
 
-    fun format(key: StringKey, vararg args: Any?): String = String.format(language.locale, this[key], *args)
+    /**
+     * Formats [key] with [args]. A value picks a word by a count with `{2:account|accounts}`: the first form when
+     * argument 2 is singular under the language's rule (see [AppLanguage.isSingular]), so "1 account" and
+     * "3 accounts" come from one string instead of "account(s)".
+     */
+    fun format(key: StringKey, vararg args: Any?): String {
+        val text = PLURAL.replace(this[key]) { m ->
+            val count = (args.getOrNull(m.groupValues[1].toInt() - 1) as? Number)?.toLong()
+            if (count != null && language.isSingular(count)) m.groupValues[2] else m.groupValues[3]
+        }
+        return String.format(language.locale, text, *args)
+    }
 
     fun accountType(type: String): String = when (type) {
         "checking" -> this[StringKey.TypeChecking]
@@ -69,6 +80,11 @@ class Strings(
         PaymentAction.STANDING_ORDER_CREATE -> this[StringKey.PaymentActionStandingOrder]
         PaymentAction.STANDING_ORDER_DELETE -> this[StringKey.PaymentActionStandingOrderDelete]
         else -> action
+    }
+
+    internal companion object {
+        /** `{n:singular|plural}`, where n is the 1-based index of the count among the format arguments. */
+        val PLURAL = Regex("\\{(\\d+):([^{}|]*)\\|([^{}|]*)\\}")
     }
 }
 
