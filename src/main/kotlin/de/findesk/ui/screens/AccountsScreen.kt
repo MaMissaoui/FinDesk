@@ -196,7 +196,7 @@ private fun BankCard(
     onOpenAccount: (AccountItem) -> Unit,
 ) {
     val s = strings()
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+    FinDeskCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

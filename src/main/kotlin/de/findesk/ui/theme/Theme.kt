@@ -21,7 +21,15 @@ internal val LightColorScheme = lightColorScheme(
     surface = SurfaceWhite,
     onSurface = DarkGray,
     surfaceVariant = LightGray,
-    onSurfaceVariant = MediumGray,
+    // Darker than MediumGray so secondary text keeps 4.5:1 on surfaceVariant too (table headers; see ContrastTest)
+    onSurfaceVariant = Color(0xFF5B6472),
+    // Material 3 draws cards and dialogs on these roles; left unset they fall back to its purple-tinted baseline, on
+    // which secondary text and amounts dropped below 4.5:1. White cards keep every text colour readable.
+    surfaceContainerLowest = SurfaceWhite,
+    surfaceContainerLow = SurfaceWhite,
+    surfaceContainer = SurfaceWhite,
+    surfaceContainerHigh = SurfaceWhite,
+    surfaceContainerHighest = SurfaceWhite,
     error = Error,
     onError = Color.White,
     outline = MediumGray,
@@ -45,6 +53,12 @@ internal val DarkColorScheme = darkColorScheme(
     onSurface = Color(0xFFE6E1E5),
     surfaceVariant = Color(0xFF49454F),
     onSurfaceVariant = Color(0xFFCAC4D0),
+    // Neutral greys instead of Material 3's purple baseline; #232529 keeps the blue text buttons at 4.5:1
+    surfaceContainerLowest = Color(0xFF17181B),
+    surfaceContainerLow = Color(0xFF1E2023),
+    surfaceContainer = Color(0xFF202226),
+    surfaceContainerHigh = Color(0xFF232529),
+    surfaceContainerHighest = Color(0xFF232529),
     error = ErrorDark,
     onError = Color(0xFF690005),
     outline = Color(0xFF938F99),

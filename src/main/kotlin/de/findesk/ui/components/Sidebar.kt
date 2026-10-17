@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -19,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import de.findesk.i18n.strings
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.PrimaryBlue
+import de.findesk.ui.theme.PrimaryBlueDark
 import de.findesk.util.AppInfo
 
 @Composable
@@ -35,7 +37,7 @@ fun Sidebar(
         modifier = modifier
             .width(240.dp)
             .fillMaxHeight()
-            .background(PrimaryBlue)
+            .background(sidebarColor())
             .padding(16.dp),
     ) {
         // App Logo/Title
@@ -83,6 +85,10 @@ fun Sidebar(
         )
     }
 }
+
+/** The brand blue, darkened in the dark theme so the sidebar doesn't glare next to dark surfaces. */
+@Composable
+internal fun sidebarColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) PrimaryBlue else PrimaryBlueDark
 
 @Composable
 private fun SidebarItem(

@@ -103,9 +103,23 @@ fun EmptyState(icon: ImageVector, title: String, description: String, modifier: 
     }
 }
 
+/**
+ * FinDesk's card: the theme's card colour (surfaceContainerHighest) with a hairline outline, so it stands off the page
+ * in both themes. Text contrast on it is checked in ContrastTest.
+ */
+@Composable
+fun FinDeskCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        content = content,
+    )
+}
+
 @Composable
 fun SectionCard(title: String, modifier: Modifier = Modifier, actions: @Composable RowScope.() -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp)) {
+    FinDeskCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -124,7 +138,7 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, actions: @Composab
 
 @Composable
 fun StatCard(title: String, value: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier, subtitle: String? = null) {
-    Card(modifier = modifier, shape = RoundedCornerShape(12.dp)) {
+    FinDeskCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
