@@ -16,7 +16,9 @@ interface RuleRepository {
     fun create(pattern: String, categoryId: Int, priority: Int = 0, autoApply: Boolean = true): Rule
     fun update(id: Int, pattern: String? = null, categoryId: Int? = null, priority: Int? = null, autoApply: Boolean? = null): Rule?
     fun delete(id: Int): Boolean
-    fun matchTransaction(purpose: String?, partnerName: String?): Category?
+
+    /** The category id of the first auto-apply rule matching purpose or partner name; see [RuleMatcher]. */
+    fun matchCategoryId(purpose: String?, partnerName: String?): Int?
     fun findAllItems(): List<RuleItem>
 
     /** The auto-apply rules, loaded and compiled once: use it to categorize many bookings in a row. */
@@ -77,12 +79,7 @@ class RuleRepositoryImpl : RuleRepository {
         Rule.findById(id)?.delete() != null
     }
 
-    override fun matchTransaction(purpose: String?, partnerName: String?): Category? = transaction {
-        val rules = findAutoApplyRules()
-        val textToMatch = listOfNotNull(purpose, partnerName).joinToString(" ")
-        if (textToMatch.isBlank()) return@transaction null
-        rules.firstOrNull { rule -> ruleMatches(rule.pattern, textToMatch) }?.category
-    }
+    override fun matchCategoryId(purpose: String?, partnerName: String?): Int? = matcher().categoryFor(purpose, partnerName)
 
     override fun findAllItems(): List<RuleItem> = transaction {
         Rule.all().orderBy(RulesTable.priority to SortOrder.DESC).map { it.toItem() }
@@ -94,8 +91,8 @@ class RuleRepositoryImpl : RuleRepository {
 }
 
 /**
- * Auto-apply rules compiled once, in priority order. Matches like [RuleRepository.matchTransaction]: the first rule
- * whose pattern is found in purpose and partner name wins; an invalid regex matches as a plain substring.
+ * Auto-apply rules compiled once, in priority order: the first rule whose pattern is found in purpose and partner
+ * name wins; an invalid regex matches as a plain substring, like [ruleMatches].
  */
 class RuleMatcher(rules: List<Pair<String, Int>>) {
     private val compiled: List<Pair<(String) -> Boolean, Int>> = rules.map { (pattern, categoryId) ->

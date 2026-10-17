@@ -273,7 +273,7 @@ class TransactionsViewModel(
             return@launchSafely
         }
         val hash = FinTSClient.transactionHash(date, amount, partner, "${text.orEmpty()}#${account.iban}#manual")
-        val resolvedCategory = categoryId ?: ruleRepository.matchTransaction(purpose, partnerName)?.id?.value
+        val resolvedCategory = categoryId ?: ruleRepository.matchCategoryId(purpose, partnerName)
         transactionRepository.create(
             accountId = accountId,
             date = date,

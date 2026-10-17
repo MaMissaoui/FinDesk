@@ -80,13 +80,13 @@ class TransactionItemsTest {
         data.ruleRepo.create("[unclosed", food, priority = 10)
         data.ruleRepo.create("null", office, priority = 5)
         // Invalid regex falls back to substring match instead of throwing
-        assertEquals("Food", data.ruleRepo.matchTransaction("buy [unclosed thing", null)?.let { c -> data.categoryRepo.findAllItems().first { it.id == c.id.value }.name })
+        assertEquals(food, data.ruleRepo.matchCategoryId("buy [unclosed thing", null))
         // Null fields must not turn into the literal text "null"
-        assertNull(data.ruleRepo.matchTransaction("Coffee", null))
+        assertNull(data.ruleRepo.matchCategoryId("Coffee", null))
     }
 
     @Test
-    fun `the compiled matcher agrees with matchTransaction`() {
+    fun `the compiled matcher keeps priority order and skips rules that are not auto-applied`() {
         data.ruleRepo.create("[unclosed", food, priority = 10)
         data.ruleRepo.create("staples|paper", office, priority = 5)
         data.ruleRepo.create("paper", food, priority = 1) // lower priority: never wins over the rule above
@@ -94,8 +94,10 @@ class TransactionItemsTest {
         val matcher = data.ruleRepo.matcher()
 
         val texts = listOf("buy [unclosed thing" to null, "Printer PAPER" to "Staples", "Kartenzahlung Kiosk" to null, "Coffee" to null, null to null, "  " to null)
-        texts.forEach { (purpose, partner) ->
-            assertEquals(data.ruleRepo.matchTransaction(purpose, partner)?.id?.value, matcher.categoryFor(purpose, partner), "$purpose / $partner")
+        val expected = listOf(food, office, null, null, null, null)
+        texts.zip(expected).forEach { (text, category) ->
+            val (purpose, partner) = text
+            assertEquals(category, matcher.categoryFor(purpose, partner), "$purpose / $partner")
         }
         assertEquals(office, matcher.categoryFor("Printer paper", null))
         assertNull(matcher.categoryFor("Kartenzahlung Kiosk", null))
