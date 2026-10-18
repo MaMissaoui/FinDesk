@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
@@ -49,6 +51,9 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     var confirmDeleteAccount by remember { mutableStateOf<AccountItem?>(null) }
     var confirmDeleteBank by remember { mutableStateOf<BankAccessItem?>(null) }
     var editConnection by remember { mutableStateOf<BankAccessItem?>(null) }
+
+    // Rename opens the connection settings with the name field focused
+    var focusName by remember { mutableStateOf(false) }
 
     BankingPromptHost(vm.bankingInteraction)
 
@@ -88,7 +93,14 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     syncStep = state.syncStep,
                     syncEnabled = state.syncingBankId == null,
                     onSync = { vm.syncBankAccess(bank.id) },
-                    onEditConnection = { editConnection = bank },
+                    onEditConnection = {
+                        focusName = false
+                        editConnection = bank
+                    },
+                    onRename = {
+                        focusName = true
+                        editConnection = bank
+                    },
                     onAddAccount = { addAccountFor = bank },
                     onDeleteBank = { confirmDeleteBank = bank },
                     onTransactions = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = it.id)) },
@@ -115,9 +127,10 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
         ConnectionDialog(
             bank = bank,
             defaultUrl = vm.lookupBank(bank.blz)?.pinTanUrl,
+            focusName = focusName,
             onDismiss = { editConnection = null },
-            onConfirm = { userId, url ->
-                vm.updateConnection(bank.id, userId, url)
+            onConfirm = { name, userId, url ->
+                vm.updateConnection(bank.id, name, userId, url)
                 editConnection = null
             },
         )
@@ -182,6 +195,7 @@ private fun BankCard(
     syncEnabled: Boolean,
     onSync: () -> Unit,
     onEditConnection: () -> Unit,
+    onRename: () -> Unit,
     onAddAccount: () -> Unit,
     onDeleteBank: () -> Unit,
     onTransactions: (AccountItem) -> Unit,
@@ -195,6 +209,7 @@ private fun BankCard(
             RowContextMenu(
                 syncEnabled.takeIf { it && !syncing }?.let { menuItem(s[StringKey.SyncNow], onSync) },
                 menuItem(s[StringKey.AddAccount], onAddAccount),
+                menuItem(s[StringKey.RenameConnection], onRename),
                 menuItem(s[StringKey.ConnectionSettings], onEditConnection),
                 menuItem(s[StringKey.RemoveBank], onDeleteBank),
             ) {
@@ -231,6 +246,14 @@ private fun BankCard(
                     Box {
                         IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
                         DropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(s[StringKey.RenameConnection]) },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                onClick = {
+                                    bankMenu = false
+                                    onRename()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text(s[StringKey.ConnectionSettings]) },
                                 leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
@@ -518,10 +541,14 @@ private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm
 private fun ConnectionDialog(
     bank: BankAccessItem,
     defaultUrl: String?,
+    focusName: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
+    onConfirm: (name: String, userId: String, url: String) -> Unit,
 ) {
+    var name by remember { mutableStateOf(bank.bankName) }
     var userId by remember { mutableStateOf(bank.userId) }
+    val nameField = remember { FocusRequester() }
+    LaunchedEffect(focusName) { if (focusName) runCatching { nameField.requestFocus() } }
     var url by remember { mutableStateOf(bank.serverUrl.orEmpty()) }
     val s = strings()
     AlertDialog(
@@ -529,6 +556,15 @@ private fun ConnectionDialog(
         title = { Text(s.format(StringKey.OnlineBankingFor, bank.bankName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.width(460.dp)) {
+                OutlinedTextField(
+                    name,
+                    { name = it.take(de.findesk.repository.MAX_BANK_NAME_LENGTH) },
+                    label = { Text(s[StringKey.ConnectionName]) },
+                    supportingText = { Text(s[StringKey.ConnectionNameHint]) },
+                    isError = name.isBlank(),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().focusRequester(nameField),
+                )
                 OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.UserIdLogin]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     url,
@@ -549,8 +585,8 @@ private fun ConnectionDialog(
         },
         confirmButton = {
             Button(
-                enabled = userId.isNotBlank() && (url.isBlank() || url.trim().startsWith("https://")),
-                onClick = { onConfirm(userId, url) },
+                enabled = name.isNotBlank() && userId.isNotBlank() && (url.isBlank() || url.trim().startsWith("https://")),
+                onClick = { onConfirm(name, userId, url) },
             ) { Text(s[StringKey.Save]) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },

@@ -36,8 +36,12 @@ private class ScriptedInteraction(
     var payeeAsked = 0
     val tanChallenges = mutableListOf<TanChallenge>()
     var offeredMethods: List<TanMethod> = emptyList()
+    val pinBankNames = mutableListOf<String>()
 
-    override fun pin(bankName: String, userId: String): String? = pinValue.also { pinAsked++ }
+    override fun pin(bankName: String, userId: String): String? = pinValue.also {
+        pinAsked++
+        pinBankNames += bankName
+    }
     override fun selectTanMethod(options: List<TanMethod>): String? = tanMethodChoice.also { offeredMethods = options }
     override fun selectTanMedium(options: List<String>): String? = options.last()
     override fun tan(challenge: TanChallenge): String? = tanValue.also { tanChallenges += challenge }
@@ -355,6 +359,31 @@ class BankingSyncTest {
         assertTrue(sent is BankingResult.Success)
         assertEquals(giro to order.copy(recipientIban = "DE44500105175407324931"), gateway.transfers.single())
         assertTrue(AuditLogRepositoryImpl().findByAction("TRANSFER").any { it.details!!.contains("sent") })
+    }
+
+    @Test
+    fun `a renamed bank connection still syncs, prompts with the new name and sends transfers`() = runBlocking {
+        assertEquals("DKB Business", data.bankAccessRepo.updateConnection(bankId, bankName = "DKB Business")!!.bankName)
+        gateway.snapshots = listOf(snapshot(giro, "500.00", booking(giro, today, "-30.00", "Shop", "B", balanceAfter = "470.00")))
+        val interaction = ScriptedInteraction()
+
+        val report = (service.syncBankConnection(bankId, interaction) as BankingResult.Success).data
+
+        assertEquals(1, report.accountsAdded)
+        assertEquals(1, report.imported)
+        assertEquals(listOf("DKB Business"), interaction.pinBankNames, "the PIN prompt shows the new name")
+
+        val accountId = data.accountRepo.findAllItems().single().id
+        val order = TransferOrder("Max Mustermann", savings, null, BigDecimal("25.00"), "Miete")
+        assertTrue(service.initiateTransfer(accountId, order, ScriptedInteraction(), confirmed = true) is BankingResult.Success)
+        assertEquals(giro to order, gateway.transfers.single())
+
+        // The name is only a label: the FinTS details are untouched by the rename
+        val bank = data.bankAccessRepo.findItem(bankId)!!
+        assertEquals("DKB Business", bank.bankName)
+        assertEquals("37050198", bank.blz)
+        assertEquals("COLSDE33XXX", bank.bic)
+        assertEquals("demo-user", bank.userId)
     }
 
     /** A service whose gateway runs [transfer] (after asking for the PIN) instead of the fake's own transfer. */

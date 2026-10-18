@@ -175,9 +175,18 @@ class AccountsViewModel(
     /** Bank suggestions for the add-bank dialog, matched on name, BLZ, BIC or a German IBAN. */
     fun searchBanks(query: String): List<BankDirectory.Entry> = BankDirectory.search(query)
 
-    fun updateConnection(bankAccessId: Int, userId: String, serverUrl: String): Job = launchSafely(onError) {
-        bankAccessRepository.updateConnection(bankAccessId, serverUrl = serverUrl, userId = userId)
+    /** Saves the connection settings. [name] is the label shown for the connection; blank is rejected. */
+    fun updateConnection(bankAccessId: Int, name: String, userId: String, serverUrl: String): Job = launchSafely(onError) {
+        if (name.isBlank()) {
+            _state.update { it.copy(error = AppStrings[StringKey.BankNameRequired]) }
+            return@launchSafely
+        }
+        val oldName = bankAccessRepository.findItem(bankAccessId)?.bankName
+        val updated = bankAccessRepository.updateConnection(bankAccessId, serverUrl = serverUrl, userId = userId, bankName = name)
         auditLogRepository.log("UPDATE_BANK_CONNECTION", "user", "Updated connection settings of bank access $bankAccessId")
+        if (updated != null && updated.bankName != oldName) {
+            auditLogRepository.log("RENAME_BANK_ACCESS", "user", "Renamed bank access $bankAccessId from $oldName to ${updated.bankName}")
+        }
         refresh()
         _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
     }

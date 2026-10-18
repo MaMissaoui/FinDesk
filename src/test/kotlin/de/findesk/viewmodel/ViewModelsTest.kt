@@ -2,7 +2,12 @@ package de.findesk.viewmodel
 
 import de.findesk.TestData
 import de.findesk.TestDatabase
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.model.Direction
+import de.findesk.repository.AccountRepositoryImpl
+import de.findesk.repository.AuditLogRepositoryImpl
+import de.findesk.repository.MAX_BANK_NAME_LENGTH
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -248,6 +253,71 @@ class ViewModelsTest {
         assertTrue(vm.state.value.accounts.isEmpty())
         assertTrue(data.transactionRepo.findItems().isEmpty())
         vm.close()
+    }
+
+    @Test
+    fun `renaming one of two bank accesses at the same bank changes only that one`() = runBlocking {
+        val personal = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "personal").id.value
+        val business = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "business").id.value
+        data.accountRepo.create(personal, "DE02120300000000202051")
+        data.accountRepo.create(business, "DE02120300000000202052")
+
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+        vm.updateConnection(business, "DKB Business", "business", "").join()
+
+        val names = vm.state.value.bankAccesses.associate { it.id to it.bankName }
+        assertEquals("DKB", names[personal])
+        assertEquals("DKB Business", names[business])
+
+        val accounts = AccountRepositoryImpl().findAllItems()
+        assertEquals("DKB", accounts.single { it.bankAccessId == personal }.bankName)
+        assertEquals("DKB Business", accounts.single { it.bankAccessId == business }.bankName)
+        assertEquals(1, AuditLogRepositoryImpl().findByAction("RENAME_BANK_ACCESS").size)
+        vm.close()
+    }
+
+    @Test
+    fun `a blank connection name is rejected and the stored name is unchanged`() = runBlocking {
+        val bankId = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "user").id.value
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+
+        vm.updateConnection(bankId, "   ", "user", "").join()
+
+        assertEquals(AppStrings[StringKey.BankNameRequired], vm.state.value.error)
+        assertEquals("DKB", data.bankAccessRepo.findItem(bankId)!!.bankName)
+        assertTrue(AuditLogRepositoryImpl().findByAction("RENAME_BANK_ACCESS").isEmpty())
+        vm.close()
+    }
+
+    @Test
+    fun `a connection name is trimmed and capped at the column length`() = runBlocking {
+        val bankId = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "user").id.value
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+
+        vm.updateConnection(bankId, "  DKB Business  ", "user", "").join()
+        assertEquals("DKB Business", data.bankAccessRepo.findItem(bankId)!!.bankName)
+
+        vm.updateConnection(bankId, "x".repeat(MAX_BANK_NAME_LENGTH + 45), "user", "").join()
+        val stored = data.bankAccessRepo.findItem(bankId)!!.bankName
+        assertEquals(MAX_BANK_NAME_LENGTH, stored.length)
+        vm.close()
+    }
+
+    @Test
+    fun `a renamed connection survives a restart`() = runBlocking {
+        val bankId = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "user").id.value
+        val before = AccountsViewModel()
+        before.loadAccounts().join()
+        before.updateConnection(bankId, "DKB Business", "user", "").join()
+        before.close()
+
+        val restarted = AccountsViewModel()
+        restarted.loadAccounts().join()
+        assertEquals("DKB Business", restarted.state.value.bankAccesses.single { it.id == bankId }.bankName)
+        restarted.close()
     }
 
     @Test

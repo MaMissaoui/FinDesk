@@ -21,8 +21,11 @@ interface BankAccessRepository {
     fun findAllItems(): List<BankAccessItem>
     fun findItem(id: Int): BankAccessItem?
 
-    /** Stores the FinTS server URL and/or the chosen TAN method (null leaves a value unchanged). */
-    fun updateConnection(id: Int, serverUrl: String? = null, tanMethod: String? = null, userId: String? = null): BankAccessItem?
+    /**
+     * Stores the FinTS server URL, the chosen TAN method, the login and/or the display name (null leaves a value
+     * unchanged). The name is only a label: renaming changes nothing about the FinTS connection.
+     */
+    fun updateConnection(id: Int, serverUrl: String? = null, tanMethod: String? = null, userId: String? = null, bankName: String? = null): BankAccessItem?
 
     /** Stores the login's supported business transactions (see BankCapabilities). */
     fun updateCapabilities(id: Int, capabilities: String): BankAccessItem?
@@ -30,6 +33,9 @@ interface BankAccessRepository {
     /** Deletes the bank access together with its accounts and their transactions. */
     fun deleteWithAccounts(id: Int): Boolean
 }
+
+/** Length of the `bank_name` column. */
+const val MAX_BANK_NAME_LENGTH = 255
 
 class BankAccessRepositoryImpl : BankAccessRepository {
     override fun findAll(): List<BankAccess> = transaction {
@@ -80,8 +86,9 @@ class BankAccessRepositoryImpl : BankAccessRepository {
 
     override fun findItem(id: Int): BankAccessItem? = transaction { BankAccess.findById(id)?.toItem() }
 
-    override fun updateConnection(id: Int, serverUrl: String?, tanMethod: String?, userId: String?): BankAccessItem? = transaction {
+    override fun updateConnection(id: Int, serverUrl: String?, tanMethod: String?, userId: String?, bankName: String?): BankAccessItem? = transaction {
         BankAccess.findById(id)?.apply {
+            bankName?.trim()?.takeIf { it.isNotEmpty() }?.let { this.bankName = it.take(MAX_BANK_NAME_LENGTH) }
             userId?.let { this.userId = it.trim() }
             serverUrl?.let { this.serverUrl = it.trim().ifEmpty { null } }
             tanMethod?.let { this.tanMethod = it }
