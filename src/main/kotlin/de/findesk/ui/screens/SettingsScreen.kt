@@ -66,7 +66,7 @@ fun SettingsScreen(
         StringKey.DataAndOcr,
         StringKey.BackupAndRestore,
         StringKey.ProtocolTraceTitle,
-        StringKey.AuditLogLatest,
+        StringKey.AuditLogShort,
     )
     val hasBanner = state.message != null || state.error != null
 
@@ -345,6 +345,9 @@ fun SettingsScreen(
 
             item {
                 SectionCard(s[StringKey.AuditLogLatest], Modifier.fillMaxWidth()) {
+                    if (state.auditLog.isEmpty()) {
+                        Text(s[StringKey.AuditLogEmpty], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     state.auditLog.forEach { e ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                             Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(140.dp))

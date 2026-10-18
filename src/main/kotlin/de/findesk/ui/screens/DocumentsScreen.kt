@@ -49,8 +49,18 @@ fun DocumentsScreen() {
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Search is the toolbar's context, Upload its action; the OCR hint rides under the field
             Column(Modifier.weight(1f)) {
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = { vm.searchDocuments(it) },
+                    placeholder = { Text(s[StringKey.SearchDocuments]) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
                 if (!state.isOcrAvailable) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         s[StringKey.OcrNeedsTesseract],
                         style = MaterialTheme.typography.bodySmall,
@@ -58,6 +68,7 @@ fun DocumentsScreen() {
                     )
                 }
             }
+            Spacer(Modifier.width(12.dp))
             if (state.isUploading) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))
@@ -78,14 +89,6 @@ fun DocumentsScreen() {
         Spacer(Modifier.height(16.dp))
         MessageBanner(state.message, state.error, vm::clearMessages)
 
-        OutlinedTextField(
-            value = state.searchQuery,
-            onValueChange = { vm.searchDocuments(it) },
-            placeholder = { Text(s[StringKey.SearchDocuments]) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
         Spacer(Modifier.height(12.dp))
         TabRow(selectedTabIndex = state.tab.ordinal) {
             DocumentTab.entries.forEach { tab ->

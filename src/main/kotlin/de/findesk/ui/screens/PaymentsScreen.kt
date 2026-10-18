@@ -10,8 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
@@ -78,13 +76,6 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         Column(Modifier.weight(3f).verticalScroll(rememberScrollState())) {
-            Text(
-                s[StringKey.SepaTransfer],
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.semantics { heading() },
-            )
-            Spacer(Modifier.height(16.dp))
             MessageBanner(state.message, state.error, vm::clearMessages)
 
             if (state.accounts.isEmpty()) {
@@ -92,8 +83,8 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
                 return@Column
             }
 
-            Card {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SectionCard(s[StringKey.SepaTransfer]) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(s[StringKey.From], style = MaterialTheme.typography.labelLarge)
                     DropdownSelector(
                         label = from?.let { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance, it.currency)})" } ?: s[StringKey.ChooseAccount],

@@ -438,6 +438,8 @@ enum class StringKey {
     CancelRestore,
     BackupRestoredAt,
     AuditLogLatest,
+    AuditLogShort,
+    AuditLogEmpty,
     RestoreFileTitle,
     RestoreCreated,
     RestoreExplanation,
