@@ -2,12 +2,16 @@ package de.findesk.viewmodel
 
 import de.findesk.TestData
 import de.findesk.TestDatabase
+import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.i18n.Translations
 import de.findesk.model.Direction
 import de.findesk.repository.AccountRepositoryImpl
 import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.MAX_BANK_NAME_LENGTH
+import de.findesk.ui.components.accountLabel
+import de.findesk.util.Formats
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -385,6 +389,42 @@ class ViewModelsTest {
         assertNull(data.bankAccessRepo.findItem(bankId)!!.syncFrom)
         assertTrue(AuditLogRepositoryImpl().findByAction("SET_SYNC_FROM").isNotEmpty())
         vm.close()
+    }
+
+    @Test
+    fun `renameAccount stores the name and audits only a change`() = runBlocking {
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+        val audit = AuditLogRepositoryImpl()
+
+        vm.renameAccount(account, "Haushalt").join()
+        assertEquals("Haushalt", data.accountRepo.findAllItems().first { it.id == account }.name)
+        assertEquals(1, audit.findByAction("RENAME_ACCOUNT").size, "one entry for the first name")
+
+        vm.renameAccount(account, "Haushalt").join()
+        assertEquals(1, audit.findByAction("RENAME_ACCOUNT").size, "renaming to the same name writes nothing")
+
+        vm.renameAccount(account, "   ").join()
+        assertNull(data.accountRepo.findAllItems().first { it.id == account }.name, "blank resets to null")
+        assertEquals(2, audit.findByAction("RENAME_ACCOUNT").size, "clearing writes one entry")
+
+        vm.openDetail(account).join()
+        vm.renameAccount(account, "Reisekasse").join()
+        assertEquals("Reisekasse", vm.state.value.detail?.account?.name, "an open detail view shows the new name")
+        vm.close()
+    }
+
+    @Test
+    fun `account name and label fall back to the localized type`() {
+        val s = Translations.of(AppLanguage.EN)
+        val plain = data.accountRepo.findAllItems().first { it.id == account }
+        assertEquals("Checking", s.accountName(plain), "no name -> the localized type")
+        assertEquals("Test Bank ${Formats.iban(plain.iban)}", accountLabel(plain))
+
+        data.accountRepo.rename(account, "Haushalt")
+        val named = data.accountRepo.findAllItems().first { it.id == account }
+        assertEquals("Haushalt", s.accountName(named))
+        assertEquals("Test Bank · Haushalt ${Formats.iban(named.iban)}", accountLabel(named))
     }
 
     @Test

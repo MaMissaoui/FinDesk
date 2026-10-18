@@ -155,6 +155,9 @@ enum class StringKey {
     AllTransactions,
     DeleteAccountTitle,
     DeleteAccountText,
+    RenameAccount,
+    AccountName,
+    AccountNameHint,
     RemoveBankTitle,
     RemoveBankText,
 

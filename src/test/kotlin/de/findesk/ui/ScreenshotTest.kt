@@ -109,7 +109,8 @@ class ScreenshotTest {
     fun `render the payment review with an unconfirmed earlier order`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-payments").toFile().absolutePath)
         val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
-        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        val accountId = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(accountId, "Haushalt")
         val order = TransferOrder("Vermieter GmbH", "DE02120300000000202051", null, BigDecimal("850.00"), "Miete Oktober")
         val payments = PaymentOrderRepositoryImpl()
         val earlier = payments.create(PaymentAction.TRANSFER, "DE89370400440532013000", order.recipientName, order.recipientIban, order.amount, "EUR", order.purpose, null, null)
@@ -132,6 +133,7 @@ class ScreenshotTest {
         DatabaseFactory.init(Files.createTempDirectory("findesk-duplicate").toFile().absolutePath)
         val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
         val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
         val today = java.time.LocalDate.now()
 
         fun confirming(): TransactionsViewModel = TransactionsViewModel().apply {
@@ -184,6 +186,19 @@ class ScreenshotTest {
         fun showing(): TransactionsViewModel = TransactionsViewModel()
         render("transactions-balance", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
         render("transactions-balance-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+    }
+
+    @Test
+    fun `render accounts with a custom account name`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-names").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        val named = accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        accounts.create(bank, "DE02120300000000202051", balance = BigDecimal("812.40"))
+        accounts.rename(named, "Haushalt")
+
+        render("accounts-named", Screen.ACCOUNTS, dark = false)
+        render("accounts-named-dark", Screen.ACCOUNTS, dark = true)
     }
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }

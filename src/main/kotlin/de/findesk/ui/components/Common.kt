@@ -27,10 +27,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
+import de.findesk.model.AccountItem
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.readableOn
+import de.findesk.util.Formats
 import de.findesk.viewmodel.BaseViewModel
 import kotlinx.coroutines.delay
 import java.awt.FileDialog
@@ -184,6 +186,12 @@ fun LedgerRow(date: String, title: String, meta: String?, amount: String, isExpe
         }
         Text(amount, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = amountColor(isExpense))
     }
+}
+
+/** The picker/detail label for an account: bank, the user's name when set, and the formatted IBAN. */
+fun accountLabel(account: AccountItem): String {
+    val iban = Formats.iban(account.iban)
+    return if (account.name != null) "${account.bankName} · ${account.name} $iban" else "${account.bankName} $iban"
 }
 
 /** Parses "#RRGGBB"; falls back to a palette color derived from [fallbackKey]. */

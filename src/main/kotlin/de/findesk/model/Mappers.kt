@@ -34,6 +34,7 @@ fun Account.toItem() = AccountItem(
     currency = currency,
     accountType = accountType,
     lastUpdate = lastUpdate,
+    name = name,
 )
 
 fun Category.toItem() = CategoryItem(

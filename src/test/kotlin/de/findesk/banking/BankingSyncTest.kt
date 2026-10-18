@@ -743,6 +743,22 @@ class BankingSyncTest {
         data.bankAccessRepo.updateConnection(bank.id, serverUrl = "https://x.example/fints")
         assertEquals("https://x.example/fints", data.bankAccessRepo.findItem(bank.id)!!.serverUrl)
     }
+
+    @Test
+    fun `a sync updates the balance and imports bookings but keeps the account's name`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val accountId = data.accountRepo.findAllItems().single().id
+        data.accountRepo.rename(accountId, "Haushalt")
+
+        gateway.snapshots = listOf(snapshot(giro, "120.00", booking(giro, today, "-5.00", "Shop", "A", balanceAfter = "120.00")))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(1, report.imported)
+        val stored = data.accountRepo.findAllItems().single()
+        assertEquals("Haushalt", stored.name, "a sync must not overwrite the user's name")
+        assertEquals(BigDecimal("120.00"), stored.balance)
+    }
 }
 
 class HbciCallbackTest {

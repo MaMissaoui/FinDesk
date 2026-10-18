@@ -142,9 +142,9 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
             )
             if (state.accounts.size > 1 || state.accountId != null) {
                 DropdownSelector(
-                    label = state.accounts.firstOrNull { it.id == state.accountId }?.let { "…" + it.iban.takeLast(4) } ?: s[StringKey.AllAccounts],
+                    label = state.accounts.firstOrNull { it.id == state.accountId }?.let { it.name ?: "…${it.iban.takeLast(4)}" } ?: s[StringKey.AllAccounts],
                     options = listOf<AccountItem?>(null) + state.accounts,
-                    optionLabel = { it?.let { a -> "${a.bankName} ${Formats.iban(a.iban)}" } ?: s[StringKey.AllAccounts] },
+                    optionLabel = { it?.let { a -> accountLabel(a) } ?: s[StringKey.AllAccounts] },
                     onSelect = { vm.updateAccountFilter(it?.id) },
                 )
             }
@@ -438,9 +438,9 @@ private fun AddTransactionDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.width(420.dp)) {
                 DropdownSelector(
-                    label = "${account.bankName} ${Formats.iban(account.iban)}",
+                    label = accountLabel(account),
                     options = accounts,
-                    optionLabel = { "${it.bankName} ${Formats.iban(it.iban)}" },
+                    optionLabel = { accountLabel(it) },
                     onSelect = { account = it },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -520,9 +520,9 @@ private fun ImportDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(s[StringKey.IntoAccount], fontWeight = FontWeight.Medium)
                     DropdownSelector(
-                        label = account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: s[StringKey.ChooseAccount],
+                        label = account?.let { accountLabel(it) } ?: s[StringKey.ChooseAccount],
                         options = accounts,
-                        optionLabel = { "${it.bankName} ${Formats.iban(it.iban)}" },
+                        optionLabel = { accountLabel(it) },
                         onSelect = { onAccount(it.id) },
                     )
                 }
@@ -676,7 +676,7 @@ private fun TransactionDetailDialog(
                     color = amountColor(txn.isExpense),
                 )
                 DetailRow(s[StringKey.DetailDate], Formats.date(txn.date))
-                DetailRow(s[StringKey.DetailAccount], account?.let { "${it.bankName} ${Formats.iban(it.iban)}" } ?: Formats.iban(txn.accountIban))
+                DetailRow(s[StringKey.DetailAccount], account?.let { accountLabel(it) } ?: Formats.iban(txn.accountIban))
                 txn.partnerName?.let { DetailRow(s[StringKey.DetailPartner], it) }
                 txn.purpose?.let { DetailRow(s[StringKey.DetailPurpose], it) }
                 Row(verticalAlignment = Alignment.CenterVertically) {

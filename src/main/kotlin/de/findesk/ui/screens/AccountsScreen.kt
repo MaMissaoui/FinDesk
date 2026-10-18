@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -20,6 +22,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankDirectory
 import de.findesk.banking.BankingService
@@ -54,6 +57,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     var confirmDeleteBank by remember { mutableStateOf<BankAccessItem?>(null) }
     var editConnection by remember { mutableStateOf<BankAccessItem?>(null) }
     var fetchHistoryFor by remember { mutableStateOf<BankAccessItem?>(null) }
+    var renameAccount by remember { mutableStateOf<AccountItem?>(null) }
 
     // Rename opens the connection settings with the name field focused
     var focusName by remember { mutableStateOf(false) }
@@ -111,6 +115,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     onEditBalance = { editBalance = it },
                     onDeleteAccount = { confirmDeleteAccount = it },
                     onOpenAccount = { vm.openDetail(it.id) },
+                    onRenameAccount = { renameAccount = it },
                 )
             }
         }
@@ -124,7 +129,18 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                 vm.closeDetail()
                 onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = detail.account.id))
             },
+            onRename = { renameAccount = detail.account },
             onClose = vm::closeDetail,
+        )
+    }
+    renameAccount?.let { account ->
+        RenameAccountDialog(
+            account = account,
+            onDismiss = { renameAccount = null },
+            onConfirm = {
+                vm.renameAccount(account.id, it)
+                renameAccount = null
+            },
         )
     }
     editConnection?.let { bank ->
@@ -225,6 +241,7 @@ private fun BankCard(
     onEditBalance: (AccountItem) -> Unit,
     onDeleteAccount: (AccountItem) -> Unit,
     onOpenAccount: (AccountItem) -> Unit,
+    onRenameAccount: (AccountItem) -> Unit,
 ) {
     val s = strings()
     FinDeskCard(modifier = Modifier.fillMaxWidth()) {
@@ -321,6 +338,7 @@ private fun BankCard(
                 RowContextMenu(
                     menuItem(s[StringKey.ShowTransactions]) { onTransactions(account) },
                     menuItem(s[StringKey.MenuDetails]) { onOpenAccount(account) },
+                    menuItem(s[StringKey.RenameAccount]) { onRenameAccount(account) },
                     menuItem(s[StringKey.EditBalance]) { onEditBalance(account) },
                     menuItem(s[StringKey.DeleteAccount]) { onDeleteAccount(account) },
                 ) {
@@ -334,8 +352,12 @@ private fun BankCard(
                             ),
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(s.accountType(account.accountType), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                            Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(s.accountName(account), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(
+                                account.name?.let { "${s.accountType(account.accountType)} · ${Formats.iban(account.iban)}" } ?: Formats.iban(account.iban),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         Text(
                             Formats.money(account.balance, account.currency),
@@ -572,6 +594,35 @@ private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm
 }
 
 @Composable
+private fun RenameAccountDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var text by remember { mutableStateOf(account.name.orEmpty()) }
+    val field = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { field.requestFocus() } }
+    val s = strings()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s[StringKey.RenameAccount]) },
+        text = {
+            Column(modifier = Modifier.width(460.dp)) {
+                OutlinedTextField(
+                    text,
+                    { text = it.take(de.findesk.repository.MAX_ACCOUNT_NAME_LENGTH) },
+                    label = { Text(s[StringKey.AccountName]) },
+                    placeholder = { Text(s.accountType(account.accountType)) },
+                    supportingText = { Text(s.format(StringKey.AccountNameHint, s.accountType(account.accountType))) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { onConfirm(text) }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(field),
+                )
+            }
+        },
+        confirmButton = { Button(onClick = { onConfirm(text) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+    )
+}
+
+@Composable
 private fun ConnectionDialog(
     bank: BankAccessItem,
     defaultUrl: String?,
@@ -688,12 +739,12 @@ private fun FetchHistoryDialog(
 }
 
 @Composable
-private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, onAllTransactions: () -> Unit, onClose: () -> Unit) {
+private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, onAllTransactions: () -> Unit, onRename: () -> Unit, onClose: () -> Unit) {
     val a = detail.account
     val s = strings()
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("${a.bankName} · ${s.accountType(a.accountType)}") },
+        title = { Text("${a.bankName} · ${s.accountName(a)}") },
         text = {
             Column(Modifier.width(760.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -733,6 +784,11 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
             }
         },
         confirmButton = { TextButton(onClick = onAllTransactions) { Text(s[StringKey.AllTransactions]) } },
-        dismissButton = { TextButton(onClick = onClose) { Text(s[StringKey.Close]) } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onRename) { Text(s[StringKey.RenameAccount]) }
+                TextButton(onClick = onClose) { Text(s[StringKey.Close]) }
+            }
+        },
     )
 }

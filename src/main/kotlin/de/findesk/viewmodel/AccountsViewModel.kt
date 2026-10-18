@@ -145,6 +145,22 @@ class AccountsViewModel(
         refresh()
     }
 
+    /** Sets the account's display name (blank clears it). Only a change to the stored name is audit-logged. */
+    fun renameAccount(accountId: Int, name: String): Job = launchSafely(onError) {
+        val previous = accountRepository.findAllItems().firstOrNull { it.id == accountId }?.name
+        val updated = accountRepository.rename(accountId, name)
+        refresh()
+        // An open detail view holds a snapshot of the account, so its title would keep the old name
+        if (updated != null) _state.update { st -> st.copy(detail = st.detail?.takeIf { it.account.id == accountId }?.copy(account = updated) ?: st.detail) }
+        if (updated != null && updated.name != previous) {
+            auditLogRepository.log(
+                "RENAME_ACCOUNT",
+                "user",
+                "Renamed account ${updated.iban.takeLast(4)} from ${previous ?: "default"} to ${updated.name ?: "default"}",
+            )
+        }
+    }
+
     fun deleteAccount(accountId: Int): Job = launchSafely(onError) {
         accountRepository.deleteWithTransactions(accountId)
         auditLogRepository.log("DELETE_ACCOUNT", "user", "Deleted account $accountId and its transactions")

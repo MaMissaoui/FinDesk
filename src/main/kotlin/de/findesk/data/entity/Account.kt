@@ -17,6 +17,7 @@ class Account(id: EntityID<Int>) : IntEntity(id) {
     var balance by AccountsTable.balance
     var currency by AccountsTable.currency
     var accountType by AccountsTable.accountType
+    var name by AccountsTable.name
     var lastUpdate by AccountsTable.lastUpdate
 
     val transactions by Transaction referrersOn TransactionsTable.accountId
