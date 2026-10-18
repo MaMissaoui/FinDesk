@@ -1,0 +1,73 @@
+package de.findesk.util
+
+import de.findesk.model.AccountGroupItem
+import de.findesk.model.AccountItem
+import java.math.BigDecimal
+
+/**
+ * What an [AccountGroupView] stands for: a built-in account-type group, or one of the user's custom groups.
+ * Both expose a stable [id] string used for the persisted selection and the collapsed state.
+ */
+sealed interface GroupKey {
+    val id: String
+
+    data class Type(val type: String) : GroupKey {
+        override val id: String get() = "type:$type"
+    }
+
+    data class Custom(val groupId: Int) : GroupKey {
+        override val id: String get() = "custom:$groupId"
+    }
+}
+
+/** One entry in the account panel: its key, an optional custom name and the accounts with their per-currency totals. */
+data class AccountGroupView(
+    val key: GroupKey,
+    /** The custom group's name, or null for a type group (the UI localizes those with `Strings.accountType`). */
+    val name: String?,
+    val accounts: List<AccountItem>,
+    val totals: Map<String, BigDecimal>,
+)
+
+/** Type groups are ordered by these first; any other type follows, alphabetically. */
+private val FIXED_TYPE_ORDER = listOf("checking", "savings", "credit_card", "depot")
+
+/**
+ * Puts every account into its custom group when [AccountItem.groupId] names an existing group, and into its
+ * account-type group otherwise (an unknown group id falls back to the type). Type groups with no accounts are left
+ * out, custom groups are always shown so an empty one can receive accounts. Accounts inside a group keep the input
+ * order, which is the repository order.
+ */
+fun group(accounts: List<AccountItem>, groups: List<AccountGroupItem>, primary: String): List<AccountGroupView> {
+    val known = groups.associateBy { it.id }
+    val customAccounts = LinkedHashMap<Int, MutableList<AccountItem>>()
+    groups.forEach { customAccounts[it.id] = mutableListOf() }
+    val typeAccounts = LinkedHashMap<String, MutableList<AccountItem>>()
+    accounts.forEach { account ->
+        val groupId = account.groupId
+        if (groupId != null && known.containsKey(groupId)) {
+            customAccounts.getValue(groupId).add(account)
+        } else {
+            typeAccounts.getOrPut(account.accountType) { mutableListOf() }.add(account)
+        }
+    }
+
+    val typeKeys = FIXED_TYPE_ORDER + typeAccounts.keys.filter { it !in FIXED_TYPE_ORDER }.sorted()
+    val views = mutableListOf<AccountGroupView>()
+    typeKeys.forEach { type ->
+        val list = typeAccounts[type].orEmpty()
+        if (list.isNotEmpty()) {
+            views += AccountGroupView(GroupKey.Type(type), name = null, accounts = list, totals = totals(list, primary))
+        }
+    }
+    groups.forEach { custom ->
+        val list = customAccounts.getValue(custom.id)
+        views += AccountGroupView(GroupKey.Custom(custom.id), name = custom.name, accounts = list, totals = totals(list, primary))
+    }
+    return views
+}
+
+/** Balances per currency, primary first; different currencies are never added up. */
+fun grandTotal(accounts: List<AccountItem>, primary: String): Map<String, BigDecimal> = totals(accounts, primary)
+
+private fun totals(accounts: List<AccountItem>, primary: String): Map<String, BigDecimal> = Currencies.totals(accounts, primary, { it.currency }, { it.balance })

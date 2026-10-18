@@ -18,6 +18,7 @@ import de.findesk.i18n.Translations
 import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.plaintextDatabase
+import de.findesk.repository.AccountGroupRepositoryImpl
 import de.findesk.repository.AccountRepositoryImpl
 import de.findesk.repository.BankAccessRepositoryImpl
 import de.findesk.repository.NewTransaction
@@ -29,6 +30,8 @@ import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
+import de.findesk.util.GroupKey
+import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.PaymentsViewModel
 import de.findesk.viewmodel.TransactionsViewModel
 import de.findesk.viewmodel.UnlockMode
@@ -210,6 +213,38 @@ class ScreenshotTest {
 
         render("accounts-central-blz", Screen.ACCOUNTS, dark = false)
         render("accounts-central-blz-dark", Screen.ACCOUNTS, dark = true)
+    }
+
+    /** The account panel on Transactions: type groups, a custom group, mixed currencies and a selection. */
+    @Test
+    fun `render transactions with the account panel`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-panel").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        val household = accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        accounts.rename(household, "Haushalt")
+        accounts.create(bank, "DE02120300000000202051", balance = BigDecimal("812.40"))
+        val savings = accounts.create(bank, "DE44500105175407324931", balance = BigDecimal("15000.00"), accountType = "savings").id.value
+        accounts.create(bank, "DE02120300000000202052", balance = BigDecimal("5400.00"), currency = "USD", accountType = "depot")
+        val reisen = AccountGroupRepositoryImpl().create("Reisen")
+        accounts.setGroup(savings, reisen.id)
+
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(household, today.minusDays(4), BigDecimal("-20.00"), "EUR", "Bäckerei", "Brötchen", null, "panel-1"),
+                NewTransaction(household, today.minusDays(2), BigDecimal("120.00"), "EUR", "Employer GmbH", "Gehalt", null, "panel-2"),
+                NewTransaction(savings, today.minusDays(1), BigDecimal("-40.00"), "EUR", "Sparkasse", "Zinsen", null, "panel-3"),
+            ),
+        )
+
+        // The screen's own start() restores this persisted selection when it opens.
+        fun panel(): TransactionsViewModel = TransactionsViewModel().apply {
+            runBlocking { selectAccounts(AccountSelection.Group(GroupKey.Type("checking"))).join() }
+        }
+        render("transactions-panel", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
+        render("transactions-panel-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel) }
+        render("transactions-panel-narrow", 1024, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
     }
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }

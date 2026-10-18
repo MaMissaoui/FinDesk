@@ -28,6 +28,7 @@ object DatabaseFactory {
         arrayOf(
             BankAccessTable,
             AccountsTable,
+            AccountGroupsTable,
             TransactionsTable,
             CategoriesTable,
             RulesTable,

@@ -7,13 +7,18 @@ import de.findesk.i18n.StringKey
 import de.findesk.importer.CsvMapping
 import de.findesk.importer.ParsedStatement
 import de.findesk.importer.StatementImportService
+import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
 import de.findesk.model.CategoryItem
 import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import de.findesk.util.AccountGroupView
 import de.findesk.util.Currencies
+import de.findesk.util.GroupKey
+import de.findesk.util.grandTotal
+import de.findesk.util.group
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -57,6 +62,16 @@ sealed interface CategoryFilter {
     data class Only(val categoryId: Int) : CategoryFilter
 }
 
+/** What the account panel filters the booking list by. */
+sealed interface AccountSelection {
+    data object All : AccountSelection
+
+    /** One built-in or custom group; its accounts become an `accountIds` filter. */
+    data class Group(val key: GroupKey) : AccountSelection
+
+    data class Account(val id: Int) : AccountSelection
+}
+
 /** A statement file read and waiting for the user to pick the account and confirm. */
 data class ImportPreview(
     val file: File,
@@ -74,7 +89,20 @@ data class TransactionsState(
     val period: Period = Period.THIS_MONTH,
     val direction: Direction = Direction.ALL,
     val categoryFilter: CategoryFilter = CategoryFilter.Any,
+    /** Derived from [selection] (the selected single account), kept for the running balance, import and CSV export. */
     val accountId: Int? = null,
+    /** What the account panel filters by. */
+    val selection: AccountSelection = AccountSelection.All,
+    /** The account panel's groups, in display order. */
+    val groups: List<AccountGroupView> = emptyList(),
+    /** The grand total of every account, per currency, primary first. */
+    val grandTotal: Map<String, BigDecimal> = emptyMap(),
+    /** Ids of the collapsed groups (see [GroupKey.id]). */
+    val collapsed: Set<String> = emptySet(),
+    /** Free-text filter over the panel's account rows. */
+    val accountFilterText: String = "",
+    /** The custom groups as loaded, for rename, move and delete. */
+    val customGroups: List<AccountGroupItem> = emptyList(),
     /** Balance after each shown booking's id, when one non-depot account is selected; null hides the column. */
     val balances: Map<Int, de.findesk.util.RunningBalance.Entry>? = null,
     /** The selected account's balance and currency, for the header. */
@@ -110,8 +138,10 @@ class TransactionsViewModel(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val categoryRepository: CategoryRepository = CategoryRepositoryImpl(),
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
+    private val accountGroupRepository: AccountGroupRepository = AccountGroupRepositoryImpl(),
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
+    private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
     private val reportService: ReportService = ReportService(),
     private val importService: StatementImportService = StatementImportService(),
     private val documentService: de.findesk.document.DocumentService = de.findesk.document.DocumentService(),
@@ -124,12 +154,37 @@ class TransactionsViewModel(
     private val onError: (Exception) -> Unit = { e -> _state.update { it.copy(isLoading = false, error = e.userMessage()) } }
     private var searchJob: Job? = null
 
+    /** Set by [start] without an account: the next refresh restores the selection stored for this profile. */
+    private var restoreSelection = false
+
+    private var collapsedLoaded = false
+
     fun currentFilter(s: TransactionsState = _state.value): TransactionFilter {
         val (start, end) = s.period.range(today())
+        val accountId: Int?
+        val accountIds: Set<Int>?
+        when (val selection = s.selection) {
+            is AccountSelection.Account -> {
+                accountId = selection.id
+                accountIds = null
+            }
+
+            is AccountSelection.Group -> {
+                accountId = null
+                // Empty for an empty custom group, so it shows no bookings rather than all of them.
+                accountIds = s.groups.firstOrNull { it.key.id == selection.key.id }?.accounts?.map { it.id }?.toSet() ?: emptySet()
+            }
+
+            AccountSelection.All -> {
+                accountId = null
+                accountIds = null
+            }
+        }
         return TransactionFilter(
             startDate = start,
             endDate = end,
-            accountId = s.accountId,
+            accountId = accountId,
+            accountIds = accountIds,
             categoryId = (s.categoryFilter as? CategoryFilter.Only)?.categoryId,
             uncategorizedOnly = s.categoryFilter == CategoryFilter.None,
             direction = s.direction,
@@ -142,9 +197,11 @@ class TransactionsViewModel(
     /** Applies navigation context (e.g. "transactions of this account") and loads. */
     fun start(accountId: Int? = null, uncategorizedOnly: Boolean = false, partner: String? = null): Job {
         if (partner != null) return showPartner(partner)
+        restoreSelection = accountId == null
         _state.update {
             it.copy(
                 accountId = accountId,
+                selection = accountId?.let { id -> AccountSelection.Account(id) } ?: it.selection,
                 categoryFilter = if (uncategorizedOnly) CategoryFilter.None else CategoryFilter.Any,
                 // A deep link into an account or the uncategorized list shouldn't be limited to this month
                 period = if (accountId != null || uncategorizedOnly) Period.ALL else it.period,
@@ -156,12 +213,14 @@ class TransactionsViewModel(
     /** Every booking from [partner], any time, account, category, direction or amount: the search alone narrows the list. */
     fun showPartner(partner: String): Job {
         searchJob?.cancel()
+        restoreSelection = false
         _state.update {
             it.copy(
                 searchQuery = partner,
                 period = Period.ALL,
                 direction = Direction.ALL,
                 categoryFilter = CategoryFilter.Any,
+                selection = AccountSelection.All,
                 accountId = null,
                 minAmount = null,
                 maxAmount = null,
@@ -176,11 +235,28 @@ class TransactionsViewModel(
     }
 
     private fun refresh() {
+        val accounts = accountRepository.findAllItems()
+        val customGroups = accountGroupRepository.findAllItems()
+        val primary = Currencies.primary(settingsRepository)
+        val groups = group(accounts, customGroups, primary)
+        val selection = resolveSelection(restoreSelectionOrCurrent(groups, accounts), groups, accounts)
+        restoreSelection = false
+        _state.update {
+            it.copy(
+                accounts = accounts,
+                customGroups = customGroups,
+                groups = groups,
+                grandTotal = grandTotal(accounts, primary),
+                // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
+                collapsed = if (collapsedLoaded) it.collapsed else loadCollapsed().also { collapsedLoaded = true },
+                selection = selection,
+                accountId = (selection as? AccountSelection.Account)?.id,
+            )
+        }
         val transactions = transactionRepository.findItems(currentFilter())
         // Keep the open detail panel in sync with edits
         _state.value.selected?.let { sel -> _state.update { it.copy(selected = transactions.firstOrNull { t -> t.id == sel.id } ?: sel) } }
         val categories = categoryRepository.findAllItems()
-        val accounts = accountRepository.findAllItems()
         // The running balance needs every booking of the account, not just the filtered list, so a text or period
         // filter hides rows but never changes their balances. A depot's balance is a market value, not the sum of
         // its bookings, so the column only makes sense for a single non-depot account.
@@ -202,6 +278,51 @@ class TransactionsViewModel(
             )
         }
     }
+
+    /** Reads the stored selection once (when [start] asked for it), otherwise keeps the current one. */
+    private fun restoreSelectionOrCurrent(groups: List<AccountGroupView>, accounts: List<AccountItem>): AccountSelection = if (restoreSelection) parseStoredSelection(groups, accounts) else _state.value.selection
+
+    private fun parseStoredSelection(groups: List<AccountGroupView>, accounts: List<AccountItem>): AccountSelection {
+        val raw = settingsRepository.getValue(KEY_SELECTION) ?: return AccountSelection.All
+        return when {
+            raw.startsWith("group:") -> {
+                val keyId = raw.removePrefix("group:")
+                val key = when {
+                    keyId.startsWith("type:") -> GroupKey.Type(keyId.removePrefix("type:"))
+                    keyId.startsWith("custom:") -> keyId.removePrefix("custom:").toIntOrNull()?.let { GroupKey.Custom(it) }
+                    else -> null
+                }
+                if (key != null && groups.any { it.key.id == key.id }) AccountSelection.Group(key) else AccountSelection.All
+            }
+
+            raw.startsWith("account:") -> {
+                val id = raw.removePrefix("account:").toIntOrNull()
+                if (id != null && accounts.any { it.id == id }) AccountSelection.Account(id) else AccountSelection.All
+            }
+
+            else -> AccountSelection.All
+        }
+    }
+
+    /** Falls back to All when the selected account or group no longer exists (or a type group is now empty). */
+    private fun resolveSelection(selection: AccountSelection, groups: List<AccountGroupView>, accounts: List<AccountItem>): AccountSelection = when (selection) {
+        is AccountSelection.All -> selection
+        is AccountSelection.Account -> if (accounts.any { it.id == selection.id }) selection else AccountSelection.All
+        is AccountSelection.Group -> if (groups.any { it.key.id == selection.key.id }) selection else AccountSelection.All
+    }
+
+    private fun selectionValue(selection: AccountSelection): String = when (selection) {
+        AccountSelection.All -> "all"
+        is AccountSelection.Group -> "group:${selection.key.id}"
+        is AccountSelection.Account -> "account:${selection.id}"
+    }
+
+    private fun loadCollapsed(): Set<String> = settingsRepository.getValue(KEY_COLLAPSED)
+        ?.split(",")
+        ?.map { it.trim() }
+        ?.filter { it.isNotEmpty() }
+        ?.toSet()
+        .orEmpty()
 
     /** Debounced so typing doesn't fire a query per keystroke. */
     fun updateSearchQuery(query: String): Job {
@@ -228,9 +349,72 @@ class TransactionsViewModel(
         return loadTransactions()
     }
 
-    fun updateAccountFilter(accountId: Int?): Job {
-        _state.update { it.copy(accountId = accountId) }
-        return loadTransactions()
+    /** Selects an account, group or all accounts, persists the choice for this profile and reloads. */
+    fun selectAccounts(selection: AccountSelection): Job {
+        _state.update { it.copy(selection = selection, accountId = (selection as? AccountSelection.Account)?.id) }
+        _state.update { it.copy(isLoading = true, error = null) }
+        // The write runs in the same job as the reload, off the UI thread, so stored and shown selection can't diverge
+        return launchSafely(onError) {
+            settingsRepository.setValue(KEY_SELECTION, selectionValue(selection))
+            refresh()
+        }
+    }
+
+    fun updateAccountFilter(accountId: Int?): Job = selectAccounts(accountId?.let { AccountSelection.Account(it) } ?: AccountSelection.All)
+
+    /** Collapses or expands a group; view state only, so it is persisted but not audited. */
+    fun toggleCollapsed(key: GroupKey): Job {
+        val collapsed = _state.value.collapsed
+        val next = if (key.id in collapsed) collapsed - key.id else collapsed + key.id
+        _state.update { it.copy(collapsed = next) }
+        return launchSafely(onError) { settingsRepository.setValue(KEY_COLLAPSED, next.sorted().joinToString(",")) }
+    }
+
+    /** Filters the panel's account rows by name, IBAN or bank; the booking list is unaffected. */
+    fun updateAccountFilterText(text: String) {
+        _state.update { it.copy(accountFilterText = text) }
+    }
+
+    fun createGroup(name: String): Job = launchSafely(onError) {
+        if (name.isBlank()) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorNameRequired]) }
+            return@launchSafely
+        }
+        val created = accountGroupRepository.create(name)
+        auditLogRepository.log("CREATE_ACCOUNT_GROUP", "user", "Created account group '${created.name}'")
+        refresh()
+    }
+
+    fun renameGroup(id: Int, name: String): Job = launchSafely(onError) {
+        if (name.isBlank()) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorNameRequired]) }
+            return@launchSafely
+        }
+        val renamed = accountGroupRepository.rename(id, name)
+        if (renamed != null) auditLogRepository.log("RENAME_ACCOUNT_GROUP", "user", "Renamed account group $id to '${renamed.name}'")
+        refresh()
+    }
+
+    fun deleteGroup(id: Int): Job = launchSafely(onError) {
+        accountGroupRepository.delete(id)
+        auditLogRepository.log("DELETE_ACCOUNT_GROUP", "user", "Deleted account group $id")
+        if ((_state.value.selection as? AccountSelection.Group)?.key == GroupKey.Custom(id)) {
+            _state.update { it.copy(selection = AccountSelection.All, accountId = null) }
+            settingsRepository.setValue(KEY_SELECTION, selectionValue(AccountSelection.All))
+        }
+        refresh()
+    }
+
+    fun moveGroup(id: Int, up: Boolean): Job = launchSafely(onError) {
+        accountGroupRepository.move(id, up)
+        auditLogRepository.log("REORDER_ACCOUNT_GROUP", "user", "Moved account group $id ${if (up) "up" else "down"}")
+        refresh()
+    }
+
+    fun moveAccountToGroup(accountId: Int, groupId: Int?): Job = launchSafely(onError) {
+        accountRepository.setGroup(accountId, groupId)
+        auditLogRepository.log("MOVE_ACCOUNT_TO_GROUP", "user", "Moved account $accountId to group ${groupId ?: "default"}")
+        refresh()
     }
 
     fun updateAmountRange(min: BigDecimal?, max: BigDecimal?): Job {
@@ -411,8 +595,8 @@ class TransactionsViewModel(
         _state.update { it.copy(isImporting = true) }
         return launchSafely({ e -> _state.update { it.copy(isImporting = false, error = e.userMessage()) } }) {
             val report = importService.import(accountId, preview.statement, updateBalance)
-            // Show everything that was imported, not just this month
-            _state.update { it.copy(importPreview = null, isImporting = false, period = Period.ALL, accountId = accountId, message = report.summary()) }
+            // Show everything that was imported, not just this month; select the imported account.
+            _state.update { it.copy(importPreview = null, isImporting = false, period = Period.ALL, selection = AccountSelection.Account(accountId), accountId = accountId, message = report.summary()) }
             refresh()
         }
     }
@@ -423,5 +607,9 @@ class TransactionsViewModel(
 
     companion object {
         const val SEARCH_DEBOUNCE_MS = 250L
+
+        /** Settings keys holding the account panel's selection and collapsed groups, per profile. */
+        const val KEY_SELECTION = "transactions.selection"
+        const val KEY_COLLAPSED = "accountGroups.collapsed"
     }
 }

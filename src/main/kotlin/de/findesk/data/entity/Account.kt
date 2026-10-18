@@ -19,6 +19,7 @@ class Account(id: EntityID<Int>) : IntEntity(id) {
     var accountType by AccountsTable.accountType
     var name by AccountsTable.name
     var lastUpdate by AccountsTable.lastUpdate
+    var groupId by AccountsTable.groupId
 
     val transactions by Transaction referrersOn TransactionsTable.accountId
 }
