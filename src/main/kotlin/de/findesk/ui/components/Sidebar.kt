@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import de.findesk.i18n.strings
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.PrimaryBlue
-import de.findesk.ui.theme.PrimaryBlueDark
+import de.findesk.ui.theme.SidebarNavy
 import de.findesk.util.AppInfo
 
 @Composable
@@ -89,9 +89,9 @@ fun Sidebar(
     }
 }
 
-/** The brand blue, darkened in the dark theme so the sidebar doesn't glare next to dark surfaces. */
+/** The brand blue in the light theme, deep navy in the dark theme so the sidebar doesn't glare next to dark surfaces. */
 @Composable
-internal fun sidebarColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) PrimaryBlue else PrimaryBlueDark
+internal fun sidebarColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) PrimaryBlue else SidebarNavy
 
 @Composable
 private fun SidebarItem(
@@ -100,8 +100,13 @@ private fun SidebarItem(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    // Darken rather than lighten: any white highlight drops the white label below 4.5:1 (see ContrastTest)
-    val backgroundColor = if (isSelected) Color.Black.copy(alpha = 0.2f) else Color.Transparent
+    // Light theme darkens the blue; dark theme lightens the navy, since black on navy is invisible. Both keep the white label at 4.5:1 (see ContrastTest)
+    val selectedHighlight = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+        Color.Black.copy(alpha = 0.2f)
+    } else {
+        Color.White.copy(alpha = 0.12f)
+    }
+    val backgroundColor = if (isSelected) selectedHighlight else Color.Transparent
     // Disabled items may fall below 4.5:1, which WCAG allows for inactive controls
     val contentColor = if (enabled) Color.White else Color.White.copy(alpha = 0.5f)
 

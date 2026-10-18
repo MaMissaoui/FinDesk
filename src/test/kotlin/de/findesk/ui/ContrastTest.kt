@@ -9,7 +9,7 @@ import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.ErrorDark
 import de.findesk.ui.theme.LightColorScheme
 import de.findesk.ui.theme.PrimaryBlue
-import de.findesk.ui.theme.PrimaryBlueDark
+import de.findesk.ui.theme.SidebarNavy
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.SuccessDark
 import de.findesk.ui.theme.readableOn
@@ -88,9 +88,10 @@ class ContrastTest {
         val white = Color.White
         assertContrast(white, PrimaryBlue, "white sidebar text on PrimaryBlue")
 
-        // The selected tab draws a translucent dark highlight behind the label; Compose blends in sRGB.
-        assertContrast(white, Color.Black.copy(alpha = 0.2f).compositeOver(PrimaryBlue), "white label on selected sidebar tab")
-        assertContrast(white, PrimaryBlueDark, "white sidebar text on PrimaryBlueDark (dark theme)")
+        // The selected tab draws a translucent highlight behind the label; Compose blends in sRGB.
+        assertContrast(white, Color.Black.copy(alpha = 0.2f).compositeOver(PrimaryBlue), "white label on selected sidebar tab (light)")
+        assertContrast(white, SidebarNavy, "white sidebar text on SidebarNavy (dark theme)")
+        assertContrast(white, Color.White.copy(alpha = 0.12f).compositeOver(SidebarNavy), "white label on selected sidebar tab (dark)")
     }
 
     private fun assertContrast(foreground: Color, background: Color, label: String) {
