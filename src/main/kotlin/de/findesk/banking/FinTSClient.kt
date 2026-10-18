@@ -175,7 +175,7 @@ class FinTSClient(
     fun hasSavedPin(bankAccessId: Int): Boolean = settingsRepository.getValue(pinFlagKey(bankAccessId)) != null
 
     /** Key of the credential entry. The data dir makes it profile-specific and survives renaming a profile. */
-    private fun pinKey(bankAccessId: Int): String = "${passportDir.absoluteFile.parentFile.absolutePath}#bank-$bankAccessId"
+    private fun pinKey(bankAccessId: Int): String = pinKey(passportDir.absoluteFile.parentFile, bankAccessId)
 
     private fun pinFlagKey(bankAccessId: Int): String = "fints.pinSaved.$bankAccessId"
 
@@ -334,6 +334,12 @@ class FinTSClient(
     )
 
     companion object {
+        /**
+         * Credential-store key of a bank access's remembered PIN. [dataDir] (the profile's data directory) makes it
+         * profile-specific; profile deletion uses the same function to find the entries.
+         */
+        fun pinKey(dataDir: File, bankAccessId: Int): String = "${dataDir.absolutePath}#bank-$bankAccessId"
+
         /** Error code for a failure that certainly didn't execute an order (see [OrderNotExecutedException]). */
         const val NOT_EXECUTED = "NOT_EXECUTED"
 

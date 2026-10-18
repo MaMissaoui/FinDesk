@@ -208,7 +208,8 @@ private class SecretToolStore : CredentialStore {
         get() = !System.getenv("DBUS_SESSION_BUS_ADDRESS").isNullOrBlank() && onPath(TOOL)
 
     override fun read(key: String): String? {
-        val result = run("lookup", "service", CredentialStores.SERVICE, "key", key) ?: return null
+        // No answer (timeout, not startable) is a failed read, not "no PIN": the caller then asks and deletes nothing
+        val result = run("lookup", "service", CredentialStores.SERVICE, "key", key) ?: throw IllegalStateException("secret-tool did not answer")
         return result.stdout.removeSuffix("\n").ifEmpty { null }
     }
 
