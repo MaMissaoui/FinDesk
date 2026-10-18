@@ -9,7 +9,9 @@ import androidx.compose.ui.graphics.luminance
 // Primary Colors
 val PrimaryBlue = Color(0xFF2D6CDF)
 val PrimaryBlueLight = Color(0xFF5B8DEF)
-val PrimaryBlueDark = Color(0xFF1A4BAF)
+
+/** Deep navy for the dark-theme sidebar, quieter next to dark surfaces than the brand blue. */
+val SidebarNavy = Color(0xFF1E2D52)
 
 // Secondary/Accent Colors
 val Teal = Color(0xFF3BC7B0)
