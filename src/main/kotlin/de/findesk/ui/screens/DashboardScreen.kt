@@ -41,14 +41,14 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        // Keyed: items come and go as the dashboard loads (welcome card, upcoming, budgets), so each keeps its own
-        // identity instead of taking over whatever slot its position used to be
+        // Not keyed: a keyed list keeps its first visible item in place when one is inserted above it, so the welcome
+        // card, added once loading ends, opened scrolled out of view above the stat cards
         if (state.error != null) {
-            item(key = "error") { MessageBanner(null, state.error) { vm.loadDashboard() } }
+            item { MessageBanner(null, state.error) { vm.loadDashboard() } }
         }
 
         if (!state.isLoading && !state.hasAccounts) {
-            item(key = "welcome") {
+            item {
                 Card {
                     EmptyState(
                         icon = AppIcons.AccountBalance,
@@ -61,7 +61,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
-        item(key = "stats") {
+        item {
             // Equal heights even when a subtitle wraps in a narrow window
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(
@@ -95,7 +95,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
-        item(key = "charts") {
+        item {
             Row(modifier = Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionCard(s[StringKey.ExpensesByCategory], Modifier.weight(1f).fillMaxHeight()) {
                     if (state.expensesByCategory.isEmpty()) {
@@ -111,7 +111,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         }
 
         if (state.upcoming.isNotEmpty()) {
-            item(key = "upcoming") {
+            item {
                 SectionCard(s[StringKey.Upcoming30Days], Modifier.fillMaxWidth()) {
                     state.upcoming.forEach { r ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -136,14 +136,14 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         }
 
         if (state.budgets.isNotEmpty()) {
-            item(key = "budgets") {
+            item {
                 SectionCard(s[StringKey.BudgetsThisMonth], Modifier.fillMaxWidth()) {
                     state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
                 }
             }
         }
 
-        item(key = "tax") {
+        item {
             SectionCard(s[StringKey.TaxDeductibleYtd], Modifier.fillMaxWidth()) {
                 if (state.taxDeductionsByCategory.isEmpty()) {
                     Text(
@@ -156,7 +156,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
-        item(key = "recent") {
+        item {
             SectionCard(
                 s[StringKey.RecentTransactions],
                 Modifier.fillMaxWidth(),
