@@ -25,6 +25,7 @@ import de.findesk.repository.NewTransaction
 import de.findesk.repository.PaymentOrderRepositoryImpl
 import de.findesk.repository.SettingsRepositoryImpl
 import de.findesk.repository.TransactionRepositoryImpl
+import de.findesk.ui.components.ProfileMenuModel
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.NavigationArgs
@@ -77,7 +78,7 @@ class ScreenshotTest {
 
     @Test
     fun `render the unlock screens`() {
-        fun gate(name: String, mode: UnlockMode, language: AppLanguage = AppLanguage.EN, dark: Boolean = false, wrongAttempt: Boolean = false, leftovers: Boolean = false) {
+        fun gate(name: String, mode: UnlockMode, language: AppLanguage = AppLanguage.EN, dark: Boolean = false, wrongAttempt: Boolean = false, leftovers: Boolean = false, back: String? = null) {
             val dir = Files.createTempDirectory("findesk-gate").toFile()
             when (mode) {
                 UnlockMode.CREATE -> {}
@@ -94,7 +95,7 @@ class ScreenshotTest {
             if (wrongAttempt) runBlocking { vm.unlock("wrong passphrase").join() }
             render(name, width = 560, height = 720) {
                 CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
-                    FinDeskTheme(darkTheme = dark) { UnlockScreen(vm, profileName = "Business") }
+                    FinDeskTheme(darkTheme = dark) { UnlockScreen(vm, profileName = "Business", back = back?.let { it to {} }) }
                 }
             }
             vm.close()
@@ -105,6 +106,9 @@ class ScreenshotTest {
         gate("gate-4-change-dark", UnlockMode.CHANGE, dark = true)
         gate("gate-5-unlock-fr", UnlockMode.UNLOCK, language = AppLanguage.FR)
         gate("gate-6-leftover-copies", UnlockMode.UNLOCK, leftovers = true)
+        // After a live switch from the top bar: the way back to the profile that was open
+        gate("gate-7-switched-back", UnlockMode.UNLOCK, back = "Personal")
+        gate("gate-8-switched-new-de", UnlockMode.CREATE, language = AppLanguage.DE, back = "Personal")
     }
 
     /**
@@ -285,6 +289,8 @@ class ScreenshotTest {
         render("sidebar-collapsed", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel, sidebarCollapsed = true) }
         render("sidebar-collapsed-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel, sidebarCollapsed = true) }
         render("sidebar-collapsed-narrow", 1024, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel, sidebarCollapsed = true) }
+        render("topbar-profiles", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel, profiles = listOf("mamsoft" to "MAMSoft", null to "Personal")) }
+        render("topbar-profiles-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel, profiles = listOf("mamsoft" to "MAMSoft", null to "Personal"), sidebarCollapsed = true) }
         render("sidebar-collapsed-de", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, language = AppLanguage.DE, transactions = ::panel, sidebarCollapsed = true) }
     }
 
@@ -343,7 +349,7 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null, sidebarCollapsed: Boolean = false) {
+    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null, sidebarCollapsed: Boolean = false, profiles: List<Pair<String?, String>>? = null) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
@@ -351,7 +357,14 @@ class ScreenshotTest {
                     Row(Modifier.fillMaxSize()) {
                         Sidebar(currentScreen = screen, onScreenSelected = {}, lockedOn = lockedOn, collapsed = sidebarCollapsed)
                         Column(Modifier.fillMaxSize()) {
-                            TopBar(title = stringsFor(screen), isDarkTheme = dark, onThemeToggle = {}, sidebarCollapsed = sidebarCollapsed, language = language)
+                            TopBar(
+                                title = stringsFor(screen),
+                                isDarkTheme = dark,
+                                onThemeToggle = {},
+                                sidebarCollapsed = sidebarCollapsed,
+                                language = language,
+                                profileMenu = profiles?.let { list -> ProfileMenuModel(current = list.first().first, load = { list }, onSwitch = {}, onManage = {}) },
+                            )
                             HorizontalDivider()
                             Box(Modifier.fillMaxSize()) {
                                 when (screen) {

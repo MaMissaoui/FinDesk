@@ -361,6 +361,10 @@ enum class StringKey {
     ExpandSidebar,
     ChangeLanguage,
     LanguageBusy,
+    SwitchProfileMenu,
+    ManageProfiles,
+    OpenProfile,
+    BackToProfile,
 
     // Payments
     SepaTransfer,
