@@ -5,6 +5,8 @@ import java.nio.ByteOrder
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 plugins {
     kotlin("jvm") version "2.1.10"
@@ -190,10 +192,11 @@ fun ByteArray.containsBytes(needle: ByteArray): Boolean {
 val dmgDir = layout.buildDirectory.dir("compose/binaries/main/dmg")
 val isMacHost = System.getProperty("os.name").lowercase().contains("mac")
 
-fun runTool(vararg command: String) {
+fun runTool(vararg command: String): String {
     val process = ProcessBuilder(*command).redirectErrorStream(true).start()
     val output = process.inputStream.bufferedReader().readText()
     check(process.waitFor() == 0) { "${command.joinToString(" ")} failed:\n$output" }
+    return output.trim()
 }
 
 /** Mounts [dmg] at a fresh directory, runs [action] on the mount point and always detaches it again. */
@@ -287,6 +290,41 @@ tasks.register("verifyInstallerIcon") {
             check(sha256(packaged) == sha256(iconPng)) { "The app image ships ${packaged.path} (${sha256(packaged)}), not ${iconPng.name} (${sha256(iconPng)})" }
             println("Icon OK: ${packaged.name} in the app image matches ${iconPng.name}")
         }
+    }
+}
+
+// One-step local install on macOS: builds the self-contained FinDesk.app (it carries its own Java runtime) and
+// puts it into /Applications. A previous FinDesk.app is moved to the Trash, not deleted, so it can be dragged
+// back. `install-mac.command` runs this on a double-click in Finder.
+//   ./gradlew installMacApp [-PinstallDir=<folder>]    (default /Applications)
+tasks.register("installMacApp") {
+    group = "distribution"
+    description = "Builds FinDesk.app and installs it into /Applications (a previous version goes to the Trash)"
+    dependsOn("createDistributable", "verifyInstallerIcon")
+    val installDir = providers.gradleProperty("installDir").orElse("/Applications")
+    doLast {
+        check(isMacHost) { "installMacApp builds a macOS app bundle and only runs on macOS" }
+        val built = packagedAppDir.get().asFile.resolve("FinDesk.app")
+        check(built.isDirectory) { "No app bundle at $built" }
+        runTool("codesign", "--verify", "--deep", "--strict", built.path)
+        val version = runTool("defaults", "read", File(built, "Contents/Info.plist").path, "CFBundleShortVersionString")
+
+        val target = File(installDir.get(), "FinDesk.app")
+        // Replacing the bundle under a running app would crash it or leave it half old, half new
+        val running = ProcessHandle.allProcesses().anyMatch { it.info().command().orElse("").startsWith("${target.path}/") }
+        check(!running) { "FinDesk is running from $target. Quit it, then install again." }
+        if (target.exists()) {
+            val previous = runCatching { runTool("defaults", "read", File(target, "Contents/Info.plist").path, "CFBundleShortVersionString") }.getOrDefault("unknown")
+            val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH.mm.ss"))
+            val trashed = File(System.getProperty("user.home"), ".Trash/FinDesk $previous (replaced $stamp).app")
+            // mv, not Files.move: it also handles an install folder on another volume
+            runTool("mv", target.path, trashed.path)
+            println("Previous FinDesk $previous moved to the Trash as \"${trashed.name}\"")
+        }
+        // ditto keeps the bundle's signature, permissions and extended attributes intact
+        runTool("ditto", built.path, target.path)
+        runTool("codesign", "--verify", "--deep", "--strict", target.path)
+        println("Installed FinDesk $version to $target")
     }
 }
 
