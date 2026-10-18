@@ -282,7 +282,7 @@ private fun TransactionRow(
                 Text(txn.description, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (txn.documentCount > 0) {
                     Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Default.Email, contentDescription = s.format(StringKey.DocumentsCount, txn.documentCount), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                    Icon(AppIcons.AttachFile, contentDescription = s.format(StringKey.DocumentsCount, txn.documentCount), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                 }
             }
             val secondary = if (txn.partnerName != null) txn.purpose else null
