@@ -16,7 +16,7 @@ plugins {
 }
 
 group = "de.findesk"
-version = "1.3.0"
+version = "1.3.1"
 
 repositories {
     mavenCentral()
@@ -72,7 +72,7 @@ compose.desktop {
             modules("java.instrument", "java.naming", "java.prefs", "java.smartcardio", "java.sql", "java.management", "jdk.unsupported", "java.xml", "jdk.crypto.ec", "jdk.charsets", "jdk.localedata")
 
             packageName = "FinDesk"
-            packageVersion = "1.3.0"
+            packageVersion = "1.3.1"
             description = "Your Financial Workspace - Modern banking and document management"
             vendor = "FinDesk"
             copyright = "© 2026 FinDesk. All rights reserved."

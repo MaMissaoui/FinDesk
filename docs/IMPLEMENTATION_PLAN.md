@@ -335,29 +335,29 @@ artifacts on every pull request; on a published release the same files are attac
 ```bash
 # DMG installer
 ./gradlew packageDmg
-# Output: build/compose/binaries/main/dmg/FinDesk-1.3.0.dmg
+# Output: build/compose/binaries/main/dmg/FinDesk-1.3.1.dmg
 ```
 
 #### Windows
 ```bash
 # MSI installer
 ./gradlew packageMsi
-# Output: build/compose/binaries/main/msi/FinDesk-1.3.0.msi
+# Output: build/compose/binaries/main/msi/FinDesk-1.3.1.msi
 
 # Portable EXE
 ./gradlew packageExe
-# Output: build/compose/binaries/main/exe/FinDesk-1.3.0.exe
+# Output: build/compose/binaries/main/exe/FinDesk-1.3.1.exe
 ```
 
 #### Linux
 ```bash
 # Debian/Ubuntu package
 ./gradlew packageDeb
-# Output: build/compose/binaries/main/deb/findesk_1.3.0_amd64.deb
+# Output: build/compose/binaries/main/deb/findesk_1.3.1_amd64.deb
 
 # Fedora/RHEL package
 ./gradlew packageRpm
-# Output: build/compose/binaries/main/rpm/findesk-1.3.0-1.x86_64.rpm
+# Output: build/compose/binaries/main/rpm/findesk-1.3.1-1.x86_64.rpm
 ```
 
 ### Output Locations
@@ -368,4 +368,4 @@ artifacts on every pull request; on a published release the same files are attac
 | Windows | EXE | `build/compose/binaries/main/exe/` |
 | Linux | DEB | `build/compose/binaries/main/deb/` |
 | Linux | RPM | `build/compose/binaries/main/rpm/` |
-| All | JAR | `build/libs/FinDesk-1.3.0.jar` |
+| All | JAR | `build/libs/FinDesk-1.3.1.jar` |
