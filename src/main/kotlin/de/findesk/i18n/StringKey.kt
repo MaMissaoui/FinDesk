@@ -590,6 +590,8 @@ enum class StringKey {
     HintNeedsCategory,
     HintNothingToExport,
     ErrorBankUnreachable,
+    ErrorServerHttpStatus,
+    ErrorServerNotFints,
     ErrorNoStandingOrderId,
     ErrorBankRejectedPin,
     ErrorPayeeCancelled,
