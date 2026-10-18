@@ -40,6 +40,9 @@ fun SettingsScreen(
     onDarkThemeChange: (Boolean) -> Unit,
     language: AppLanguage,
     onLanguageChange: (AppLanguage) -> Unit,
+    /** Opens another profile now, through its unlock screen; null keeps the "open at next start" behaviour. */
+    onSwitchProfile: ((String?) -> Unit)? = null,
+    profileSwitchEnabled: Boolean = true,
 ) {
     val vm = rememberViewModel { SettingsViewModel(isOcrAvailable = TesseractOcrEngine.createOrNull() != null) }
     val state by vm.state.collectAsState()
@@ -137,7 +140,12 @@ fun SettingsScreen(
                                 Text(s[StringKey.ProfileNextStart], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.width(8.dp))
                             }
-                            TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
+                            if (onSwitchProfile != null) {
+                                // The same live switch as the top bar's profile menu
+                                TextButton(enabled = p.slug != state.openProfile && profileSwitchEnabled, onClick = { onSwitchProfile(p.slug) }) { Text(s[StringKey.OpenProfile]) }
+                            } else {
+                                TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
+                            }
                             IconButton(onClick = { renameProfile = p }) { Icon(Icons.Default.Edit, contentDescription = s.format(StringKey.RenameProfile, p.name)) }
                             IconButton(enabled = !p.isDefault && p.slug != state.openProfile, onClick = { confirmDeleteProfile = p }) {
                                 Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteProfile, p.name))

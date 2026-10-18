@@ -12,6 +12,7 @@ import org.jetbrains.exposed.sql.StdOutSqlLogger
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.addLogger
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.vendors.currentDialect
 import java.io.File
@@ -57,8 +58,32 @@ object DatabaseFactory {
     @Volatile
     private var passphrase: String? = null
 
+    /** The Exposed registration of the open database; it holds the pool and, through it, the key. */
+    @Volatile
+    private var database: Database? = null
+
+    /** For tests: the registration a later [close] must remove from Exposed. */
+    internal val currentDatabase: Database? get() = database
+
     /** Whether the open database is encrypted. */
     val isEncrypted: Boolean get() = passphrase != null
+
+    /** Whether a database is open (between [init] and [close]). */
+    val isOpen: Boolean get() = pool != null
+
+    /**
+     * Closes the open database before another profile is unlocked: the pool is shut and the key is dropped from
+     * memory. A `transaction {}` started afterwards fails instead of reaching the next profile's database.
+     */
+    fun close() {
+        pool?.close()
+        database?.let { TransactionManager.closeAndUnregister(it) }
+        database = null
+        pool = null
+        openDb = null
+        passphrase = null
+        TransactionManager.defaultDatabase = null
+    }
 
     fun databaseFile(dataDir: File): File = File(dataDir, DB_NAME)
 
@@ -90,10 +115,12 @@ object DatabaseFactory {
             },
         )
         pool?.close()
+        // Unregistered, or Exposed keeps the old database (and the old key behind its pool) reachable
+        database?.let { TransactionManager.closeAndUnregister(it) }
         pool = newPool
         openDb = db
         this.passphrase = passphrase
-        Database.connect(newPool)
+        database = Database.connect(newPool)
 
         transaction {
             // Prints every statement with its values (bank passport passphrases included), so only on request

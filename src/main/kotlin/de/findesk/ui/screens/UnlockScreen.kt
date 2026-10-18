@@ -35,7 +35,12 @@ import de.findesk.viewmodel.UnlockViewModel
 
 /** The startup gate (see [UnlockViewModel]): unlock, change the passphrase, or choose one for new or plaintext data. */
 @Composable
-fun UnlockScreen(vm: UnlockViewModel, profileName: String?) {
+fun UnlockScreen(
+    vm: UnlockViewModel,
+    profileName: String?,
+    /** After a live profile switch: the previous profile's name and the way back to its unlock screen. */
+    back: Pair<String, () -> Unit>? = null,
+) {
     val s = strings()
     val state by vm.state.collectAsState()
     var current by remember { mutableStateOf("") }
@@ -188,6 +193,10 @@ fun UnlockScreen(vm: UnlockViewModel, profileName: String?) {
                     UnlockMode.UNLOCK -> TextButton(onClick = { vm.showChange(true) }, enabled = !state.isBusy) { Text(s[StringKey.ChangePassphrase]) }
                     UnlockMode.CHANGE -> TextButton(onClick = { vm.showChange(false) }, enabled = !state.isBusy) { Text(s[StringKey.Back]) }
                     else -> {}
+                }
+                // That profile is locked again, so going back means unlocking it again
+                back?.let { (name, onBack) ->
+                    TextButton(onClick = onBack, enabled = !state.isBusy) { Text(s.format(StringKey.BackToProfile, name)) }
                 }
             }
         }

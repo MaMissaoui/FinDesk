@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -26,9 +27,11 @@ import de.findesk.i18n.AppStrings
 import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
+import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.SettingsRepository
 import de.findesk.repository.SettingsRepositoryImpl
 import de.findesk.ui.components.AboutDialog
+import de.findesk.ui.components.ProfileMenuModel
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.NavigationArgs
@@ -43,9 +46,11 @@ import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.util.AppPaths
 import de.findesk.util.ProfileStore
+import de.findesk.util.ProfileSwitch
 import de.findesk.viewmodel.Busy
 import de.findesk.viewmodel.SettingsViewModel
 import de.findesk.viewmodel.UnlockViewModel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,6 +70,9 @@ fun App(
     onAboutClose: () -> Unit = {},
     sidebarCollapsed: Boolean = false,
     onToggleSidebar: () -> Unit = {},
+    currentProfile: String? = null,
+    profiles: ProfileStore? = null,
+    onSwitchProfile: ((String?) -> Unit)? = null,
 ) {
     // A language change recreates the screen (see the key below), so the top bar refuses it while work would be lost
     val busy by Busy.active.collectAsState()
@@ -81,7 +89,6 @@ fun App(
                         topInset = Platform.titleBarHeight,
                         currentScreen = navigationState.currentScreen,
                         onScreenSelected = { navigationState.navigateTo(it) },
-                        profileName = profileLabel,
                         lockedOn = navigationState.lockedOn,
                         collapsed = sidebarCollapsed,
                     )
@@ -96,6 +103,14 @@ fun App(
                             language = language,
                             onLanguageChange = onLanguageChange,
                             languageEnabled = !busy && navigationState.lockedOn == null,
+                            profileMenu = profiles?.let { store ->
+                                ProfileMenuModel(
+                                    current = currentProfile,
+                                    load = { store.list().map { it.slug to it.name } },
+                                    onSwitch = { onSwitchProfile?.invoke(it) },
+                                    onManage = { navigationState.navigateTo(Screen.SETTINGS) },
+                                )
+                            },
                         )
 
                         HorizontalDivider()
@@ -125,6 +140,8 @@ fun App(
                                         onDarkThemeChange = setDarkTheme,
                                         language = language,
                                         onLanguageChange = onLanguageChange,
+                                        onSwitchProfile = onSwitchProfile,
+                                        profileSwitchEnabled = !busy && navigationState.lockedOn == null,
                                     )
                                 }
                             }
@@ -143,15 +160,59 @@ fun main() {
     val profiles = ProfileStore()
     val profile = profiles.active()
     AppPaths.activeProfile = profile.slug
-    val dataDir = AppPaths.dataDir.apply { mkdirs() }
     // Before the gate looks at the database file, so a restored backup is what gets unlocked or encrypted
-    DatabaseFactory.applyPendingRestore(dataDir)
-    val profileLabel = profile.name.takeIf { profiles.list().size > 1 }
+    DatabaseFactory.applyPendingRestore(AppPaths.dataDir.apply { mkdirs() })
     application {
+        var session by remember { mutableStateOf(ProfileSession(profile.slug)) }
         var prefs by remember { mutableStateOf<UiPrefs?>(null) }
-        prefs?.let { FinDeskWindow(profileLabel, it) } ?: UnlockWindow(dataDir, profileLabel) { prefs = it }
+        val scope = rememberCoroutineScope()
+        // Completed when the main window has left the composition, i.e. after every screen's view model was closed
+        var mainWindowGone by remember { mutableStateOf<CompletableDeferred<Unit>?>(null) }
+        // Set synchronously, so a second request (top bar and Settings) can't close the next profile's database
+        var switching by remember { mutableStateOf(false) }
+        val switchProfile: (String?) -> Unit = switch@{ target ->
+            if (switching || target == session.slug || Busy.active.value) return@switch
+            switching = true
+            val from = session.slug
+            val fromMain = prefs != null
+            scope.launch {
+                try {
+                    withContext(Dispatchers.IO) {
+                        // Into the profile being left, while its database is still open
+                        if (fromMain) runCatching { AuditLogRepositoryImpl().log("PROFILE_SWITCH", "user", "Switched from profile ${from ?: "default"} to ${target ?: "default"}") }
+                        DatabaseFactory.applyPendingRestore(ProfileSwitch.dataDir(target).apply { mkdirs() })
+                    }
+                    val gone = CompletableDeferred<Unit>().also { if (fromMain) mainWindowGone = it else it.complete(Unit) }
+                    // One snapshot: the main window goes and the target's unlock window comes, so a window is always open
+                    prefs = null
+                    session = ProfileSession(target, previous = from, ready = false)
+                    // Only once the main window and its view models are disposed is the database closed under them
+                    gone.await()
+                    withContext(Dispatchers.IO) { ProfileSwitch.closeAndActivate(target, profiles) }
+                    session = session.copy(ready = true)
+                } finally {
+                    mainWindowGone = null
+                    switching = false
+                }
+            }
+        }
+        // The name shows in the window titles once there is more than one profile
+        val profileLabel = remember(session.slug) { profiles.list().takeIf { it.size > 1 }?.firstOrNull { it.slug == session.slug }?.name }
+        prefs?.let { FinDeskWindow(profileLabel, it, session.slug, profiles, switchProfile, onDisposed = { mainWindowGone?.complete(Unit) }) }
+            ?: key(session.slug) {
+                val back = session.previous?.let { previous -> profiles.list().firstOrNull { it.slug == previous } }
+                UnlockWindow(
+                    dataDir = ProfileSwitch.dataDir(session.slug),
+                    profileLabel = profileLabel,
+                    ready = session.ready,
+                    back = back?.let { it.name to { switchProfile(it.slug) } },
+                ) { prefs = it }
+            }
     }
 }
+
+/** The profile whose unlock screen or main window is shown; [previous] is offered as "Back to …" after a switch. */
+private data class ProfileSession(val slug: String?, val previous: String? = null, val ready: Boolean = true)
 
 /** Language, theme and sidebar, read off the UI thread once the database is open, before the main window shows them. */
 private data class UiPrefs(val language: AppLanguage, val darkTheme: Boolean, val sidebarCollapsed: Boolean = false) {
@@ -166,7 +227,15 @@ private data class UiPrefs(val language: AppLanguage, val darkTheme: Boolean, va
 
 /** Nothing can be read before the database is open, so language and theme come from the system here. */
 @Composable
-private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, onOpened: (UiPrefs) -> Unit) {
+private fun ApplicationScope.UnlockWindow(
+    dataDir: File,
+    profileLabel: String?,
+    /** False while the previous profile's database is still being closed after a switch. */
+    ready: Boolean = true,
+    /** After a switch: the previous profile's name and how to go back to its unlock screen. */
+    back: Pair<String, () -> Unit>? = null,
+    onOpened: (UiPrefs) -> Unit,
+) {
     val vm = remember { UnlockViewModel(dataDir) }
     val state by vm.state.collectAsState()
     LaunchedEffect(state.opened) {
@@ -185,14 +254,27 @@ private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, 
     ) {
         CompositionLocalProvider(LocalStrings provides strings) {
             FinDeskTheme(darkTheme = isSystemInDarkTheme()) {
-                UnlockScreen(vm, profileLabel)
+                if (ready) {
+                    UnlockScreen(vm, profileLabel, back)
+                } else {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs) {
+private fun ApplicationScope.FinDeskWindow(
+    profileLabel: String?,
+    prefs: UiPrefs,
+    currentProfile: String?,
+    profiles: ProfileStore,
+    onSwitchProfile: (String?) -> Unit,
+    onDisposed: () -> Unit = {},
+) {
+    // First in this window, so it is disposed last: after the screens below and their view models
+    DisposableEffect(Unit) { onDispose { onDisposed() } }
     val settings = remember { SettingsRepositoryImpl() }
     // Maximized: the tables and charts want the room. On macOS this zooms to fill the screen, not a full-screen Space
     val windowState = rememberWindowState(placement = WindowPlacement.Maximized)
@@ -260,6 +342,9 @@ private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs
             onAboutClose = { aboutOpen = false },
             sidebarCollapsed = sidebarCollapsed,
             onToggleSidebar = toggleSidebar,
+            currentProfile = currentProfile,
+            profiles = profiles,
+            onSwitchProfile = onSwitchProfile,
         )
     }
 }

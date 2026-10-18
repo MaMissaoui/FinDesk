@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.StringKey
@@ -29,6 +30,8 @@ fun TopBar(
     onLanguageChange: (AppLanguage) -> Unit = {},
     /** False while work runs that a language change would interrupt (see `Busy`) or a screen is locked. */
     languageEnabled: Boolean = true,
+    /** The profile switcher; null hides it (e.g. in previews). Disabled together with the language menu. */
+    profileMenu: ProfileMenuModel? = null,
 ) {
     val s = strings()
     Row(
@@ -61,6 +64,7 @@ fun TopBar(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            profileMenu?.let { ProfileMenu(it, languageEnabled) }
             LanguageMenu(language, languageEnabled, onLanguageChange)
 
             // Theme Toggle
@@ -108,6 +112,70 @@ private fun LanguageMenu(language: AppLanguage, enabled: Boolean, onLanguageChan
                         },
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * What the top bar's profile switcher needs: the open profile, the profiles as (slug, name) pairs, read each time the
+ * menu opens so a profile created or renamed in Settings shows, and the actions.
+ */
+data class ProfileMenuModel(
+    val current: String?,
+    val load: () -> List<Pair<String?, String>>,
+    val onSwitch: (String?) -> Unit,
+    val onManage: () -> Unit,
+)
+
+/**
+ * The open profile's name with a chevron, like a company switcher. Picking another profile closes this one and shows
+ * that profile's unlock screen (see `ProfileSwitch`); "Manage profiles…" opens Settings.
+ */
+@Composable
+private fun ProfileMenu(model: ProfileMenuModel, enabled: Boolean) {
+    val s = strings()
+    var open by remember { mutableStateOf(false) }
+    var profiles by remember(model.current) { mutableStateOf(model.load()) }
+    val name = profiles.firstOrNull { it.first == model.current }?.second.orEmpty()
+    DisabledReason(if (enabled) null else s[StringKey.LanguageBusy]) {
+        Box {
+            OutlinedButton(
+                onClick = {
+                    profiles = model.load()
+                    open = true
+                },
+                enabled = enabled,
+                modifier = Modifier.widthIn(min = 160.dp, max = 260.dp).semantics { contentDescription = s[StringKey.SwitchProfileMenu] },
+            ) {
+                Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                profiles.forEach { (slug, profileName) ->
+                    val isCurrent = slug == model.current
+                    DropdownMenuItem(
+                        text = { Text(profileName, fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal) },
+                        trailingIcon = if (isCurrent) {
+                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        } else {
+                            null
+                        },
+                        onClick = {
+                            open = false
+                            if (!isCurrent) model.onSwitch(slug)
+                        },
+                    )
+                }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text(s[StringKey.ManageProfiles]) },
+                    onClick = {
+                        open = false
+                        model.onManage()
+                    },
+                )
             }
         }
     }

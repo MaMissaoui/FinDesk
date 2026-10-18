@@ -13,8 +13,9 @@ object AppPaths {
             ?: File(System.getProperty("user.home"), ".findesk")
 
     /**
-     * Profile opened at startup; null is the default profile. Set once in `main` before the database is opened and
-     * never changed while the app runs (switching applies at the next start).
+     * The open profile; null is the default profile. Set in `main` before the database is opened, and changed only by
+     * [ProfileSwitch.closeAndActivate], after the previous profile's database is closed and before the next one is
+     * unlocked.
      */
     @Volatile
     var activeProfile: String? = null
