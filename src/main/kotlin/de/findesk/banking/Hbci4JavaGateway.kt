@@ -288,12 +288,14 @@ class Hbci4JavaGateway : FinTSGateway {
         if (generateSequence(e) { it.cause }.any { it is JobNotSupportedException }) {
             return UnsupportedOperationException(AppStrings[StringKey.ErrorOrderNotOffered], e)
         }
-        if (BankingFailures.isNetworkFailure(e, callback.diagnostics)) {
-            return IllegalStateException(AppStrings[StringKey.ErrorBankUnreachable], e)
+        // An HTTP answer is the real cause even when an IOException cause survived: don't call it "unreachable"
+        BankingFailures.httpStatus(e, callback.diagnostics)?.let {
+            return IllegalStateException(AppStrings.format(StringKey.ErrorServerHttpStatus, it), e)
         }
-        val bankText = callback.bankMessages.lastOrNull() ?: callback.diagnostics.lastOrNull()?.substringAfter("Exception: ")
-        val root = generateSequence(e) { it.cause }.last()
-        return IllegalStateException(bankText ?: root.message ?: e.message ?: AppStrings[StringKey.ErrorDialogFailed], e)
+        if (BankingFailures.isNetworkFailure(e, callback.diagnostics)) {
+            return IllegalStateException(BankingFailures.networkMessage(e), e)
+        }
+        return IllegalStateException(BankingFailures.describe(e, callback.bankMessages, callback.diagnostics), e)
     }
 
     private fun checkStatus(status: Pair<Boolean, String?>) {
