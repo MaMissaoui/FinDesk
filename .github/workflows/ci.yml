@@ -1,9 +1,17 @@
 name: CI
 
+# Prose-only changes cannot break the build or the tests, so they skip CI. paths-ignore (not
+# paths) is used so a new non-Markdown file is tested without touching this workflow.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -16,6 +24,9 @@ jobs:
   test:
     name: Lint & test
     runs-on: ubuntu-latest
+    # The step took 116 s on PR #33; a hung Gradle daemon or a stuck download should
+    # fail fast instead of holding a runner for the default six hours.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
