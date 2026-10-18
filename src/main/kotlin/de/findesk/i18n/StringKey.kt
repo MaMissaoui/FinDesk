@@ -617,6 +617,7 @@ enum class StringKey {
     ErrorNoStandingOrderId,
     ErrorBankRejectedPin,
     ErrorPayeeCancelled,
+    ErrorPassportReset,
     ProtocolTraceTitle,
     ProtocolTraceHint,
     ProtocolTraceEnable,

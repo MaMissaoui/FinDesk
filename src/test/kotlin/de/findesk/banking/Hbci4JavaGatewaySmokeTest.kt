@@ -98,10 +98,56 @@ class Hbci4JavaGatewaySmokeTest {
             assertTrue(second.any { it.contains("127.0.0.1") }, "dialog 2 names the new host: $second")
             assertFalse(second.any { it.contains("37050198") }, "the old BLZ is gone: $second")
 
-            // No reset: the passport written by dialog 2 still wins even though different values are passed
+            // No reset, but the login changed: the mismatch check heals the stale passport before the dialog, so
+            // HBCI4Java uses the connection's new values. This intentionally replaces the old expectation that the
+            // passport written by dialog 2 kept winning without an explicit reset: the behaviour changed on purpose.
             val third = dialog("12030000", "https://localhost/fints")
-            assertTrue(third.any { it.contains("70020270") }, "without a reset the old BLZ is still used: $third")
-            assertTrue(third.any { it.contains("127.0.0.1") }, "without a reset the old host is still used: $third")
+            assertTrue(third.any { it.contains("12030000") }, "dialog 3 names the new BLZ: $third")
+            assertTrue(third.any { it.contains("localhost") }, "dialog 3 names the new host: $third")
+            assertFalse(third.any { it.contains("70020270") }, "the old BLZ is gone: $third")
+            assertFalse(third.any { it.contains("127.0.0.1") }, "the old host is gone: $third")
+        } finally {
+            ProtocolTraceStore.enabled = false
+            ProtocolTraceStore.clear()
+        }
+    }
+
+    /**
+     * The mismatch check must not churn a correct passport: with unchanged values the second dialog keeps the file
+     * HBCI4Java wrote. A fresh passport logs "have to create new passport file" while a reused one is only loaded,
+     * which is the cheapest reliable signal here: the connect against the closed port fails before any HBCI message,
+     * so the new-system-id step ("Rufe neue System-ID ab") never runs and lastModified changes on every save anyway.
+     */
+    @Test
+    @Timeout(value = 120, unit = TimeUnit.SECONDS)
+    fun `an unchanged passport is kept between dialogs`() {
+        val gateway = Hbci4JavaGateway()
+        val passport = File(tmp, "kept-passport.dat")
+        val connection = FinTSConnection(
+            bankName = "Kept Bank",
+            blz = "12030000",
+            userId = "kept-user",
+            serverUrl = "https://localhost/fints",
+            passportFile = passport,
+            passportPassphrase = "test-passphrase-123",
+        )
+
+        /** Runs one dialog and returns the dialog's trace lines (never throws; nothing listens on local 443). */
+        fun dialog(): List<String> {
+            ProtocolTraceStore.clear()
+            runCatching { gateway.fetchAll(connection, quietInteraction(), { LocalDate.now().minusDays(1) }, LocalDate.now()) }
+            return ProtocolTraceStore.last()?.lines.orEmpty().map { it.message }
+        }
+
+        ProtocolTraceStore.enabled = true
+        try {
+            val first = dialog()
+            assertTrue(passport.exists(), "the first dialog writes the passport")
+            assertTrue(first.any { it.contains("have to create new passport file") }, "the first dialog creates the passport: $first")
+
+            val second = dialog()
+            assertTrue(passport.exists(), "the passport is not deleted")
+            assertFalse(second.any { it.contains("have to create new passport file") }, "the second dialog reuses the passport instead of recreating it: $second")
         } finally {
             ProtocolTraceStore.enabled = false
             ProtocolTraceStore.clear()
