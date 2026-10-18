@@ -1,5 +1,7 @@
 package de.findesk.viewmodel
 
+import de.findesk.banking.CredentialStore
+import de.findesk.banking.CredentialStores
 import de.findesk.document.DocumentService
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
@@ -68,6 +70,8 @@ class SettingsViewModel(
     private val backupService: de.findesk.data.backup.BackupService = de.findesk.data.backup.BackupService(java.io.File(dataDirectory)),
     private val profileStore: ProfileStore = ProfileStore(),
     private val openProfile: String? = de.findesk.util.AppPaths.activeProfile,
+    /** Resolved lazily, so constructing the view model never touches the operating system's credential store. */
+    private val credentialStore: () -> CredentialStore = CredentialStores::system,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(SettingsState())
@@ -289,10 +293,26 @@ class SettingsViewModel(
     }
 
     fun deleteProfile(slug: String): Job = launchSafely(onError) {
+        forgetProfilePins(slug)
         val movedTo = profileStore.delete(slug, openProfile)
         auditLogRepository.log("PROFILE_DELETED", "user", "Profile $slug moved to ${movedTo.absolutePath}")
         refresh()
         _state.update { it.copy(message = AppStrings.format(StringKey.MessageProfileMoved, movedTo.absolutePath)) }
+    }
+
+    /**
+     * Forgets a profile's remembered PINs before its folder is moved: the credentials live in the operating system's
+     * store, keyed by the profile's data directory, so moving the folder alone would leave them behind.
+     */
+    private fun forgetProfilePins(slug: String) {
+        val profileDir = profileStore.list().firstOrNull { it.slug == slug }?.dir ?: return
+        val store = credentialStore()
+        if (!store.isAvailable) return
+        val passports = profileDir.resolve("passports")
+        passports.listFiles { file -> file.isFile && file.name.startsWith("bank-") && file.name.endsWith(".dat") }.orEmpty().forEach { passport ->
+            val id = passport.name.removePrefix("bank-").removeSuffix(".dat")
+            runCatching { store.delete("${profileDir.absolutePath}#bank-$id") }
+        }
     }
 
     fun clearMessages() {

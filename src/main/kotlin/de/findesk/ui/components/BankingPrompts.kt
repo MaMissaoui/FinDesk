@@ -27,12 +27,27 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
     when (val p = prompt) {
         null -> Unit
 
-        is BankingPrompt.Pin -> SecretDialog(
-            title = s.format(StringKey.PinFor, p.bankName),
-            text = s.format(StringKey.PinExplanation, p.userId),
-            label = s[StringKey.Pin],
-            onAnswer = interaction::answer,
-        )
+        is BankingPrompt.Pin -> {
+            // Unchecked by default, and only offered where the system has a credential store
+            var remember by remember(p) { mutableStateOf(false) }
+            SecretDialog(
+                title = s.format(StringKey.PinFor, p.bankName),
+                text = s.format(StringKey.PinExplanation, p.userId),
+                label = s[StringKey.Pin],
+                onAnswer = { interaction.answerPin(it, remember) },
+                footer = {
+                    if (p.offerRemember) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = remember, onCheckedChange = { remember = it })
+                            Column {
+                                Text(s[StringKey.RememberPinForSyncs])
+                                Text(s[StringKey.RememberPinExplanation], style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                },
+            )
+        }
 
         is BankingPrompt.ChooseTanMethod -> ChoiceDialog(
             title = s[StringKey.ChooseTanProcedure],
@@ -114,6 +129,8 @@ private fun SecretDialog(
     masked: Boolean = true,
     onAnswer: (String?) -> Unit,
     extra: @Composable ColumnScope.() -> Unit = {},
+    /** Below the field, for options about the entered value (e.g. remembering the PIN). */
+    footer: @Composable ColumnScope.() -> Unit = {},
 ) {
     var value by remember { mutableStateOf("") }
     AlertDialog(
@@ -132,6 +149,7 @@ private fun SecretDialog(
                     keyboardActions = KeyboardActions(onDone = { if (value.isNotEmpty()) onAnswer(value) }),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                footer()
             }
         },
         confirmButton = { Button(enabled = value.isNotEmpty(), onClick = { onAnswer(value) }) { Text(strings()[StringKey.Ok]) } },

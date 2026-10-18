@@ -35,7 +35,7 @@ class Hbci4JavaGatewayLiveTest {
         val asked = mutableListOf<String>()
         val envPin = System.getenv("FINDESK_FINTS_ONLINE_PIN") ?: "123456"
         val ui = object : BankingInteraction {
-            override fun pin(bankName: String, userId: String) = envPin.also { asked += "pin" }
+            override fun pin(bankName: String, userId: String, offerRemember: Boolean) = PinEntry(envPin).also { asked += "pin" }
             override fun selectTanMethod(options: List<TanMethod>) = options.firstOrNull()?.id.also { asked += "secmech" }
             override fun selectTanMedium(options: List<String>) = options.firstOrNull()
             override fun tan(challenge: TanChallenge): String? = envPin.also { asked += "tan" }

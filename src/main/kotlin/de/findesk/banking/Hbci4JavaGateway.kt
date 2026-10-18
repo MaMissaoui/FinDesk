@@ -439,7 +439,7 @@ internal class FinDeskHbciCallback(
             HBCICallback.NEED_CONNECTION, HBCICallback.CLOSE_CONNECTION -> Unit
 
             HBCICallback.NEED_PT_PIN -> {
-                val value = pin ?: interaction.pin(connection.bankName, connection.userId)?.takeIf { it.isNotEmpty() } ?: cancel()
+                val value = pin ?: interaction.pin(connection.bankName, connection.userId)?.pin?.takeIf { it.isNotEmpty() } ?: cancel()
                 // A new PIN after a rejected one may open the dialog, and then its orders do get sent
                 if (pin == null) pinRejected = false
                 pin = value

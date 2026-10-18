@@ -1,6 +1,7 @@
 package de.findesk.viewmodel
 
 import de.findesk.banking.BankingInteraction
+import de.findesk.banking.PinEntry
 import de.findesk.banking.TanChallenge
 import de.findesk.banking.TanMethod
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,7 +12,7 @@ import java.util.concurrent.TimeUnit
 
 /** A question from the bank waiting for the user. Answer with [UiBankingInteraction.answer]. */
 sealed interface BankingPrompt {
-    data class Pin(val bankName: String, val userId: String) : BankingPrompt
+    data class Pin(val bankName: String, val userId: String, val offerRemember: Boolean = false) : BankingPrompt
     data class ChooseTanMethod(val options: List<TanMethod>) : BankingPrompt
     data class ChooseTanMedium(val options: List<String>) : BankingPrompt
     data class Tan(val challenge: TanChallenge) : BankingPrompt
@@ -21,7 +22,8 @@ sealed interface BankingPrompt {
 
 /**
  * Bridges blocking banking callbacks (on an IO thread) to Compose dialogs: each call publishes a
- * [BankingPrompt] and waits until the UI answers or cancels. The PIN is passed through, never kept.
+ * [BankingPrompt] and waits until the UI answers or cancels. The PIN travels through the answer future, never
+ * through the [prompt] StateFlow, and the UI never keeps it.
  */
 class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInteraction {
     private val _prompt = MutableStateFlow<BankingPrompt?>(null)
@@ -31,7 +33,7 @@ class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInter
     val info: StateFlow<String?> = _info.asStateFlow()
 
     @Volatile
-    private var pending: CompletableFuture<String?>? = null
+    private var pending: CompletableFuture<Any?>? = null
 
     @Volatile
     private var closed = false
@@ -39,6 +41,11 @@ class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInter
     /** Answer the current prompt; null cancels. For yes/no prompts any non-null value means yes. */
     fun answer(value: String?) {
         pending?.complete(value)
+    }
+
+    /** Answer the PIN prompt with the entered [pin] and whether to [remember] it; a null [pin] cancels. */
+    fun answerPin(pin: String?, remember: Boolean) {
+        pending?.complete(pin?.let { PinEntry(it, remember) })
     }
 
     /**
@@ -55,9 +62,9 @@ class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInter
     }
 
     @Synchronized
-    private fun ask(prompt: BankingPrompt): String? {
+    private fun ask(prompt: BankingPrompt): Any? {
         if (closed) return null
-        val future = CompletableFuture<String?>()
+        val future = CompletableFuture<Any?>()
         pending = future
         if (closed) future.complete(null) // closed between the check and publishing the future
         _prompt.value = prompt
@@ -71,13 +78,13 @@ class UiBankingInteraction(private val timeoutMinutes: Long = 10) : BankingInter
         }
     }
 
-    override fun pin(bankName: String, userId: String): String? = ask(BankingPrompt.Pin(bankName, userId))
+    override fun pin(bankName: String, userId: String, offerRemember: Boolean): PinEntry? = ask(BankingPrompt.Pin(bankName, userId, offerRemember)) as? PinEntry
 
-    override fun selectTanMethod(options: List<TanMethod>): String? = ask(BankingPrompt.ChooseTanMethod(options))
+    override fun selectTanMethod(options: List<TanMethod>): String? = ask(BankingPrompt.ChooseTanMethod(options)) as? String
 
-    override fun selectTanMedium(options: List<String>): String? = ask(BankingPrompt.ChooseTanMedium(options))
+    override fun selectTanMedium(options: List<String>): String? = ask(BankingPrompt.ChooseTanMedium(options)) as? String
 
-    override fun tan(challenge: TanChallenge): String? = ask(BankingPrompt.Tan(challenge))
+    override fun tan(challenge: TanChallenge): String? = ask(BankingPrompt.Tan(challenge)) as? String
 
     override fun confirmDecoupled(message: String): Boolean = ask(BankingPrompt.Decoupled(message)) != null
 

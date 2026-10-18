@@ -139,6 +139,29 @@ class ScreenshotTest {
         render("transactions-duplicate-confirm-de-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, language = AppLanguage.DE, transactions = ::confirming) }
     }
 
+    /** The sync's PIN prompt with the opt-in to remember the PIN (unchecked), as macOS and Linux show it. */
+    @Test
+    fun `render the PIN prompt with the remember option`() {
+        fun prompt(name: String, dark: Boolean, language: AppLanguage) {
+            val ui = de.findesk.viewmodel.UiBankingInteraction()
+            val asking = kotlin.concurrent.thread { ui.pin("DKB Business", "max.mustermann", offerRemember = true) }
+            while (ui.prompt.value == null) Thread.sleep(10)
+            render(name, 720, 560) {
+                CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
+                    FinDeskTheme(darkTheme = dark) {
+                        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                            de.findesk.ui.components.BankingPromptHost(ui)
+                        }
+                    }
+                }
+            }
+            ui.cancelPending()
+            asking.join()
+        }
+        prompt("pin-remember", dark = false, language = AppLanguage.EN)
+        prompt("pin-remember-de-dark", dark = true, language = AppLanguage.DE)
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {

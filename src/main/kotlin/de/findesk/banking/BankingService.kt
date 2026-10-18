@@ -37,6 +37,18 @@ class BankingService(
 
     val syncProgress: StateFlow<FinTSClient.SyncProgress?> get() = finTSClient.syncProgress
 
+    /** Whether the OS offers a credential store, so the UI may offer to remember the PIN. */
+    val canRememberPin: Boolean get() = finTSClient.canRememberPin
+
+    /** Set when the last sync's opted-in PIN could not be saved in the system keychain. */
+    val pinNotSaved: Boolean get() = finTSClient.pinNotSaved
+
+    /** A PIN is remembered for [bankAccessId] (settings flag only; the keychain is never read here). */
+    fun hasSavedPin(bankAccessId: Int): Boolean = finTSClient.hasSavedPin(bankAccessId)
+
+    /** Deletes a remembered PIN for [bankAccessId]; used by the connection settings and when the login changes. */
+    fun forgetPin(bankAccessId: Int) = finTSClient.forgetPin(bankAccessId)
+
     companion object {
         /** First sync goes back this far (many banks require a TAN for more than 90 days). */
         const val INITIAL_SYNC_DAYS = 90L

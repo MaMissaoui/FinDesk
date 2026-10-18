@@ -24,14 +24,25 @@ import java.util.Base64
 class FinTSClient(
     private val bankAccessRepository: BankAccessRepository = BankAccessRepositoryImpl(),
     private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
+    private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val gateway: FinTSGateway = Hbci4JavaGateway(),
     private val passportDir: File = File(AppPaths.dataDir, "passports"),
+    /** Resolved lazily, so constructing a client never touches the operating system's credential store. */
+    private val credentialStore: () -> CredentialStore = CredentialStores::system,
 ) {
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.DISCONNECTED)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
     private val _syncProgress = MutableStateFlow<SyncProgress?>(null)
     val syncProgress: StateFlow<SyncProgress?> = _syncProgress.asStateFlow()
+
+    /** Set when the last sync's opted-in PIN could not be saved; the sync's view model shows a short, non-secret note. */
+    @Volatile
+    var pinNotSaved: Boolean = false
+        private set
+
+    /** Whether the system offers a credential store, so the UI may offer to remember the PIN. */
+    val canRememberPin: Boolean get() = credentialStore().isAvailable
 
     data class SyncProgress(
         val currentStep: String,
@@ -69,15 +80,106 @@ class FinTSClient(
 
     /**
      * Fetch accounts, balances and bookings for one bank access in a single dialog.
+     *
+     * Only this call may use a stored PIN: the user opted in on an earlier sync, it belongs to the current login and
+     * the OS credential store still has it. Transfers and standing orders always ask again.
      */
     suspend fun fetchAll(
         bankAccessId: Int,
         interaction: BankingInteraction,
         since: (iban: String) -> LocalDate?,
         to: LocalDate = LocalDate.now(),
-    ): BankingResult<List<AccountSnapshot>> = run(bankAccessId, ConnectionStatus.SYNCING, AppStrings[StringKey.ProgressConnecting]) { connection ->
-        gateway.fetchAll(connection, interaction, since, to)
+    ): BankingResult<List<AccountSnapshot>> {
+        pinNotSaved = false
+        // The flag and key are read (and the OS store touched) on IO, before the gateway call
+        val stored = withContext(Dispatchers.IO) { bankAccessRepository.findItem(bankAccessId)?.let { storedPinFor(it) } }
+        val remembering = RememberingInteraction(
+            inner = interaction,
+            stored = stored,
+            offer = canRememberPin,
+            // A rejected stored PIN must not survive the re-prompt, even if the user cancels it: drop it right away
+            onStoredRejected = { runCatching { forgetPin(bankAccessId) } },
+        )
+        val result = run(bankAccessId, ConnectionStatus.SYNCING, AppStrings[StringKey.ProgressConnecting]) { connection ->
+            gateway.fetchAll(connection, remembering, since, to)
+        }
+        withContext(Dispatchers.IO) { finishFetchAll(bankAccessId, remembering, result) }
+        return result
     }
+
+    /**
+     * Settles the PIN after a sync dialog: save an opted-in PIN after success, drop a stored PIN the bank rejected.
+     * CANCELLED keeps the stored PIN (nothing changed at the bank), and a store failure never fails the sync.
+     */
+    private fun finishFetchAll(bankAccessId: Int, remembering: RememberingInteraction, result: BankingResult<List<AccountSnapshot>>) {
+        val entered = remembering.lastEntry
+        remembering.lastEntry = null // the PIN must not outlive the dialog
+        when (result) {
+            is BankingResult.Success -> {
+                if (entered?.remember == true && entered.pin.isNotEmpty()) {
+                    try {
+                        savePin(bankAccessId, entered)
+                    } catch (e: Exception) {
+                        // Keep the sync result; tell the view model the store refused, and never leak the PIN
+                        pinNotSaved = true
+                    }
+                }
+            }
+
+            is BankingResult.Error -> if (result.code != "CANCELLED" && remembering.storedUsed) {
+                runCatching { forgetPin(bankAccessId) }
+            }
+        }
+    }
+
+    /** The stored PIN for the current login, or null. A stale flag (another login) forgets it; a missing entry clears the flag. */
+    private fun storedPinFor(bankAccess: BankAccessItem): String? {
+        val flagKey = pinFlagKey(bankAccess.id)
+        val flag = settingsRepository.getValue(flagKey) ?: return null
+        if (flag != loginSignature(bankAccess)) {
+            // The PIN belongs to another login: it would only lock this one
+            forgetPin(bankAccess.id)
+            return null
+        }
+        val stored = try {
+            credentialStore().read(pinKey(bankAccess.id))
+        } catch (e: Exception) {
+            // Locked or denied store: ask the user, but don't touch the entry or the flag
+            return null
+        }
+        if (stored.isNullOrEmpty()) {
+            settingsRepository.delete(flagKey)
+            return null
+        }
+        return stored
+    }
+
+    private fun savePin(bankAccessId: Int, entry: PinEntry) {
+        val bankAccess = bankAccessRepository.findItem(bankAccessId) ?: return
+        credentialStore().write(pinKey(bankAccessId), entry.pin)
+        settingsRepository.setValue(pinFlagKey(bankAccessId), loginSignature(bankAccess))
+        auditLogRepository.log("PIN_SAVED", "user", "Saved PIN for bank access $bankAccessId for syncs")
+    }
+
+    /** Deletes a stored PIN and its flag. The flag goes first, so a store failure can never keep a rejected PIN in use. */
+    fun forgetPin(bankAccessId: Int) {
+        val wasSaved = settingsRepository.getValue(pinFlagKey(bankAccessId)) != null
+        settingsRepository.delete(pinFlagKey(bankAccessId))
+        // Also without a flag: an entry whose flag write failed must not linger in the keychain
+        runCatching { credentialStore().delete(pinKey(bankAccessId)) }
+        // Logged only when a PIN was remembered, not on every bank removal or user-id change
+        if (wasSaved) auditLogRepository.log("PIN_FORGOTTEN", "user", "Removed stored PIN of bank access $bankAccessId")
+    }
+
+    /** A saved PIN exists for [bankAccessId]; reads only the settings flag, never the credential store. */
+    fun hasSavedPin(bankAccessId: Int): Boolean = settingsRepository.getValue(pinFlagKey(bankAccessId)) != null
+
+    /** Key of the credential entry. The data dir makes it profile-specific and survives renaming a profile. */
+    private fun pinKey(bankAccessId: Int): String = "${passportDir.absoluteFile.parentFile.absolutePath}#bank-$bankAccessId"
+
+    private fun pinFlagKey(bankAccessId: Int): String = "fints.pinSaved.$bankAccessId"
+
+    private fun loginSignature(bankAccess: BankAccessItem): String = "${bankAccess.blz}|${bankAccess.userId}"
 
     /**
      * Send a SEPA single transfer. The caller must have obtained explicit user confirmation first.
@@ -183,10 +285,47 @@ class FinTSClient(
         return passphrase
     }
 
-    /** Removes the bank's stored passport file and passphrase; call when the bank access is deleted. */
+    /** Removes the bank's stored passport file, passphrase and any remembered PIN; call when the bank access is deleted. */
     fun deleteStoredCredentials(bankAccessId: Int) {
         File(passportDir, "bank-$bankAccessId.dat").delete()
         settingsRepository.delete("fints.passport.$bankAccessId")
+        forgetPin(bankAccessId)
+    }
+
+    /**
+     * Wraps the caller's interaction for a sync: a stored PIN answers the first prompt, everything else is delegated,
+     * and after the bank rejects it the entry is dropped before the user is asked again. A stored PIN is never
+     * returned twice, because banks lock a login after a few wrong PINs.
+     */
+    private class RememberingInteraction(
+        private val inner: BankingInteraction,
+        private val stored: String?,
+        private val offer: Boolean,
+        private val onStoredRejected: () -> Unit,
+    ) : BankingInteraction by inner {
+        var storedUsed: Boolean = false
+            private set
+
+        /** Set once the rejected stored PIN was dropped, so repeated re-prompts don't audit it again. */
+        private var storedDropped = false
+
+        /** Last PIN the user entered (not the stored one), kept to save it after a successful sync. */
+        var lastEntry: PinEntry? = null
+
+        override fun pin(bankName: String, userId: String, offerRemember: Boolean): PinEntry? {
+            val saved = stored
+            if (saved != null && !storedUsed) {
+                storedUsed = true
+                return PinEntry(saved)
+            }
+            // A later call means the bank rejected the PIN: forget it before asking again, so cancelling at the
+            // re-prompt (or a timeout) can never keep a PIN the bank refuses
+            if (storedUsed && !storedDropped) {
+                storedDropped = true
+                onStoredRejected()
+            }
+            return inner.pin(bankName, userId, offer).also { lastEntry = it }
+        }
     }
 
     data class TransferResult(
