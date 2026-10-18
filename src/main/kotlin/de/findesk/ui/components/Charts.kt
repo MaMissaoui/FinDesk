@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
@@ -74,7 +75,9 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).background(colors[i], CircleShape))
                     Spacer(Modifier.width(8.dp))
-                    Text(slice.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1)
+                    // Ellipsis and a gap, so a long name never runs into its amount in a narrow window
+                    Text(slice.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.width(8.dp))
                     Text(Formats.money(slice.amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -92,7 +95,10 @@ internal fun niceCeiling(value: Double): Double {
 /** Grouped income/expense bars per month, on an axis from 0 to a round maximum. */
 @Composable
 fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier = Modifier, currency: String = "EUR") {
-    val top = niceCeiling(months.flatMap { listOf(it.income, it.expenses) }.maxOfOrNull { it.toDouble() } ?: 0.0)
+    val max = months.flatMap { listOf(it.income, it.expenses) }.maxOfOrNull { it.toDouble() } ?: 0.0
+    val top = niceCeiling(max)
+    // Without data only the baseline is labelled; a scale of €0.5 steps would just repeat "€1"
+    val ticks = if (max > 0.0) listOf(top, top / 2, 0.0) else listOf(0.0)
     val grid = MaterialTheme.colorScheme.outlineVariant
     val description = buildBarsDescription(title, months, currency, strings())
     val axisWidth = 64.dp
@@ -101,10 +107,12 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
 
     Column(modifier.semantics { contentDescription = description }) {
         Row(Modifier.fillMaxWidth().weight(1f)) {
-            Column(Modifier.width(axisWidth).fillMaxHeight().padding(end = 8.dp), verticalArrangement = Arrangement.SpaceBetween, horizontalAlignment = Alignment.End) {
-                listOf(top, top / 2, 0.0).forEach {
+            Column(Modifier.width(axisWidth).fillMaxHeight().padding(end = 8.dp), verticalArrangement = Arrangement.Bottom, horizontalAlignment = Alignment.End) {
+                ticks.forEachIndexed { i, tick ->
+                    if (i > 0) Spacer(Modifier.weight(1f))
                     Text(
-                        Formats.wholeMoney(BigDecimal.valueOf(it), currency),
+                        // Below €10 the half-way tick needs cents to differ from its neighbours
+                        if (top < 10) Formats.money(BigDecimal.valueOf(tick), currency) else Formats.wholeMoney(BigDecimal.valueOf(tick), currency),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -115,7 +123,7 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
             Canvas(Modifier.weight(1f).fillMaxHeight().padding(vertical = labelInset)) {
                 val groupWidth = size.width / months.size.coerceAtLeast(1)
                 val barWidth = groupWidth * 0.3f
-                listOf(0f, 0.5f).forEach { f -> drawLine(grid, Offset(0f, size.height * f), Offset(size.width, size.height * f), strokeWidth = 1f) }
+                if (max > 0.0) listOf(0f, 0.5f).forEach { f -> drawLine(grid, Offset(0f, size.height * f), Offset(size.width, size.height * f), strokeWidth = 1f) }
                 months.forEachIndexed { i, m ->
                     val x = i * groupWidth + groupWidth * 0.18f
                     val incomeH = (m.income.toDouble() / top).toFloat() * size.height
