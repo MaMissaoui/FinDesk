@@ -1,8 +1,10 @@
 package de.findesk.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -16,6 +18,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +61,7 @@ fun AccountPanel(
     onDeleteGroup: (Int) -> Unit,
     onMoveGroup: (Int, Boolean) -> Unit,
     onMoveAccount: (Int, Int?) -> Unit,
+    onMarkRead: (AccountSelection) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val s = strings()
@@ -73,15 +77,22 @@ fun AccountPanel(
         account.bankName.contains(query, ignoreCase = true)
 
     val shown = accounts.count { matches(it) }
+    val totalNew = accounts.sumOf { it.newCount }
 
     FinDeskCard(modifier = modifier) {
         Column(Modifier.fillMaxSize()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                SelectableRow(selected = selection == AccountSelection.All, onClick = { onSelect(AccountSelection.All) }) {
-                    Text(s[StringKey.AllAccounts], style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.End) {
-                        grandTotal.forEach { (currency, amount) ->
-                            Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(amount, selection == AccountSelection.All))
+                RowContextMenu(
+                    if (totalNew > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.All) } else null,
+                ) {
+                    SelectableRow(selected = selection == AccountSelection.All, onClick = { onSelect(AccountSelection.All) }) {
+                        Text(s[StringKey.AllAccounts], style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        NewCountBadge(totalNew, selected = selection == AccountSelection.All)
+                        Spacer(Modifier.width(8.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            grandTotal.forEach { (currency, amount) ->
+                                Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(amount, selection == AccountSelection.All))
+                            }
                         }
                     }
                 }
@@ -92,6 +103,7 @@ fun AccountPanel(
                     if (query.isNotEmpty() && visible.isEmpty()) return@forEach
                     val custom = (view.key as? GroupKey.Custom)?.let { key -> customGroups.firstOrNull { it.id == key.groupId } }
                     RowContextMenu(
+                        if (view.newCount > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.Group(view.key)) } else null,
                         custom?.let { menuItem(s[StringKey.RenameGroup]) { renaming = it } },
                         custom?.let { menuItem(s[StringKey.MoveUp]) { onMoveGroup(it.id, true) } },
                         custom?.let { menuItem(s[StringKey.MoveDown]) { onMoveGroup(it.id, false) } },
@@ -108,7 +120,10 @@ fun AccountPanel(
                     }
                     if (view.key.id !in collapsed) {
                         visible.forEach { account ->
-                            RowContextMenu(menuItem(s[StringKey.MoveToGroup]) { moving = account }) {
+                            RowContextMenu(
+                                if (account.newCount > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.Account(account.id)) } else null,
+                                menuItem(s[StringKey.MoveToGroup]) { moving = account },
+                            ) {
                                 AccountRow(
                                     account = account,
                                     selected = selection is AccountSelection.Account && selection.id == account.id,
@@ -189,6 +204,31 @@ fun AccountPanel(
 @Composable
 private fun panelAmountColor(value: java.math.BigDecimal, selected: Boolean): Color = if (selected) LocalContentColor.current else balanceColor(value)
 
+/**
+ * The unread-booking count for an account, a group or "All accounts": a small pill shown only when it is above zero.
+ * On the selection highlight a filled pill would be unreadable in dark mode, so there it turns into an outline in the
+ * row's own content colour (same reason as [panelAmountColor]).
+ */
+@Composable
+private fun NewCountBadge(count: Int, selected: Boolean) {
+    if (count <= 0) return
+    val s = strings()
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (selected) Color.Transparent else MaterialTheme.colorScheme.primary,
+        border = if (selected) BorderStroke(1.dp, LocalContentColor.current) else null,
+        modifier = Modifier.semantics { contentDescription = s.format(StringKey.NewBookingsCount, count) },
+    ) {
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = if (selected) LocalContentColor.current else MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+        )
+    }
+}
+
 /** One clickable entry that is highlighted (and announced) while selected. */
 @Composable
 private fun SelectableRow(
@@ -229,6 +269,8 @@ private fun GroupHeaderRow(
             )
         }
         Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        NewCountBadge(view.newCount, selected = selected)
+        Spacer(Modifier.width(8.dp))
         // One line per currency, each coloured by its own sign
         Column(horizontalAlignment = Alignment.End) {
             view.totals.ifEmpty { mapOf(primaryCurrency to BigDecimal.ZERO) }.forEach { (currency, amount) ->
@@ -249,7 +291,13 @@ private fun AccountRow(account: AccountItem, selected: Boolean, onSelect: () -> 
     val s = strings()
     SelectableRow(selected = selected, onClick = onSelect, modifier = Modifier.padding(start = 12.dp)) {
         Column(Modifier.weight(1f)) {
-            Text(s.accountName(account), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                s.accountName(account),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (account.newCount > 0) FontWeight.Bold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text("…${account.iban.takeLast(4)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             account.lastUpdate?.let {
                 Text(
@@ -259,6 +307,8 @@ private fun AccountRow(account: AccountItem, selected: Boolean, onSelect: () -> 
                 )
             }
         }
+        NewCountBadge(account.newCount, selected = selected)
+        Spacer(Modifier.width(8.dp))
         Text(
             Formats.money(account.balance, account.currency),
             style = MaterialTheme.typography.bodyMedium,

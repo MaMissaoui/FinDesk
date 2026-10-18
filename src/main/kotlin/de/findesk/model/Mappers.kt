@@ -25,7 +25,7 @@ fun BankAccess.toItem() = BankAccessItem(
     syncFrom = syncFrom,
 )
 
-fun Account.toItem() = AccountItem(
+fun Account.toItem(newCount: Int = 0) = AccountItem(
     id = id.value,
     bankAccessId = bankAccess.id.value,
     bankName = bankAccess.bankName,
@@ -37,6 +37,7 @@ fun Account.toItem() = AccountItem(
     lastUpdate = lastUpdate,
     name = name,
     groupId = groupId,
+    newCount = newCount,
 )
 
 fun AccountGroup.toItem() = AccountGroupItem(
@@ -70,6 +71,7 @@ fun Transaction.toItem(documentCount: Int = 0): TransactionItem {
         categoryColor = category?.color,
         isTaxRelevant = category?.isTaxRelevant ?: false,
         documentCount = documentCount,
+        isNew = isNew,
     )
 }
 

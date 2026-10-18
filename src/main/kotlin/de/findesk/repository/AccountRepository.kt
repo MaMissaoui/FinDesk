@@ -9,6 +9,7 @@ import de.findesk.model.AccountItem
 import de.findesk.model.toItem
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
@@ -127,7 +128,14 @@ class AccountRepositoryImpl : AccountRepository {
     }
 
     override fun findAllItems(): List<AccountItem> = transaction {
-        Account.all().orderBy(AccountsTable.id to org.jetbrains.exposed.sql.SortOrder.ASC).map { it.toItem() }
+        // One grouped query fills every account's counter, not one query per account
+        val count = TransactionsTable.id.count()
+        val newCounts = TransactionsTable
+            .select(TransactionsTable.accountId, count)
+            .where { TransactionsTable.isNew eq true }
+            .groupBy(TransactionsTable.accountId)
+            .associate { it[TransactionsTable.accountId].value to it[count].toInt() }
+        Account.all().orderBy(AccountsTable.id to org.jetbrains.exposed.sql.SortOrder.ASC).map { it.toItem(newCounts[it.id.value] ?: 0) }
     }
 
     override fun deleteWithTransactions(id: Int): Boolean = transaction { deleteAccountCascade(id) }

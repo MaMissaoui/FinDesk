@@ -4,6 +4,7 @@ import de.findesk.data.database.DatabaseFactory
 import de.findesk.data.table.*
 import de.findesk.repository.AccountGroupRepositoryImpl
 import de.findesk.repository.AccountRepositoryImpl
+import de.findesk.repository.TransactionRepositoryImpl
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.TransactionManager
@@ -150,5 +151,28 @@ class DatabaseFactoryTest {
             assertTrue(groupColumns.contains("sort_order"))
         }
         assertTrue(AccountGroupRepositoryImpl().findAllItems().isEmpty(), "the new table exists and is empty")
+    }
+
+    @Test
+    fun `a database without is_new gets the column and existing rows read false`() {
+        val dir = File(tempDir, "old-is-new").apply { mkdirs() }
+        val db = Database.connect("jdbc:sqlite:${File(dir, "findesk.db").absolutePath}", driver = "org.sqlite.JDBC")
+        transaction(db) {
+            exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, date TEXT NOT NULL, amount DECIMAL(15,2) NOT NULL, currency VARCHAR(3) DEFAULT 'EUR' NOT NULL, partner_name VARCHAR(255) NULL, purpose TEXT NULL, category_id INTEGER NULL, document_id INTEGER NULL, hash VARCHAR(64) NOT NULL, created_at TEXT NOT NULL)")
+            exec("INSERT INTO transactions (account_id, date, amount, hash, created_at) VALUES (1, '2026-10-01', -10.00, 'h1', '2026-10-01 10:00:00')")
+        }
+        TransactionManager.closeAndUnregister(db)
+
+        DatabaseFactory.init(dir.absolutePath)
+
+        transaction {
+            assertTrue(TransactionsTable.columns.map { it.name }.contains("is_new"), "the new column is added")
+            // The same statement updateSchema runs for a missing column: SQLite needs a default for a NOT NULL column
+            val ddl = TransactionsTable.isNew.createStatement().joinToString(" ")
+            assertTrue(ddl.contains("DEFAULT 0"), "the column is added with DEFAULT 0")
+        }
+        val rows = transaction { de.findesk.data.entity.Transaction.all().map { it.id.value to it.isNew } }
+        assertEquals(listOf(1 to false), rows, "the old row is kept and reads false, never new")
+        assertTrue(TransactionRepositoryImpl().countNew().isEmpty(), "an upgraded database has no unread bookings")
     }
 }

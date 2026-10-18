@@ -27,6 +27,8 @@ data class AccountGroupView(
     val name: String?,
     val accounts: List<AccountItem>,
     val totals: Map<String, BigDecimal>,
+    /** Sum of the accounts' unread bookings, for the panel's counter badge. */
+    val newCount: Int = 0,
 )
 
 /** Type groups are ordered by these first; any other type follows, alphabetically. */
@@ -57,12 +59,12 @@ fun group(accounts: List<AccountItem>, groups: List<AccountGroupItem>, primary: 
     typeKeys.forEach { type ->
         val list = typeAccounts[type].orEmpty()
         if (list.isNotEmpty()) {
-            views += AccountGroupView(GroupKey.Type(type), name = null, accounts = list, totals = totals(list, primary))
+            views += AccountGroupView(GroupKey.Type(type), name = null, accounts = list, totals = totals(list, primary), newCount = list.sumOf { it.newCount })
         }
     }
     groups.forEach { custom ->
         val list = customAccounts.getValue(custom.id)
-        views += AccountGroupView(GroupKey.Custom(custom.id), name = custom.name, accounts = list, totals = totals(list, primary))
+        views += AccountGroupView(GroupKey.Custom(custom.id), name = custom.name, accounts = list, totals = totals(list, primary), newCount = list.sumOf { it.newCount })
     }
     return views
 }

@@ -99,6 +99,8 @@ data class TransactionsState(
     val grandTotal: Map<String, BigDecimal> = emptyMap(),
     /** Ids of the collapsed groups (see [GroupKey.id]). */
     val collapsed: Set<String> = emptySet(),
+    /** The ids rendered bold: bookings a sync brought in, kept until the selection changes. */
+    val boldIds: Set<Int> = emptySet(),
     /** Free-text filter over the panel's account rows. */
     val accountFilterText: String = "",
     /** The custom groups as loaded, for rename, move and delete. */
@@ -158,6 +160,9 @@ class TransactionsViewModel(
     private var restoreSelection = false
 
     private var collapsedLoaded = false
+
+    /** The selection the last [refresh] resolved, so a changed selection can reset [TransactionsState.boldIds]. */
+    private var lastRefreshedSelection: AccountSelection? = null
 
     fun currentFilter(s: TransactionsState = _state.value): TransactionFilter {
         val (start, end) = s.period.range(today())
@@ -235,12 +240,16 @@ class TransactionsViewModel(
     }
 
     private fun refresh() {
-        val accounts = accountRepository.findAllItems()
+        // Compared against the last refresh, not the current state: selectAccounts already wrote the new selection
+        // into the state before calling refresh, so the two would always be equal and a change would never reset boldIds
+        val previousSelection = lastRefreshedSelection
+        var accounts = accountRepository.findAllItems()
         val customGroups = accountGroupRepository.findAllItems()
         val primary = Currencies.primary(settingsRepository)
-        val groups = group(accounts, customGroups, primary)
+        var groups = group(accounts, customGroups, primary)
         val selection = resolveSelection(restoreSelectionOrCurrent(groups, accounts), groups, accounts)
         restoreSelection = false
+        lastRefreshedSelection = selection
         _state.update {
             it.copy(
                 accounts = accounts,
@@ -254,6 +263,20 @@ class TransactionsViewModel(
             )
         }
         val transactions = transactionRepository.findItems(currentFilter())
+        val shownNew = transactions.filter { it.isNew }.map { it.id }.toSet()
+        // Bold rows survive a refresh so clearing a counter can't unbold them, but a selection change replaces them
+        var boldIds = if (selection == previousSelection) _state.value.boldIds + shownNew else shownNew
+
+        // Opening a single account marks its bookings read, however it was selected. View state only: no audit entry.
+        if (selection is AccountSelection.Account && (_state.value.accounts.firstOrNull { it.id == selection.id }?.newCount ?: 0) > 0) {
+            // The clear covers the whole account, so capture its new bookings outside the period on screen too:
+            // a late booking dated last month stays bold when the user widens the period
+            boldIds = boldIds + transactionRepository.findItems(TransactionFilter(accountId = selection.id)).filter { it.isNew }.map { it.id }
+            transactionRepository.markRead(setOf(selection.id))
+            accounts = accountRepository.findAllItems()
+            groups = group(accounts, customGroups, primary)
+        }
+
         // Keep the open detail panel in sync with edits
         _state.value.selected?.let { sel -> _state.update { it.copy(selected = transactions.firstOrNull { t -> t.id == sel.id } ?: sel) } }
         val categories = categoryRepository.findAllItems()
@@ -269,6 +292,9 @@ class TransactionsViewModel(
                 transactions = transactions,
                 categories = categories,
                 accounts = accounts,
+                groups = groups,
+                grandTotal = grandTotal(accounts, primary),
+                boldIds = boldIds,
                 balances = balances,
                 currentBalance = balanceAccount?.balance,
                 balanceCurrency = balanceAccount?.currency,
@@ -361,6 +387,23 @@ class TransactionsViewModel(
     }
 
     fun updateAccountFilter(accountId: Int?): Job = selectAccounts(accountId?.let { AccountSelection.Account(it) } ?: AccountSelection.All)
+
+    /**
+     * Marks the bookings behind [selection] as read on the user's request: All clears everything, a group its
+     * accounts, an account that one. View state only, so no audit entry. [TransactionsState.boldIds] stays as it is.
+     */
+    fun markRead(selection: AccountSelection): Job {
+        _state.update { it.copy(isLoading = true, error = null) }
+        return launchSafely(onError) {
+            val accountIds: Set<Int>? = when (selection) {
+                AccountSelection.All -> null
+                is AccountSelection.Account -> setOf(selection.id)
+                is AccountSelection.Group -> _state.value.groups.firstOrNull { it.key == selection.key }?.accounts?.map { it.id }?.toSet() ?: emptySet()
+            }
+            transactionRepository.markRead(accountIds)
+            refresh()
+        }
+    }
 
     /** Collapses or expands a group; view state only, so it is persisted but not audited. */
     fun toggleCollapsed(key: GroupKey): Job {

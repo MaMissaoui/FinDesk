@@ -18,4 +18,7 @@ object TransactionsTable : IntIdTable("transactions") {
     val documentId = reference("document_id", DocumentsTable).nullable()
     val hash = varchar("hash", 64).index()
     val createdAt = datetime("created_at")
+
+    /** Whether a bank sync brought this booking in and the user has not opened its account since. */
+    val isNew = bool("is_new").default(false)
 }
