@@ -1,12 +1,17 @@
 package de.findesk.ui.components
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -15,6 +20,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -35,13 +42,16 @@ fun Sidebar(
     lockedOn: Screen? = null,
     /** Room left free at the top, e.g. for the macOS window buttons over a unified title bar. */
     topInset: Dp = 0.dp,
+    /** Icons only, 72 dp wide; toggled from the top bar and remembered per profile. */
+    collapsed: Boolean = false,
 ) {
+    val width by animateDpAsState(if (collapsed) COLLAPSED_WIDTH else EXPANDED_WIDTH, animationSpec = tween(150))
     Column(
         modifier = modifier
-            .width(240.dp)
+            .width(width)
             .fillMaxHeight()
             .background(sidebarColor())
-            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 16.dp + topInset),
+            .padding(start = if (collapsed) 12.dp else 16.dp, end = if (collapsed) 12.dp else 16.dp, bottom = 16.dp, top = 16.dp + topInset),
     ) {
         // App Logo/Title
         Row(
@@ -54,15 +64,17 @@ fun Sidebar(
                 contentDescription = strings()[de.findesk.i18n.StringKey.AppLogo],
                 modifier = Modifier.size(40.dp),
             )
-            Column {
-                Text(
-                    text = "FinDesk",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                )
-                // Opaque white: any transparency drops below 4.5:1 on PrimaryBlue (ContrastTest)
-                if (profileName != null) Text(profileName, style = MaterialTheme.typography.bodySmall, color = Color.White, maxLines = 1)
+            if (!collapsed) {
+                Column {
+                    Text(
+                        text = "FinDesk",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    // Opaque white: any transparency drops below 4.5:1 on PrimaryBlue (ContrastTest)
+                    if (profileName != null) Text(profileName, style = MaterialTheme.typography.bodySmall, color = Color.White, maxLines = 1)
+                }
             }
         }
 
@@ -72,6 +84,7 @@ fun Sidebar(
                 screen = screen,
                 isSelected = screen == currentScreen,
                 enabled = lockedOn == null || screen == lockedOn,
+                collapsed = collapsed,
                 onClick = { onScreenSelected(screen) },
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -79,27 +92,65 @@ fun Sidebar(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Version info at bottom
-        Text(
-            text = "v${AppInfo.VERSION}",
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White,
-            modifier = Modifier.padding(top = 16.dp),
-        )
+        // Version info at bottom; it doesn't fit the icon-only width
+        if (!collapsed) {
+            Text(
+                text = "v${AppInfo.VERSION}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+        }
     }
 }
+
+private val EXPANDED_WIDTH = 240.dp
+private val COLLAPSED_WIDTH = 72.dp
 
 /** The brand blue in the light theme, deep navy in the dark theme so the sidebar doesn't glare next to dark surfaces. */
 @Composable
 internal fun sidebarColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) PrimaryBlue else SidebarNavy
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SidebarItem(
     screen: Screen,
     isSelected: Boolean,
     enabled: Boolean,
+    collapsed: Boolean,
     onClick: () -> Unit,
 ) {
+    if (!collapsed) {
+        SidebarItemRow(screen, isSelected, enabled, collapsed = false, onClick)
+        return
+    }
+    // Icon only: the title moves into a hover tooltip and, for screen readers, the item's content description
+    TooltipArea(
+        tooltip = {
+            Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 2.dp) {
+                Text(
+                    screen.title(strings()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        },
+        delayMillis = 300,
+    ) {
+        SidebarItemRow(screen, isSelected, enabled, collapsed = true, onClick)
+    }
+}
+
+@Composable
+private fun SidebarItemRow(
+    screen: Screen,
+    isSelected: Boolean,
+    enabled: Boolean,
+    collapsed: Boolean,
+    onClick: () -> Unit,
+) {
+    val title = screen.title(strings())
     // Light theme darkens the blue; dark theme lightens the navy, since black on navy is invisible. Both keep the white label at 4.5:1 (see ContrastTest)
     val selectedHighlight = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
         Color.Black.copy(alpha = 0.2f)
@@ -121,9 +172,10 @@ private fun SidebarItem(
                 onClick = onClick,
                 role = Role.Tab,
             )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .then(if (collapsed) Modifier.semantics { contentDescription = title } else Modifier)
+            .padding(horizontal = if (collapsed) 12.dp else 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.spacedBy(12.dp),
     ) {
         Icon(
             imageVector = screen.icon,
@@ -131,11 +183,14 @@ private fun SidebarItem(
             tint = contentColor,
             modifier = Modifier.size(24.dp),
         )
-        Text(
-            text = screen.title(strings()),
-            style = MaterialTheme.typography.bodyLarge,
-            color = contentColor,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-        )
+        if (!collapsed) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = contentColor,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+            )
+        }
     }
 }

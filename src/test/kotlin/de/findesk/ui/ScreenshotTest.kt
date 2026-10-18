@@ -281,6 +281,11 @@ class ScreenshotTest {
         render("transactions-panel-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel) }
         render("transactions-panel-mid", 1280, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
         render("transactions-panel-narrow", 1024, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
+        // The icon-only sidebar frees 168 dp: at the minimum window width the account panel then fits again
+        render("sidebar-collapsed", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel, sidebarCollapsed = true) }
+        render("sidebar-collapsed-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel, sidebarCollapsed = true) }
+        render("sidebar-collapsed-narrow", 1024, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel, sidebarCollapsed = true) }
+        render("sidebar-collapsed-de", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, language = AppLanguage.DE, transactions = ::panel, sidebarCollapsed = true) }
     }
 
     /** The unread-booking counter: panel badges, a bold account name and bold rows for a sync's fresh bookings. */
@@ -338,15 +343,15 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null) {
+    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null, sidebarCollapsed: Boolean = false) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     Row(Modifier.fillMaxSize()) {
-                        Sidebar(currentScreen = screen, onScreenSelected = {}, lockedOn = lockedOn)
+                        Sidebar(currentScreen = screen, onScreenSelected = {}, lockedOn = lockedOn, collapsed = sidebarCollapsed)
                         Column(Modifier.fillMaxSize()) {
-                            TopBar(title = stringsFor(screen), isDarkTheme = dark, onThemeToggle = {})
+                            TopBar(title = stringsFor(screen), isDarkTheme = dark, onThemeToggle = {}, sidebarCollapsed = sidebarCollapsed, language = language)
                             HorizontalDivider()
                             Box(Modifier.fillMaxSize()) {
                                 when (screen) {

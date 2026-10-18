@@ -357,6 +357,10 @@ enum class StringKey {
     MarkAsRead,
     DragToGroupHint,
     NoAccountsInGroup,
+    CollapseSidebar,
+    ExpandSidebar,
+    ChangeLanguage,
+    LanguageBusy,
 
     // Payments
     SepaTransfer,

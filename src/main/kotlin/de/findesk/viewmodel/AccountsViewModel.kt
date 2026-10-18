@@ -379,7 +379,8 @@ class AccountsViewModel(
         }
         return launchSafely({ e -> _state.update { it.copy(syncingBankId = null, error = e.userMessage()) } }) {
             try {
-                when (val r = bankingService.syncBankConnection(bankAccessId, bankingInteraction)) {
+                // fetchHistoryFrom runs through here too, so one busy section covers both
+                when (val r = Busy.track { bankingService.syncBankConnection(bankAccessId, bankingInteraction) }) {
                     is BankingResult.Success -> {
                         refresh()
                         val warn = r.data.warnings.takeIf { it.isNotEmpty() }?.joinToString("\n")

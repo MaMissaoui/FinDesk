@@ -43,6 +43,7 @@ import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.util.AppPaths
 import de.findesk.util.ProfileStore
+import de.findesk.viewmodel.Busy
 import de.findesk.viewmodel.SettingsViewModel
 import de.findesk.viewmodel.UnlockViewModel
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +63,11 @@ fun App(
     setDarkTheme: (Boolean) -> Unit = {},
     aboutOpen: Boolean = false,
     onAboutClose: () -> Unit = {},
+    sidebarCollapsed: Boolean = false,
+    onToggleSidebar: () -> Unit = {},
 ) {
+    // A language change recreates the screen (see the key below), so the top bar refuses it while work would be lost
+    val busy by Busy.active.collectAsState()
     val navigate: (Screen, NavigationArgs) -> Unit = { screen, args -> navigationState.navigateTo(screen, args) }
     val strings = Translations.of(language)
     LaunchedEffect(language) { AppStrings.set(language) }
@@ -78,6 +83,7 @@ fun App(
                         onScreenSelected = { navigationState.navigateTo(it) },
                         profileName = profileLabel,
                         lockedOn = navigationState.lockedOn,
+                        collapsed = sidebarCollapsed,
                     )
 
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -85,6 +91,11 @@ fun App(
                             title = navigationState.currentScreen.title(strings),
                             isDarkTheme = isDarkTheme,
                             onThemeToggle = { setDarkTheme(!isDarkTheme) },
+                            sidebarCollapsed = sidebarCollapsed,
+                            onToggleSidebar = onToggleSidebar,
+                            language = language,
+                            onLanguageChange = onLanguageChange,
+                            languageEnabled = !busy && navigationState.lockedOn == null,
                         )
 
                         HorizontalDivider()
@@ -142,12 +153,13 @@ fun main() {
     }
 }
 
-/** Language and theme, read off the UI thread once the database is open, before the main window shows them. */
-private data class UiPrefs(val language: AppLanguage, val darkTheme: Boolean) {
+/** Language, theme and sidebar, read off the UI thread once the database is open, before the main window shows them. */
+private data class UiPrefs(val language: AppLanguage, val darkTheme: Boolean, val sidebarCollapsed: Boolean = false) {
     companion object {
         fun load(settings: SettingsRepository = SettingsRepositoryImpl()) = UiPrefs(
             language = AppLanguage.fromCode(runCatching { settings.getValue(AppLanguage.KEY) }.getOrNull()),
             darkTheme = runCatching { settings.getValue(SettingsViewModel.KEY_DARK_THEME) == "true" }.getOrDefault(false),
+            sidebarCollapsed = runCatching { settings.getValue(KEY_SIDEBAR_COLLAPSED) == "true" }.getOrDefault(false),
         )
     }
 }
@@ -198,6 +210,12 @@ private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs
         darkTheme = enabled
         scope.launch(Dispatchers.IO) { settings.setValue(SettingsViewModel.KEY_DARK_THEME, enabled.toString()) }
     }
+    var sidebarCollapsed by remember { mutableStateOf(prefs.sidebarCollapsed) }
+    val toggleSidebar: () -> Unit = {
+        val next = !sidebarCollapsed
+        sidebarCollapsed = next
+        scope.launch(Dispatchers.IO) { settings.setValue(KEY_SIDEBAR_COLLAPSED, next.toString()) }
+    }
     var aboutOpen by remember { mutableStateOf(false) }
     var requestId by remember { mutableLongStateOf(0L) }
     val request: (ScreenRequest) -> Unit = { navigationState.navigateTo(Screen.TRANSACTIONS, NavigationArgs(request = it, requestId = ++requestId)) }
@@ -231,6 +249,20 @@ private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs
             onAbout = { aboutOpen = true },
             onExit = ::exitApplication,
         )
-        App(navigationState, language, setLanguage, profileLabel, darkTheme, setDarkTheme, aboutOpen, onAboutClose = { aboutOpen = false })
+        App(
+            navigationState,
+            language,
+            setLanguage,
+            profileLabel,
+            darkTheme,
+            setDarkTheme,
+            aboutOpen,
+            onAboutClose = { aboutOpen = false },
+            sidebarCollapsed = sidebarCollapsed,
+            onToggleSidebar = toggleSidebar,
+        )
     }
 }
+
+/** Settings key: whether the sidebar shows icons only, per profile. */
+private const val KEY_SIDEBAR_COLLAPSED = "ui.sidebarCollapsed"
