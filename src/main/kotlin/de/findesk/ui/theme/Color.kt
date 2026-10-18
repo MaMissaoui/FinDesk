@@ -3,6 +3,7 @@ package de.findesk.ui.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 
 // Primary Colors
@@ -51,3 +52,20 @@ val CategoryColors = listOf(
     Color(0xFF607D8B), // Blue Grey
     Color(0xFFCDDC39), // Lime
 )
+
+/** WCAG contrast ratio between two opaque colours, 1 to 21. */
+fun contrastRatio(foreground: Color, background: Color): Float {
+    val lighter = maxOf(foreground.luminance(), background.luminance())
+    val darker = minOf(foreground.luminance(), background.luminance())
+    return (lighter + 0.05f) / (darker + 0.05f)
+}
+
+/**
+ * [color] moved towards [toward] (the theme's text colour) just far enough to read at 4.5:1 on [background].
+ * Category colours are user-picked hex values, so no fixed palette can guarantee readable text in both themes.
+ */
+fun readableOn(color: Color, background: Color, toward: Color): Color = generateSequence(0f) { it + 0.05f }
+    .takeWhile { it < 1f }
+    .map { lerp(color, toward, it) }
+    .firstOrNull { contrastRatio(it, background) >= 4.5f }
+    ?: toward

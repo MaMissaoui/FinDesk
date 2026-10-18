@@ -41,13 +41,15 @@ internal val LightColorScheme = lightColorScheme(
 
 internal val DarkColorScheme = darkColorScheme(
     primary = PrimaryBlueLight,
-    onPrimary = Color.White,
+    // White on the light blue was 3.2:1 on every filled button; a deep navy reads at 5:1
+    onPrimary = Color(0xFF0A1F44),
     primaryContainer = PrimaryBlue,
     onPrimaryContainer = Color.White,
     secondary = TealLight,
     onSecondary = DarkGray,
     secondaryContainer = Teal,
-    onSecondaryContainer = Color.White,
+    // Selected filter chips: white on teal was 2.1:1. The container stays bright, as the selected chip has no border
+    onSecondaryContainer = DarkGray,
     tertiary = Color(0xFFFFD99D),
     onTertiary = DarkGray,
     background = Color(0xFF1C1B1F),

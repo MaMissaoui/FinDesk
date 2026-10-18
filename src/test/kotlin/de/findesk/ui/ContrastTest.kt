@@ -3,6 +3,7 @@ package de.findesk.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.DarkColorScheme
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.ErrorDark
@@ -11,6 +12,7 @@ import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.PrimaryBlueDark
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.SuccessDark
+import de.findesk.ui.theme.readableOn
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -56,6 +58,28 @@ class ContrastTest {
                 assertContrast(error, bg, "expense amount on $where ($name)")
             }
             assertContrast(scheme.onSurfaceVariant, scheme.surfaceVariant, "onSurfaceVariant on surfaceVariant, e.g. table header ($name)")
+        }
+    }
+
+    /** Colour pairs Material components draw with on their own: filled buttons, selected filter chips. */
+    @Test
+    fun `filled buttons and selected chips keep 4_5 to 1`() {
+        listOf("light" to LightColorScheme, "dark" to DarkColorScheme).forEach { (name, scheme) ->
+            assertContrast(scheme.onPrimary, scheme.primary, "filled button label ($name)")
+            assertContrast(scheme.onSecondaryContainer, scheme.secondaryContainer, "selected filter chip label ($name)")
+            assertContrast(scheme.onSurfaceVariant, scheme.surface, "unselected tab label ($name)")
+        }
+    }
+
+    /** Category badges draw the label in the category colour on a 12% tint of it; users pick any colour. */
+    @Test
+    fun `category badges stay readable for every colour`() {
+        val extremes = listOf(Color(0xFFFFF59D), Color(0xFF3E2723), Color.White, Color.Black)
+        listOf(LightColorScheme, DarkColorScheme).forEach { scheme ->
+            (CategoryColors + extremes).forEach { color ->
+                val tint = color.copy(alpha = 0.12f).compositeOver(scheme.surfaceContainerHighest)
+                assertContrast(readableOn(color, tint, scheme.onSurface), tint, "badge text for $color")
+            }
         }
     }
 
