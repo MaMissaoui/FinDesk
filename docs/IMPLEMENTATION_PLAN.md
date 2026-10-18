@@ -77,8 +77,8 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Dark-mode contrast (2026-10-18, v1.3.1): filled buttons (white on #5B8DEF, 3.2:1) and selected filter chips (white on teal, 2.1:1) use dark text; category badges move their text towards the theme's text colour until 4.5:1 (`readableOn`, also for user-picked colours); unselected tabs are grey. `ContrastTest` covers these pairs; `ScreenshotTest` renders every screen in both themes.
 - [x] UI unification (2026-10-18): tabular figures in every text style; deep navy sidebar in dark mode; sentence case for 26 English screen strings (menus keep title case; strings used by exports, imports or banking unchanged); one `LedgerRow` for the dashboard's upcoming and recent bookings; budgets and tax-deductible expenses side by side; Reports' quick statistics as stat cards and its period selector in the toolbar row; Transactions and Documents start with one toolbar row (context left, actions right); the SEPA form is a bordered `SectionCard` like its neighbours; Settings' audit-log chip has a short label and the empty log says so. Implemented through OpenCode in three batches, reviewed and rendered in both themes.
 - [x] Bank setup by name/BIC/IBAN (2026-10-17): the add-bank dialog only accepted a BLZ. `BankDirectory` gained `search` (BLZ/BIC prefix, bank-name and city substring, ranked, FinTS banks first), `byBic`, `blzFromIban` and `byIban` (German IBAN → BLZ → bank). The dialog now opens with a "Search bank: name, BLZ, BIC or IBAN" field whose live suggestions show the branch (city, BLZ, BIC) and whether a FinTS server is known; picking one fills name/BLZ/BIC, and the resolved FinTS endpoint is proposed before saving. Typing a BLZ still auto-fills, manual entry stays possible for banks outside the directory, and `PaymentsViewModel.bicFor` reuses `byIban`. Modelled on Hibiscus/Jameica (BLZ → server URL prefilled) and GnuCash/AqBanking (pick the bank from a searchable directory by name/BIC before entering credentials).
-- [x] Editable bank connection name (2026-10-18, [#31](https://github.com/MaMissaoui/FinDesk/issues/31)): a connection was named after the bank, so two logins at the same bank (personal and business DKB) showed two identical cards that only the IBANs could tell apart. Rename from the bank card's ⋮ menu or context menu, or edit the name in the connection settings, which opens with the field focused and pre-filled; a blank name is rejected. `BankAccessRepository.updateConnection` trims the name and caps it at 255 chars, `AccountsViewModel.updateConnection` writes a `RENAME_BANK_ACCESS` audit entry when it changes, and the new name shows in Accounts, the account pickers and sync messages. The name is only a label: BLZ, BIC, server URL and the FinTS login stay put, so syncs (PIN prompt shows the new name) and transfers keep working — covered with the fake gateway.
-- [x] Fetch older history from a chosen date (2026-10-18, [#30](https://github.com/MaMissaoui/FinDesk/issues/30)): a bank connection can be asked to fetch bookings from a chosen date, for example after deleting bookings or to reach past the 90-day initial window. The date is stored in the new `bank_access.sync_from` column and applies to every account of the connection, known or new, as-is (not coerced back to the initial window). A fully successful sync clears it so the normal delta logic resumes; a statement warning, a bank error or a cancel keeps it so the next sync retries. Dedup skips bookings that were already imported. Reached from the bank card's context menu and ⋮ menu ("Fetch history from…"), with a dialog that pre-fills the date, validates it against today, explains the bank's limits, and offers "Reset" when one is stored.
+- [x] Editable bank connection name (2026-10-18, v1.4.0, [#31](https://github.com/MaMissaoui/FinDesk/issues/31)): a connection was named after the bank, so two logins at the same bank (personal and business DKB) showed two identical cards that only the IBANs could tell apart. Rename from the bank card's ⋮ menu or context menu, or edit the name in the connection settings, which opens with the field focused and pre-filled; a blank name is rejected. `BankAccessRepository.updateConnection` trims the name and caps it at 255 chars, `AccountsViewModel.updateConnection` writes a `RENAME_BANK_ACCESS` audit entry when it changes, and the new name shows in Accounts, the account pickers and sync messages. The name is only a label: BLZ, BIC, server URL and the FinTS login stay put, so syncs (PIN prompt shows the new name) and transfers keep working — covered with the fake gateway.
+- [x] Fetch older history from a chosen date (2026-10-18, v1.4.0, [#30](https://github.com/MaMissaoui/FinDesk/issues/30)): a bank connection can be asked to fetch bookings from a chosen date, for example after deleting bookings or to reach past the 90-day initial window. The date is stored in the new `bank_access.sync_from` column and applies to every account of the connection, known or new, as-is (not coerced back to the initial window). A fully successful sync clears it so the normal delta logic resumes; a statement warning, a bank error or a cancel keeps it so the next sync retries. Dedup skips bookings that were already imported. Reached from the bank card's context menu and ⋮ menu ("Fetch history from…"), with a dialog that pre-fills the date, validates it against today, explains the bank's limits, and offers "Reset" when one is stored.
 
 **Audit 2026-10-17 (code structure, functionality, security, UI)**
 
@@ -343,29 +343,29 @@ also writes the runners' Gradle caches); on a published release the same files a
 ```bash
 # DMG installer
 ./gradlew packageDmg
-# Output: build/compose/binaries/main/dmg/FinDesk-1.3.1.dmg
+# Output: build/compose/binaries/main/dmg/FinDesk-1.4.0.dmg
 ```
 
 #### Windows
 ```bash
 # MSI installer
 ./gradlew packageMsi
-# Output: build/compose/binaries/main/msi/FinDesk-1.3.1.msi
+# Output: build/compose/binaries/main/msi/FinDesk-1.4.0.msi
 
 # Portable EXE
 ./gradlew packageExe
-# Output: build/compose/binaries/main/exe/FinDesk-1.3.1.exe
+# Output: build/compose/binaries/main/exe/FinDesk-1.4.0.exe
 ```
 
 #### Linux
 ```bash
 # Debian/Ubuntu package
 ./gradlew packageDeb
-# Output: build/compose/binaries/main/deb/findesk_1.3.1_amd64.deb
+# Output: build/compose/binaries/main/deb/findesk_1.4.0_amd64.deb
 
 # Fedora/RHEL package
 ./gradlew packageRpm
-# Output: build/compose/binaries/main/rpm/findesk-1.3.1-1.x86_64.rpm
+# Output: build/compose/binaries/main/rpm/findesk-1.4.0-1.x86_64.rpm
 ```
 
 ### Output Locations
@@ -376,4 +376,4 @@ also writes the runners' Gradle caches); on a published release the same files a
 | Windows | EXE | `build/compose/binaries/main/exe/` |
 | Linux | DEB | `build/compose/binaries/main/deb/` |
 | Linux | RPM | `build/compose/binaries/main/rpm/` |
-| All | JAR | `build/libs/FinDesk-1.3.1.jar` |
+| All | JAR | `build/libs/FinDesk-1.4.0.jar` |
