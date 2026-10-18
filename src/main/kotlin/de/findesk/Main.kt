@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ApplicationScope
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import de.findesk.data.database.DatabaseFactory
@@ -176,7 +177,8 @@ private fun ApplicationScope.UnlockWindow(dataDir: File, profileLabel: String?, 
 @Composable
 private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs) {
     val settings = remember { SettingsRepositoryImpl() }
-    val windowState = rememberWindowState()
+    // Maximized: the tables and charts want the room. On macOS this zooms to fill the screen, not a full-screen Space
+    val windowState = rememberWindowState(placement = WindowPlacement.Maximized)
     val navigationState = remember { NavigationState() }
     val scope = rememberCoroutineScope()
     var language by remember { mutableStateOf(prefs.language) }
