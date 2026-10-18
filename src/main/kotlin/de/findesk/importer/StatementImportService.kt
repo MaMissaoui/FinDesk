@@ -80,9 +80,16 @@ class StatementImportService(
         // Decided before inserting anything, so the balance check and dedup see the account as it was
         val (bookings, wrongCurrency) = statement.bookings.partition { it.currency == null || it.currency == account.currency }
         val balanceAllowed = balanceUpdateAllowed(accountId, statement.copy(bookings = bookings))
+        // Many bank CSV exports (e.g. DKB) list the newest booking first, but the list orders same-day bookings by
+        // insertion order (date DESC, id DESC), so same-day balances only chain if the rows are inserted oldest
+        // first. Reversing a newest-first file and then stable-sorting by date makes the insert order the booking
+        // order within a day too; the graph and the account balance below both rely on it.
+        val chronological = bookings
+            .let { if (isNewestFirst(it)) it.reversed() else it }
+            .sortedBy { it.date }
         val plan = de.findesk.repository.BookingDedup.plan(
             accountId,
-            hashes(account.iban, bookings).map { (b, h) -> de.findesk.repository.BookingDedup.Candidate(b, b.date, b.amount, h) },
+            hashes(account.iban, chronological).map { (b, h) -> de.findesk.repository.BookingDedup.Candidate(b, b.date, b.amount, h) },
             transactionRepository,
         )
         val rules = ruleRepository.matcher()
@@ -97,16 +104,14 @@ class StatementImportService(
                 purpose = booking.purpose,
                 categoryId = rules.categoryFor(booking.purpose, booking.partnerName),
                 hash = candidate.hash,
+                balanceAfter = booking.balanceAfter,
             )
         }
         val imported = transactionRepository.createAll(rows)
         val categorized = rows.count { it.categoryId != null }
 
-        // Newest booking with a balance; within a day the file order is the booking order
-        val latestBalance = bookings.withIndex()
-            .filter { it.value.balanceAfter != null }
-            .maxWithOrNull(compareBy({ it.value.date }, { it.index }))
-            ?.value?.balanceAfter
+        // The list is chronological now, so the newest booking with a balance is simply the last one
+        val latestBalance = chronological.lastOrNull { it.balanceAfter != null }?.balanceAfter
         val newBalance = if (updateBalance && balanceAllowed && latestBalance != null) {
             accountRepository.updateBalance(accountId, latestBalance)
             latestBalance
@@ -132,6 +137,21 @@ class StatementImportService(
         val fileNewest = statement.bookings.maxOf { it.date }
         val accountNewest = transactionRepository.findItems(de.findesk.model.TransactionFilter(accountId = accountId), limit = 1).firstOrNull()?.date
         return accountNewest == null || !fileNewest.isBefore(accountNewest)
+    }
+
+    /**
+     * Whether the file lists the newest booking first. Its dates decide; a file covering a single day has only its
+     * running balances to go by: newest first, each row's balance is the next row's balance plus this row's amount.
+     */
+    internal fun isNewestFirst(bookings: List<ImportedBooking>): Boolean {
+        if (bookings.size < 2) return false
+        val first = bookings.first().date
+        val last = bookings.last().date
+        if (first != last) return first.isAfter(last)
+        val pairs = bookings.zipWithNext().filter { (a, b) -> a.balanceAfter != null && b.balanceAfter != null }
+        val newestFirst = pairs.count { (a, b) -> a.balanceAfter!!.compareTo(b.balanceAfter!! + a.amount) == 0 }
+        val oldestFirst = pairs.count { (a, b) -> b.balanceAfter!!.compareTo(a.balanceAfter!! + b.amount) == 0 }
+        return newestFirst > oldestFirst
     }
 
     /**

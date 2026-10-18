@@ -52,6 +52,7 @@ fun Transaction.toItem(documentCount: Int = 0): TransactionItem {
         accountIban = account.iban,
         date = date,
         amount = amount,
+        balanceAfter = balanceAfter,
         currency = currency,
         partnerName = partnerName,
         purpose = purpose,

@@ -165,6 +165,12 @@ enum class StringKey {
     SearchPartnerPurpose,
     AllAccounts,
     TransactionsSummary,
+
+    /** Toolbar summary suffix when the running balance column is shown; %s is the account balance. */
+    TransactionsBalance,
+
+    /** Tooltip on a row whose bank balance differs from the reconstructed one; %s is the bank's value. */
+    BalanceBankMismatch,
     ColDate,
     ColDescription,
     ColCategory,

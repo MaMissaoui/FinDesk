@@ -5,8 +5,10 @@ import de.findesk.TestDatabase
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.model.TransactionFilter
 import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.SettingsRepositoryImpl
+import de.findesk.util.RunningBalance
 import de.findesk.viewmodel.BankingPrompt
 import de.findesk.viewmodel.UiBankingInteraction
 import kotlinx.coroutines.runBlocking
@@ -167,6 +169,46 @@ class BankingSyncTest {
         val bank = data.bankAccessRepo.findItem(bankId)!!
         assertNotNull(bank.lastSync)
         assertEquals("921", bank.tanMethod, "chosen TAN method is remembered")
+    }
+
+    @Test
+    fun `same-day bookings keep their running balances and chain without a mismatch`() = runBlocking {
+        gateway.snapshots = listOf(
+            snapshot(
+                giro,
+                "40.00",
+                booking(giro, today, "-10.00", "Shop", "A", balanceAfter = "90.00"),
+                booking(giro, today, "-20.00", "Shop", "B", balanceAfter = "70.00"),
+                booking(giro, today, "-30.00", "Shop", "C", balanceAfter = "40.00"),
+            ),
+        )
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        val account = data.accountRepo.findAllItems().single { it.iban == giro }
+        val items = data.transactionRepo.findItems(TransactionFilter(accountId = account.id))
+        // date DESC, id DESC: the newest same-day booking (highest id) comes first and carries the account balance
+        assertEquals(listOf(BigDecimal("40.00"), BigDecimal("70.00"), BigDecimal("90.00")), items.map { it.balanceAfter })
+
+        val entries = RunningBalance.compute(account.balance, items)
+        assertEquals(items.size, entries.size)
+        assertTrue(entries.values.all { it.bankDifference == null }, "the stored bank balances match the reconstructed chain")
+        assertEquals(BigDecimal("40.00"), entries[items.first().id]!!.balance, "the newest row is the account balance")
+    }
+
+    @Test
+    fun `existing databases get the new balance_after column`() {
+        val dir = File(tmp, "old-balance").apply { mkdirs() }
+        val db = Database.connect("jdbc:sqlite:${File(dir, "findesk.db").absolutePath}", driver = "org.sqlite.JDBC")
+        transaction(db) {
+            exec("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, date TEXT NOT NULL, amount DECIMAL(15,2) NOT NULL, currency VARCHAR(3) DEFAULT 'EUR' NOT NULL, partner_name VARCHAR(255) NULL, purpose TEXT NULL, category_id INTEGER NULL, document_id INTEGER NULL, hash VARCHAR(64) NOT NULL, created_at TEXT NOT NULL)")
+            exec("INSERT INTO transactions (account_id, date, amount, hash, created_at) VALUES (1, '2026-10-01', -10.00, 'h1', '2026-10-01 10:00:00')")
+        }
+        TransactionManager.closeAndUnregister(db)
+
+        DatabaseFactory.init(dir.absolutePath)
+
+        val rows = transaction { de.findesk.data.entity.Transaction.all().map { it.id.value to it.balanceAfter } }
+        assertEquals(listOf(1 to null), rows, "the old row is kept and the new column is null")
     }
 
     @Test

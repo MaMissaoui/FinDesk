@@ -55,6 +55,8 @@ data class TransactionItem(
     val accountIban: String,
     val date: LocalDate,
     val amount: BigDecimal,
+    /** The bank's running balance after this booking, when the statement reported one. */
+    val balanceAfter: BigDecimal? = null,
     val currency: String,
     val partnerName: String?,
     val purpose: String?,

@@ -210,6 +210,7 @@ class BankingService(
                 purpose = t.purpose,
                 categoryId = rules.categoryFor(purpose = t.purpose, partnerName = t.partnerName),
                 hash = candidate.hash,
+                balanceAfter = t.balanceAfter,
             )
         }
         val imported = transactionRepository.createAll(rows)

@@ -32,6 +32,8 @@ data class NewTransaction(
     val purpose: String?,
     val categoryId: Int?,
     val hash: String,
+    /** The bank's running balance after this booking, when the statement reported one. */
+    val balanceAfter: BigDecimal? = null,
 )
 
 interface TransactionRepository {
@@ -50,6 +52,7 @@ interface TransactionRepository {
         categoryId: Int? = null,
         documentId: Int? = null,
         hash: String,
+        balanceAfter: BigDecimal? = null,
     ): Transaction
 
     /** Inserts all [bookings] in one database transaction: all or none, and far faster than one commit per booking. */
@@ -104,6 +107,7 @@ class TransactionRepositoryImpl : TransactionRepository {
         categoryId: Int?,
         documentId: Int?,
         hash: String,
+        balanceAfter: BigDecimal?,
     ): Transaction = transaction {
         val account = Account.findById(accountId)
             ?: throw IllegalArgumentException("Account with id $accountId not found")
@@ -112,6 +116,7 @@ class TransactionRepositoryImpl : TransactionRepository {
             this.account = account
             this.date = date
             this.amount = amount
+            this.balanceAfter = balanceAfter
             this.currency = currency
             this.partnerName = partnerName
             this.purpose = purpose
@@ -123,7 +128,7 @@ class TransactionRepositoryImpl : TransactionRepository {
 
     override fun createAll(bookings: List<NewTransaction>): Int = transaction {
         bookings.forEach { b ->
-            create(b.accountId, b.date, b.amount, b.currency, b.partnerName, b.purpose, b.categoryId, hash = b.hash)
+            create(b.accountId, b.date, b.amount, b.currency, b.partnerName, b.purpose, b.categoryId, hash = b.hash, balanceAfter = b.balanceAfter)
         }
         bookings.size
     }

@@ -14,6 +14,7 @@ class Transaction(id: EntityID<Int>) : IntEntity(id) {
     var account by Account referencedOn TransactionsTable.accountId
     var date by TransactionsTable.date
     var amount by TransactionsTable.amount
+    var balanceAfter by TransactionsTable.balanceAfter
     var currency by TransactionsTable.currency
     var partnerName by TransactionsTable.partnerName
     var purpose by TransactionsTable.purpose
