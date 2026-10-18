@@ -27,16 +27,16 @@ class SettingsSectionsTest {
             }
         }
         waitForIdle()
-        // Before: only the shortcut chip carries the label; the section itself is far below and not composed
-        assertTrue(onAllNodesWithText("Audit log (latest 100)").fetchSemanticsNodes().size == 1)
-        val chipBottom = onAllNodesWithText("Audit log (latest 100)")[0].getBoundsInRoot().bottom
+        // Before: only the shortcut chip carries the short label; the section itself is far below and not composed
+        assertTrue(onAllNodesWithText("Audit log").fetchSemanticsNodes().size == 1)
+        val chipBottom = onAllNodesWithText("Audit log")[0].getBoundsInRoot().bottom
 
-        onAllNodesWithText("Audit log (latest 100)")[0].performClick()
+        onAllNodesWithText("Audit log")[0].performClick()
         waitForIdle()
 
         val title = onAllNodesWithText("Audit log (latest 100)")
-        assertTrue(title.fetchSemanticsNodes().size == 2, "section composed after the jump")
-        val sectionTop = title[1].getBoundsInRoot().top
+        assertTrue(title.fetchSemanticsNodes().size == 1, "section composed after the jump")
+        val sectionTop = title[0].getBoundsInRoot().top
         assertTrue(sectionTop > chipBottom, "section title at $sectionTop is below the shortcut row ending at $chipBottom")
     }
 }

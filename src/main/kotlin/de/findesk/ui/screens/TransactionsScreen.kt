@@ -74,7 +74,12 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // The top bar names the screen; this row holds its actions
+            // The top bar names the screen; this row holds its summary and actions
+            Text(
+                s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.weight(1f))
             DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
                 OutlinedButton(
@@ -152,12 +157,6 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
             }
             Spacer(Modifier.width(8.dp))
             AmountRangeInputs(state.minAmount, state.maxAmount, s) { min, max -> vm.updateAmountRange(min, max) }
-            Spacer(Modifier.weight(1f))
-            Text(
-                s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
 
         Spacer(Modifier.height(16.dp))
