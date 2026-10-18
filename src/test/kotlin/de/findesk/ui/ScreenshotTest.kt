@@ -32,6 +32,7 @@ import de.findesk.ui.navigation.Screen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.util.GroupKey
+import de.findesk.viewmodel.AccountPanelSettings
 import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.AccountsViewModel
 import de.findesk.viewmodel.PaymentsViewModel
@@ -222,6 +223,25 @@ class ScreenshotTest {
 
         render("accounts-central-blz", Screen.ACCOUNTS, dark = false)
         render("accounts-central-blz-dark", Screen.ACCOUNTS, dark = true)
+    }
+
+    /** The account panel on Accounts: selecting the savings group leaves only the bank card that holds it. */
+    @Test
+    fun `render accounts with the account panel`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-accounts-panel").toFile().absolutePath)
+        val banks = BankAccessRepositoryImpl()
+        val dkb = banks.create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        val hvb = banks.create("UniCredit Bank - HypoVereinsbank AG", "70020270", "HYVEDEMMXXX", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        val household = accounts.create(dkb, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        accounts.rename(household, "Haushalt")
+        accounts.create(dkb, "DE44500105175407324931", balance = BigDecimal("15000.00"), accountType = "savings")
+        accounts.create(hvb, "DE02120300000000202051", balance = BigDecimal("-45.10"))
+        SettingsRepositoryImpl().setValue(AccountPanelSettings.KEY_SELECTION, "group:type:savings")
+
+        render("accounts-panel", 1440, 900) { Frame(Screen.ACCOUNTS, dark = false) }
+        render("accounts-panel-dark", 1440, 900) { Frame(Screen.ACCOUNTS, dark = true) }
+        render("accounts-panel-narrow", 1024, 800) { Frame(Screen.ACCOUNTS, dark = false) }
     }
 
     /** The account panel on Transactions: type groups, a custom group, mixed currencies and a selection. */

@@ -356,6 +356,7 @@ enum class StringKey {
     NewBooking,
     MarkAsRead,
     DragToGroupHint,
+    NoAccountsInGroup,
 
     // Payments
     SepaTransfer,

@@ -40,6 +40,7 @@ import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
+import de.findesk.viewmodel.visibleAccounts
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -67,69 +68,126 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
 
     BankingPromptHost(vm.bankingInteraction)
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(
-                    s.format(StringKey.AccountsTotal, Currencies.format(state.totals, state.primaryCurrency), state.accounts.size),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Button(onClick = { showAddBank = true }) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(s[StringKey.AddBank])
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-        MessageBanner(state.message, state.error, vm::clearMessages)
+    // The panel filters the bank cards; null shows every account (All)
+    val visible = visibleAccounts(state.selection, state.groups)
+    val shownBanks = if (visible == null) {
+        state.bankAccesses
+    } else {
+        state.bankAccesses.filter { bank -> state.accounts.any { it.bankAccessId == bank.id && it.id in visible } }
+    }
 
-        if (!state.isLoading && state.bankAccesses.isEmpty()) {
-            EmptyState(
-                AppIcons.AccountBalance,
-                s[StringKey.NoBanksYet],
-                s[StringKey.NoBanksDescription],
-            ) { Button(onClick = { showAddBank = true }) { Text(s[StringKey.AddBank]) } }
-        }
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            items(state.bankAccesses, key = { it.id }) { bank ->
-                val accounts = state.accounts.filter { it.bankAccessId == bank.id }
-                BankCard(
-                    bank = bank,
-                    accounts = accounts,
-                    collapsed = bank.id in state.collapsedBanks,
-                    primaryCurrency = state.primaryCurrency,
-                    syncing = state.syncingBankId == bank.id,
-                    syncStep = state.syncStep,
-                    syncEnabled = state.syncingBankId == null,
-                    onToggleCollapse = { vm.toggleBankCollapsed(bank.id) },
-                    onSync = { vm.syncBankAccess(bank.id) },
-                    onEditConnection = {
-                        focusName = false
-                        editConnectionBlz = null
-                        editConnection = bank
-                    },
-                    onRename = {
-                        focusName = true
-                        editConnectionBlz = null
-                        editConnection = bank
-                    },
-                    onUseCentralBlz = { mapped ->
-                        focusName = false
-                        editConnectionBlz = mapped
-                        editConnection = bank
-                    },
-                    onAddAccount = { addAccountFor = bank },
-                    onDeleteBank = { confirmDeleteBank = bank },
-                    onFetchHistory = { fetchHistoryFor = bank },
-                    onTransactions = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = it.id)) },
-                    onEditBalance = { editBalance = it },
-                    onDeleteAccount = { confirmDeleteAccount = it },
-                    onOpenAccount = { vm.openDetail(it.id) },
-                    onRenameAccount = { renameAccount = it },
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // The panel needs the room; below this the header gets the compact account selector instead
+        val showPanel = maxWidth >= 1000.dp
+        Row(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+            if (showPanel && state.accounts.isNotEmpty()) {
+                AccountPanel(
+                    accounts = state.accounts,
+                    groups = state.groups,
+                    customGroups = state.customGroups,
+                    grandTotal = state.grandTotal,
+                    primaryCurrency = state.grandTotal.keys.firstOrNull() ?: Currencies.DEFAULT,
+                    selection = state.selection,
+                    collapsed = state.collapsed,
+                    filterText = state.accountFilterText,
+                    onSelect = { vm.selectAccounts(it) },
+                    onToggleCollapsed = { vm.toggleCollapsed(it) },
+                    onFilterText = { vm.updateAccountFilterText(it) },
+                    onCreateGroup = { vm.createGroup(it) },
+                    onRenameGroup = { id, name -> vm.renameGroup(id, name) },
+                    onDeleteGroup = { vm.deleteGroup(it) },
+                    onMoveGroup = { id, up -> vm.moveGroup(id, up) },
+                    onMoveAccount = { id, groupId -> vm.moveAccountToGroup(id, groupId) },
+                    onMarkRead = { vm.markRead(it) },
+                    modifier = Modifier.width(260.dp).fillMaxHeight(),
                 )
+                Spacer(Modifier.width(16.dp))
+            }
+            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(
+                            s.format(StringKey.AccountsTotal, Currencies.format(state.totals, state.primaryCurrency), state.accounts.size),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (!showPanel && state.accounts.isNotEmpty()) {
+                        Spacer(Modifier.width(12.dp))
+                        CompactAccountSelector(
+                            accounts = state.accounts,
+                            groups = state.groups,
+                            selection = state.selection,
+                            onSelect = { vm.selectAccounts(it) },
+                        )
+                        Spacer(Modifier.weight(1f))
+                    }
+                    Button(onClick = { showAddBank = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(s[StringKey.AddBank])
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                MessageBanner(state.message, state.error, vm::clearMessages)
+
+                if (!state.isLoading && state.bankAccesses.isEmpty()) {
+                    EmptyState(
+                        AppIcons.AccountBalance,
+                        s[StringKey.NoBanksYet],
+                        s[StringKey.NoBanksDescription],
+                    ) { Button(onClick = { showAddBank = true }) { Text(s[StringKey.AddBank]) } }
+                }
+
+                if (visible != null && visible.isEmpty()) {
+                    Text(
+                        s[StringKey.NoAccountsInGroup],
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                }
+
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    items(shownBanks, key = { it.id }) { bank ->
+                        // A filtered card lists, counts and totals only the accounts the selection shows
+                        val accounts = state.accounts.filter { it.bankAccessId == bank.id && (visible == null || it.id in visible) }
+                        BankCard(
+                            bank = bank,
+                            accounts = accounts,
+                            collapsed = bank.id in state.collapsedBanks,
+                            primaryCurrency = state.primaryCurrency,
+                            syncing = state.syncingBankId == bank.id,
+                            syncStep = state.syncStep,
+                            syncEnabled = state.syncingBankId == null,
+                            onToggleCollapse = { vm.toggleBankCollapsed(bank.id) },
+                            onSync = { vm.syncBankAccess(bank.id) },
+                            onEditConnection = {
+                                focusName = false
+                                editConnectionBlz = null
+                                editConnection = bank
+                            },
+                            onRename = {
+                                focusName = true
+                                editConnectionBlz = null
+                                editConnection = bank
+                            },
+                            onUseCentralBlz = { mapped ->
+                                focusName = false
+                                editConnectionBlz = mapped
+                                editConnection = bank
+                            },
+                            onAddAccount = { addAccountFor = bank },
+                            onDeleteBank = { confirmDeleteBank = bank },
+                            onFetchHistory = { fetchHistoryFor = bank },
+                            onTransactions = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = it.id)) },
+                            onEditBalance = { editBalance = it },
+                            onDeleteAccount = { confirmDeleteAccount = it },
+                            onOpenAccount = { vm.openDetail(it.id) },
+                            onRenameAccount = { renameAccount = it },
+                        )
+                    }
+                }
             }
         }
     }
