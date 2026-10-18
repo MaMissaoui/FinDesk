@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -46,8 +47,27 @@ fun ReportsScreen() {
     val report = state.taxReport
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        var customMode by remember { mutableStateOf(state.customRange != null) }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // The top bar names the screen; this row holds its actions
+            // The top bar names the screen; this row pairs the period controls with the export actions
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                FilterChip(selected = !customMode, onClick = {
+                    customMode = false
+                    vm.updateYear(state.selectedYear)
+                }, label = { Text(s[StringKey.TaxYear]) })
+                FilterChip(selected = customMode, onClick = { customMode = true }, label = { Text(s[StringKey.CustomRange]) })
+                if (!customMode) {
+                    IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = s[StringKey.PreviousYear]) }
+                    Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = s[StringKey.NextYear]) }
+                } else {
+                    DateRangeInputs(
+                        initial = state.customRange ?: (LocalDate.now().withDayOfMonth(1).minusMonths(2) to LocalDate.now()),
+                        onApply = { from, to -> vm.setCustomRange(from, to) },
+                    )
+                }
+                if (state.isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
             Spacer(Modifier.weight(1f))
             if (state.isExporting) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -74,26 +94,6 @@ fun ReportsScreen() {
 
         Spacer(Modifier.height(16.dp))
         MessageBanner(state.message, state.error, vm::clearMessages)
-
-        var customMode by remember { mutableStateOf(state.customRange != null) }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            FilterChip(selected = !customMode, onClick = {
-                customMode = false
-                vm.updateYear(state.selectedYear)
-            }, label = { Text(s[StringKey.TaxYear]) })
-            FilterChip(selected = customMode, onClick = { customMode = true }, label = { Text(s[StringKey.CustomRange]) })
-            if (!customMode) {
-                IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = s[StringKey.PreviousYear]) }
-                Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = s[StringKey.NextYear]) }
-            } else {
-                DateRangeInputs(
-                    initial = state.customRange ?: (LocalDate.now().withDayOfMonth(1).minusMonths(2) to LocalDate.now()),
-                    onApply = { from, to -> vm.setCustomRange(from, to) },
-                )
-            }
-            if (state.isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-        }
 
         Spacer(Modifier.height(16.dp))
         TabRow(selectedTabIndex = selectedTab) {
@@ -154,23 +154,25 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
             }
         }
         item {
-            SectionCard(s[StringKey.QuickStatistics], Modifier.fillMaxWidth()) {
-                val activeMonths = report.monthlyBreakdown.filter { it.expenses.signum() > 0 }
-                val avgMonthly = if (activeMonths.isEmpty()) {
-                    BigDecimal.ZERO
-                } else {
-                    report.totalExpenses.divide(BigDecimal(activeMonths.size), 2, RoundingMode.HALF_UP)
-                }
-                val highest = report.monthlyBreakdown.maxByOrNull { it.expenses }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    StatItem(s[StringKey.StatTransactions], report.transactionCount.toString())
-                    StatItem(s[StringKey.CategoriesUsed], report.categoriesUsed.toString())
-                    StatItem(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency))
-                    StatItem(
-                        s[StringKey.HighestMonth],
-                        highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses, report.currency)}" } ?: "—",
-                    )
-                }
+            // Quick statistics as plain stat cards, matching the dashboard's row
+            val activeMonths = report.monthlyBreakdown.filter { it.expenses.signum() > 0 }
+            val avgMonthly = if (activeMonths.isEmpty()) {
+                BigDecimal.ZERO
+            } else {
+                report.totalExpenses.divide(BigDecimal(activeMonths.size), 2, RoundingMode.HALF_UP)
+            }
+            val highest = report.monthlyBreakdown.maxByOrNull { it.expenses }
+            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatCard(s[StringKey.StatTransactions], report.transactionCount.toString(), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
+                StatCard(s[StringKey.CategoriesUsed], report.categoriesUsed.toString(), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
+                StatCard(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
+                StatCard(
+                    s[StringKey.HighestMonth],
+                    highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses, report.currency)}" } ?: "—",
+                    null,
+                    PrimaryBlue,
+                    Modifier.weight(1f).fillMaxHeight(),
+                )
             }
         }
     }
@@ -225,8 +227,13 @@ private fun CategoryAnalysisTab(report: ReportService.TaxReport) {
                         AmountRow(category, amount, report.currency)
                         LinearProgressIndicator(
                             progress = { share },
-                            modifier = Modifier.fillMaxWidth(),
                             color = CategoryColors[i % CategoryColors.size],
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            strokeCap = StrokeCap.Round,
+                            // One continuous bar: no gap between fill and track, no dot at its end
+                            gapSize = 0.dp,
+                            drawStopIndicator = {},
+                            modifier = Modifier.fillMaxWidth().height(6.dp),
                         )
                         Text("%.1f%%".format(share * 100), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -253,14 +260,6 @@ private fun AmountRow(label: String, amount: BigDecimal, currency: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
         Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun StatItem(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

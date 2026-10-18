@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -16,7 +17,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
-import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
@@ -114,44 +114,35 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             item {
                 SectionCard(s[StringKey.Upcoming30Days], Modifier.fillMaxWidth()) {
                     state.upcoming.forEach { r ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(Formats.date(r.nextDate), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(100.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(r.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                Text(
-                                    s.cadence(r.cadence) + (r.categoryName?.let { " · $it" } ?: "") + if (r.fixedAmount) "" else " · ${s[StringKey.AmountVaries]}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Text(
-                                (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, r.currency, signed = true),
-                                fontWeight = FontWeight.SemiBold,
-                                color = amountColor(!r.isIncome),
-                            )
-                        }
+                        LedgerRow(
+                            date = Formats.date(r.nextDate),
+                            title = r.name,
+                            meta = s.cadence(r.cadence) + (r.categoryName?.let { " · $it" } ?: "") + if (r.fixedAmount) "" else " · ${s[StringKey.AmountVaries]}",
+                            amount = (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, r.currency, signed = true),
+                            isExpense = !r.isIncome,
+                        )
                     }
                 }
             }
         }
 
-        if (state.budgets.isNotEmpty()) {
-            item {
-                SectionCard(s[StringKey.BudgetsThisMonth], Modifier.fillMaxWidth()) {
-                    state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
-                }
-            }
-        }
-
         item {
-            SectionCard(s[StringKey.TaxDeductibleYtd], Modifier.fillMaxWidth()) {
-                if (state.taxDeductionsByCategory.isEmpty()) {
-                    Text(
-                        s[StringKey.TaxDeductibleHint],
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    DonutChart(state.taxDeductionsByCategory, s[StringKey.TaxDeductibleYtd], currency = state.currency)
+            // Budgets (when any) and tax-deductible expenses side by side and equal height, like the stat row
+            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (state.budgets.isNotEmpty()) {
+                    SectionCard(s[StringKey.BudgetsThisMonth], Modifier.weight(1f).fillMaxHeight()) {
+                        state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
+                    }
+                }
+                SectionCard(s[StringKey.TaxDeductibleYtd], Modifier.weight(1f).fillMaxHeight()) {
+                    if (state.taxDeductionsByCategory.isEmpty()) {
+                        Text(
+                            s[StringKey.TaxDeductibleHint],
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        DonutChart(state.taxDeductionsByCategory, s[StringKey.TaxDeductibleYtd], currency = state.currency)
+                    }
                 }
             }
         }
@@ -170,37 +161,19 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                         txn.partnerName?.let { partner ->
                             menuItem(s.format(StringKey.ShowAllFromPartner, partner)) { onNavigate(Screen.TRANSACTIONS, NavigationArgs(partner = partner)) }
                         },
-                    ) { RecentTransactionRow(txn) }
+                    ) {
+                        LedgerRow(
+                            date = Formats.date(txn.date),
+                            title = txn.description,
+                            meta = txn.categoryName ?: s[StringKey.Uncategorized],
+                            amount = Formats.money(txn.amount, txn.currency, signed = true),
+                            isExpense = txn.isExpense,
+                        )
+                    }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun RecentTransactionRow(txn: TransactionItem) {
-    val s = strings()
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(txn.description, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1)
-            Text(
-                "${Formats.date(txn.date)} • ${txn.categoryName ?: s[StringKey.Uncategorized]}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            Formats.money(txn.amount, txn.currency, signed = true),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = amountColor(txn.isExpense),
-        )
-    }
-    HorizontalDivider()
 }
 
 @Composable
@@ -224,7 +197,16 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float, currency: String) {
             )
         }
         Spacer(Modifier.height(4.dp))
-        LinearProgressIndicator(progress = { b.ratio.coerceIn(0f, 1f) }, color = color, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(
+            progress = { b.ratio.coerceIn(0f, 1f) },
+            color = color,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+            strokeCap = StrokeCap.Round,
+            // One continuous bar: no gap between fill and track, no dot at its end
+            gapSize = 0.dp,
+            drawStopIndicator = {},
+            modifier = Modifier.fillMaxWidth().height(6.dp),
+        )
         Text(
             if (b.isOver) s.format(StringKey.OverBudget, Formats.money(b.spent - b.limit, currency)) else s.format(StringKey.LeftBudget, Formats.money(b.remaining, currency)),
             style = MaterialTheme.typography.bodySmall,

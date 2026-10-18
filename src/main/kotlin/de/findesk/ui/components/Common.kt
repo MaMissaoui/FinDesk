@@ -23,11 +23,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.Success
+import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.readableOn
 import de.findesk.viewmodel.BaseViewModel
 import kotlinx.coroutines.delay
@@ -144,7 +146,7 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, actions: @Composab
 }
 
 @Composable
-fun StatCard(title: String, value: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier, subtitle: String? = null) {
+fun StatCard(title: String, value: String, icon: ImageVector?, color: Color, modifier: Modifier = Modifier, subtitle: String? = null) {
     FinDeskCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -153,13 +155,34 @@ fun StatCard(title: String, value: String, icon: ImageVector, color: Color, modi
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+                if (icon != null) Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.height(8.dp))
             Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             // Always laid out, empty or not, so a card without one is as tall as its neighbours
             Text(subtitle.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/**
+ * One booking in a ledger list: a fixed-width date column, the title with an optional meta line, and the
+ * right-aligned signed amount coloured by direction. Shared so every booking list reads the same.
+ */
+@Composable
+fun LedgerRow(date: String, title: String, meta: String?, amount: String, isExpense: Boolean, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(date, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(100.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (meta != null) {
+                Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text(amount, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = amountColor(isExpense))
     }
 }
 
