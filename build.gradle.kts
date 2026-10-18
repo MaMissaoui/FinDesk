@@ -47,6 +47,9 @@ dependencies {
     // OCR (needs a native Tesseract install, e.g. `brew install tesseract tesseract-lang`)
     implementation("net.sourceforge.tess4j:tess4j:5.20.0")
 
+    // macOS Keychain access for a PIN the user chooses to remember (also pulled in by tess4j; pinned here explicitly)
+    implementation("net.java.dev.jna:jna:5.19.1")
+
     // FinTS/HBCI online banking
     implementation("com.github.hbci4j:hbci4j-core:4.1.17")
 
@@ -146,6 +149,8 @@ tasks.test {
     val testHome = layout.buildDirectory.dir("test-home").get().asFile
     doFirst { testHome.mkdirs() }
     systemProperty("user.home", testHome.absolutePath)
+    // Keep tests away from the real OS credential store, like the user.home backstop above
+    systemProperty("findesk.credentialStore", "none")
     // One test JVM on purpose: with maxParallelForks the Linux CI JVM crashed natively in Tesseract
     // (SIGSEGV in libstdc++, PR #37), likely from a different native-library load order per fork.
     // Headless UI screenshots: ./gradlew test --tests '*ScreenshotTest' -Pscreenshots=<out-dir> [-PscreenshotData=<FINDESK_HOME>]

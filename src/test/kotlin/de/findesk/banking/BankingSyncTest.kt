@@ -31,16 +31,19 @@ private class ScriptedInteraction(
     var tanMethodChoice: String? = null,
     var payeeOk: Boolean = true,
     var decoupledOk: Boolean = true,
+    var remember: Boolean = false,
 ) : BankingInteraction {
     var pinAsked = 0
     var payeeAsked = 0
     val tanChallenges = mutableListOf<TanChallenge>()
     var offeredMethods: List<TanMethod> = emptyList()
     val pinBankNames = mutableListOf<String>()
+    val pinOfferedRemember = mutableListOf<Boolean>()
 
-    override fun pin(bankName: String, userId: String): String? = pinValue.also {
+    override fun pin(bankName: String, userId: String, offerRemember: Boolean): PinEntry? = pinValue?.let { PinEntry(it, remember) }.also {
         pinAsked++
         pinBankNames += bankName
+        pinOfferedRemember += offerRemember
     }
     override fun selectTanMethod(options: List<TanMethod>): String? = tanMethodChoice.also { offeredMethods = options }
     override fun selectTanMedium(options: List<String>): String? = options.last()
@@ -849,7 +852,7 @@ class HbciCallbackTest {
     @Test
     fun `closing the screen unblocks a waiting prompt and refuses new ones`() {
         val ui = UiBankingInteraction()
-        var result: String? = "unset"
+        var result: PinEntry? = null
         val worker = thread { result = ui.pin("Bank", "user") }
         while (ui.prompt.value == null) Thread.sleep(5)
         ui.cancelPending()
@@ -862,19 +865,20 @@ class HbciCallbackTest {
     @Test
     fun `ui interaction blocks until answered from another thread`() {
         val ui = UiBankingInteraction()
-        var result: String? = "unset"
+        var result: PinEntry? = null
         val worker = thread { result = ui.pin("Bank", "user") }
         while (ui.prompt.value == null) Thread.sleep(5)
         assertEquals(BankingPrompt.Pin("Bank", "user"), ui.prompt.value)
-        ui.answer("0000")
+        ui.answerPin("0000", false)
         worker.join(2000)
-        assertEquals("0000", result)
+        assertEquals(PinEntry("0000"), result)
         assertNull(ui.prompt.value)
 
-        val cancel = thread { result = ui.tan(TanChallenge("x")) }
+        var tanResult: String? = "unset"
+        val cancel = thread { tanResult = ui.tan(TanChallenge("x")) }
         while (ui.prompt.value == null) Thread.sleep(5)
         ui.answer(null)
         cancel.join(2000)
-        assertNull(result)
+        assertNull(tanResult)
     }
 }

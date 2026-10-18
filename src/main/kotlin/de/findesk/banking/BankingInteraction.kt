@@ -5,8 +5,11 @@ package de.findesk.banking
  * thread and blocks until the user answers; returning null (or false) cancels the operation.
  */
 interface BankingInteraction {
-    /** Online banking PIN. Never stored by FinDesk. */
-    fun pin(bankName: String, userId: String): String?
+    /**
+     * Online banking PIN. The PIN is only kept when the user opts in ([PinEntry.remember]), in the operating
+     * system's credential store, and only for syncs: transfers always ask again.
+     */
+    fun pin(bankName: String, userId: String, offerRemember: Boolean = false): PinEntry?
 
     /** Pick one of the TAN procedures the bank offers. */
     fun selectTanMethod(options: List<TanMethod>): String?
@@ -28,6 +31,12 @@ interface BankingInteraction {
 
     /** Informational message from the bank. */
     fun info(message: String) {}
+}
+
+/** The PIN the user entered. [remember] is only honoured for syncs, where FinDesk may keep it in the OS store. */
+data class PinEntry(val pin: String, val remember: Boolean = false) {
+    /** Never print the PIN, not even masked (e.g. a stray debug log). */
+    override fun toString(): String = "PinEntry(remember=$remember)"
 }
 
 data class TanChallenge(

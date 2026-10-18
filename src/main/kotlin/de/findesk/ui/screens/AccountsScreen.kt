@@ -132,6 +132,9 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             bank = bank,
             defaultUrl = vm.lookupBank(bank.blz)?.pinTanUrl,
             focusName = focusName,
+            hasSavedPin = bank.id in state.savedPins,
+            canRememberPin = state.canRememberPin,
+            onForgetPin = { vm.forgetPin(bank.id) },
             onDismiss = { editConnection = null },
             onConfirm = { name, userId, url ->
                 vm.updateConnection(bank.id, name, userId, url)
@@ -573,6 +576,9 @@ private fun ConnectionDialog(
     bank: BankAccessItem,
     defaultUrl: String?,
     focusName: Boolean,
+    hasSavedPin: Boolean,
+    canRememberPin: Boolean,
+    onForgetPin: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: (name: String, userId: String, url: String) -> Unit,
 ) {
@@ -607,11 +613,25 @@ private fun ConnectionDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 bank.tanMethod?.let { Text(s.format(StringKey.RememberedTan, it), style = MaterialTheme.typography.bodySmall) }
-                Text(
-                    s[StringKey.PinNeverStored],
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                when {
+                    hasSavedPin -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(s[StringKey.PinSavedForSyncs], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = onForgetPin) { Text(s[StringKey.ForgetPin]) }
+                    }
+
+                    canRememberPin -> Text(
+                        s[StringKey.PinAskedEverySync],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    else -> Text(
+                        s[StringKey.PinNeverStored],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         },
         confirmButton = {

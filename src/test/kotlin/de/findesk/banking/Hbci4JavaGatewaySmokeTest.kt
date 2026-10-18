@@ -21,7 +21,7 @@ class Hbci4JavaGatewaySmokeTest {
     fun `unreachable server fails cleanly`() {
         val asked = mutableListOf<String>()
         val ui = object : BankingInteraction {
-            override fun pin(bankName: String, userId: String) = "00000".also { asked += "pin" }
+            override fun pin(bankName: String, userId: String, offerRemember: Boolean) = PinEntry("00000").also { asked += "pin" }
             override fun selectTanMethod(options: List<TanMethod>) = options.firstOrNull()?.id.also { asked += "secmech" }
             override fun selectTanMedium(options: List<String>) = options.firstOrNull()
             override fun tan(challenge: TanChallenge): String? = null

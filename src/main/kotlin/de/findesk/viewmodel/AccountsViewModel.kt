@@ -42,6 +42,10 @@ data class AccountsState(
     val error: String? = null,
     val message: String? = null,
     val primaryCurrency: String = Currencies.DEFAULT,
+    /** Bank access ids whose PIN is remembered for syncs (the settings flag only; the keychain is never read here). */
+    val savedPins: Set<Int> = emptySet(),
+    /** Whether the operating system offers a credential store, so the UI may offer to remember a PIN. */
+    val canRememberPin: Boolean = false,
 ) {
     /** Balances per currency, primary first; different currencies are never added up. */
     val totals: Map<String, BigDecimal> get() = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
@@ -71,7 +75,16 @@ class AccountsViewModel(
     private fun refresh() {
         val accounts = accountRepository.findAllItems()
         val bankAccesses = bankAccessRepository.findAllItems()
-        _state.update { it.copy(accounts = accounts, bankAccesses = bankAccesses, isLoading = false, primaryCurrency = Currencies.primary(settingsRepository)) }
+        _state.update {
+            it.copy(
+                accounts = accounts,
+                bankAccesses = bankAccesses,
+                isLoading = false,
+                primaryCurrency = Currencies.primary(settingsRepository),
+                canRememberPin = bankingService.canRememberPin,
+                savedPins = bankAccesses.filter { bank -> bankingService.hasSavedPin(bank.id) }.map { bank -> bank.id }.toSet(),
+            )
+        }
     }
 
     /** Validates input; returns an error message or null. Exposed for the dialog's inline validation. */
@@ -145,6 +158,12 @@ class AccountsViewModel(
         _state.update { it.copy(message = AppStrings[StringKey.MessageBankRemoved]) }
     }
 
+    /** Removes the PIN remembered for [bankAccessId] from the system's credential store. */
+    fun forgetPin(bankAccessId: Int): Job = launchSafely(onError) {
+        bankingService.forgetPin(bankAccessId)
+        refresh()
+    }
+
     /** Opens the detail view: balance history over [days] days plus recent bookings. */
     fun openDetail(accountId: Int, days: Int = 90): Job = launchSafely(onError) {
         val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: return@launchSafely
@@ -183,12 +202,15 @@ class AccountsViewModel(
             _state.update { it.copy(error = AppStrings[StringKey.BankNameRequired]) }
             return@launchSafely
         }
-        val oldName = bankAccessRepository.findItem(bankAccessId)?.bankName
+        val previous = bankAccessRepository.findItem(bankAccessId)
+        val oldName = previous?.bankName
         val updated = bankAccessRepository.updateConnection(bankAccessId, serverUrl = serverUrl, userId = userId, bankName = name)
         auditLogRepository.log("UPDATE_BANK_CONNECTION", "user", "Updated connection settings of bank access $bankAccessId")
         if (updated != null && updated.bankName != oldName) {
             auditLogRepository.log("RENAME_BANK_ACCESS", "user", "Renamed bank access $bankAccessId from $oldName to ${updated.bankName}")
         }
+        // A remembered PIN belongs to the login it was saved for: another user id makes it useless (and could lock the login)
+        if (previous != null && previous.userId != userId.trim()) bankingService.forgetPin(bankAccessId)
         refresh()
         _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
     }
@@ -226,7 +248,9 @@ class AccountsViewModel(
                     is BankingResult.Success -> {
                         refresh()
                         val warn = r.data.warnings.takeIf { it.isNotEmpty() }?.joinToString("\n")
-                        _state.update { it.copy(message = r.data.summary(), error = warn) }
+                        // A PIN the user asked to remember that the keychain refused: a short, non-secret note
+                        val pinNote = AppStrings[StringKey.PinNotSaved].takeIf { bankingService.pinNotSaved }
+                        _state.update { it.copy(message = listOfNotNull(r.data.summary(), pinNote).joinToString("\n"), error = warn) }
                     }
 
                     is BankingResult.Error -> _state.update { it.copy(error = if (r.code == "CANCELLED") null else r.message) }
