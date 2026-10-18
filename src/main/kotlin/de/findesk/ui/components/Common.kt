@@ -153,8 +153,7 @@ fun StatCard(title: String, value: String, icon: ImageVector, color: Color, modi
             }
             Spacer(Modifier.height(8.dp))
             Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            // Always laid out, empty or not, so cards in a row come out the same height. Not IntrinsicSize on the row:
-            // Text measured that way kept showing stale values after the state changed
+            // Always laid out, empty or not, so a card without one is as tall as its neighbours
             Text(subtitle.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
