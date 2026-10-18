@@ -244,6 +244,7 @@ class ScreenshotTest {
         }
         render("transactions-panel", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
         render("transactions-panel-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel) }
+        render("transactions-panel-mid", 1280, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
         render("transactions-panel-narrow", 1024, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
     }
 
