@@ -66,8 +66,10 @@ compose.desktop {
 
         nativeDistributions {
             // From `./gradlew suggestRuntimeModules`, plus modules only loaded at runtime:
-            // TLS cipher suites for bank connections, JMX for HikariCP, XML for JAXB (HBCI4Java), extra charsets for FinTS
-            modules("java.instrument", "java.naming", "java.prefs", "java.smartcardio", "java.sql", "java.management", "jdk.unsupported", "java.xml", "jdk.crypto.ec", "jdk.charsets")
+            // TLS cipher suites for bank connections, JMX for HikariCP, XML for JAXB (HBCI4Java), extra charsets for FinTS,
+            // and locale data: java.base only carries English, so without jdk.localedata the packaged app showed English
+            // month names and "€0.00" in German and French (./gradlew run, on a full JDK, never did)
+            modules("java.instrument", "java.naming", "java.prefs", "java.smartcardio", "java.sql", "java.management", "jdk.unsupported", "java.xml", "jdk.crypto.ec", "jdk.charsets", "jdk.localedata")
 
             packageName = "FinDesk"
             packageVersion = "1.2.0"
