@@ -8,6 +8,9 @@ object TransactionsTable : IntIdTable("transactions") {
     val accountId = reference("account_id", AccountsTable).index()
     val date = date("date").index()
     val amount = decimal("amount", 15, 2)
+
+    /** The bank's running balance after this booking, when the statement reported one. */
+    val balanceAfter = decimal("balance_after", 15, 2).nullable()
     val currency = varchar("currency", 3).default("EUR")
     val partnerName = varchar("partner_name", 255).nullable()
     val purpose = text("purpose").nullable()

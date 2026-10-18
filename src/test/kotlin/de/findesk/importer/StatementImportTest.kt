@@ -2,6 +2,8 @@ package de.findesk.importer
 
 import de.findesk.TestData
 import de.findesk.TestDatabase
+import de.findesk.model.TransactionFilter
+import de.findesk.util.RunningBalance
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -262,6 +264,60 @@ class StatementImportServiceTest {
         assertEquals(BigDecimal("910.01"), report.balanceUpdated)
         assertEquals(BigDecimal("910.01"), data.accountRepo.findAllItems().single().balance)
         assertTrue(report.summary().contains("Balance set to €910.01"))
+    }
+
+    @Test
+    fun `newest-first files with running balances are inserted chronologically`() = runBlocking {
+        val newestFirst = file(
+            "newest.csv",
+            "IBAN;DE89 3704 0044 0532 0130 00\n\nBuchung;Valuta;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung\n" +
+                "02.10.2026;02.10.2026;AMAZON;Lastschrift;Monitor;910,01;EUR;-89,99;EUR\n" +
+                "01.10.2026;01.10.2026;Employer;Gehalt;Gehalt;1.000,00;EUR;1.000,00;EUR\n",
+        )
+        val report = service.import(account, service.read(newestFirst))
+
+        assertEquals(2, report.imported)
+        assertEquals(BigDecimal("910.01"), data.accountRepo.findAllItems().single { it.id == account }.balance)
+        assertBalanceChainHasNoMismatch()
+    }
+
+    @Test
+    fun `oldest-first files still import the same way`() = runBlocking {
+        val oldestFirst = file(
+            "oldest.csv",
+            "IBAN;DE89 3704 0044 0532 0130 00\n\nBuchung;Valuta;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung\n" +
+                "01.10.2026;01.10.2026;Employer;Gehalt;Gehalt;1.000,00;EUR;1.000,00;EUR\n" +
+                "02.10.2026;02.10.2026;AMAZON;Lastschrift;Monitor;910,01;EUR;-89,99;EUR\n",
+        )
+        val report = service.import(account, service.read(oldestFirst))
+
+        assertEquals(2, report.imported)
+        assertEquals(BigDecimal("910.01"), data.accountRepo.findAllItems().single { it.id == account }.balance)
+        assertBalanceChainHasNoMismatch()
+    }
+
+    @Test
+    fun `a newest-first file covering one day is recognised by its running balances`() = runBlocking {
+        // Same date on every row, so only the balances tell the order: 1000 → 990 (−10) → 985 (−5), newest first
+        val oneDay = file(
+            "one-day.csv",
+            "IBAN;DE89 3704 0044 0532 0130 00\n\nBuchung;Valuta;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung\n" +
+                "02.10.2026;02.10.2026;Kiosk;Lastschrift;Zeitung;985,00;EUR;-5,00;EUR\n" +
+                "02.10.2026;02.10.2026;Bäcker;Lastschrift;Brot;990,00;EUR;-10,00;EUR\n" +
+                "02.10.2026;02.10.2026;Employer;Gehalt;Bonus;1.000,00;EUR;1.000,00;EUR\n",
+        )
+        val report = service.import(account, service.read(oneDay))
+
+        assertEquals(3, report.imported)
+        assertEquals(BigDecimal("985.00"), data.accountRepo.findAllItems().single { it.id == account }.balance)
+        assertBalanceChainHasNoMismatch()
+    }
+
+    /** The stored balances must chain back from the account balance without any gap. */
+    private fun assertBalanceChainHasNoMismatch() {
+        val balance = data.accountRepo.findAllItems().single { it.id == account }.balance
+        val entries = RunningBalance.compute(balance, data.transactionRepo.findItems(TransactionFilter(accountId = account)))
+        assertTrue(entries.values.all { it.bankDifference == null }, entries.toString())
     }
 
     @Test

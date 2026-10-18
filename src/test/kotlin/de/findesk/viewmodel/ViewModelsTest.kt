@@ -180,6 +180,53 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `running balance column shows for one checking account and hides for all or a depot`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start(accountId = account).join()
+        assertNotNull(vm.state.value.balances, "a single checking account shows the column")
+        assertEquals(BigDecimal("1500.00"), vm.state.value.currentBalance)
+
+        vm.start().join()
+        assertNull(vm.state.value.balances, "All accounts never shows it")
+        assertNull(vm.state.value.currentBalance)
+
+        val depotBank = data.bankAccessRepo.create("Depot Bank", "12345678", "", "depot-user").id.value
+        val depot = data.accountRepo.create(depotBank, "DE02120300000000202051", balance = BigDecimal("5000.00"), accountType = "depot").id.value
+        vm.start(accountId = depot).join()
+        assertNull(vm.state.value.balances, "a depot's balance is a market value, not the sum of its bookings")
+        vm.close()
+    }
+
+    @Test
+    fun `a filter hides rows but the remaining balances are unchanged`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start(accountId = account).join()
+        val all = vm.state.value.balances!!
+        val rewe = vm.state.value.transactions.first { it.partnerName == "REWE" }
+
+        vm.updateSearchQuery("rewe").join()
+
+        assertEquals(1, vm.state.value.transactions.size)
+        assertEquals(all[rewe.id], vm.state.value.balances!![rewe.id], "the balance after a booking never changes with a filter")
+        vm.close()
+    }
+
+    @Test
+    fun `exportCsv writes the balance column only when it is shown`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        val withBalance = File(tmp, "with-balance.csv")
+        vm.start(accountId = account).join()
+        vm.exportCsv(withBalance).join()
+        assertTrue(withBalance.readLines().first().endsWith(",Balance"), "shown column is exported")
+
+        val withoutBalance = File(tmp, "without-balance.csv")
+        vm.start().join()
+        vm.exportCsv(withoutBalance).join()
+        assertFalse(withoutBalance.readLines().first().contains("Balance"), "hidden column stays out of the export")
+        vm.close()
+    }
+
+    @Test
     fun `amount range matches absolute values in both directions`() = runBlocking {
         val vm = TransactionsViewModel(today = { today })
         vm.updatePeriod(Period.THIS_YEAR).join()

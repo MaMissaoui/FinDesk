@@ -20,9 +20,12 @@ import de.findesk.model.PaymentOrderStatus
 import de.findesk.plaintextDatabase
 import de.findesk.repository.AccountRepositoryImpl
 import de.findesk.repository.BankAccessRepositoryImpl
+import de.findesk.repository.NewTransaction
 import de.findesk.repository.PaymentOrderRepositoryImpl
+import de.findesk.repository.TransactionRepositoryImpl
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
+import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
@@ -162,6 +165,27 @@ class ScreenshotTest {
         prompt("pin-remember-de-dark", dark = true, language = AppLanguage.DE)
     }
 
+    /** The running balance column, with one row whose bank balance disagrees with the reconstructed chain. */
+    @Test
+    fun `render the transaction list with a running balance column`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-balance").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(4), BigDecimal("-20.00"), "EUR", "Bäckerei", "Brötchen", null, "b-1", balanceAfter = BigDecimal("2380.00")),
+                NewTransaction(account, today.minusDays(3), BigDecimal("-80.00"), "EUR", "Stadtwerke", "Abschlag", null, "b-2", balanceAfter = BigDecimal("2300.00")),
+                NewTransaction(account, today.minusDays(2), BigDecimal("120.00"), "EUR", "Employer GmbH", "Gehalt", null, "b-3", balanceAfter = BigDecimal("2500.00")),
+                NewTransaction(account, today.minusDays(1), BigDecimal("-49.63"), "EUR", "Kiosk", "Wasser", null, "b-4"),
+            ),
+        )
+
+        fun showing(): TransactionsViewModel = TransactionsViewModel()
+        render("transactions-balance", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+        render("transactions-balance-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {
@@ -190,7 +214,7 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, lockedOn: Screen? = null) {
+    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
@@ -204,7 +228,7 @@ class ScreenshotTest {
                                 when (screen) {
                                     Screen.DASHBOARD -> DashboardScreen()
                                     Screen.ACCOUNTS -> AccountsScreen()
-                                    Screen.TRANSACTIONS -> if (transactions != null) TransactionsScreen(createViewModel = transactions) else TransactionsScreen()
+                                    Screen.TRANSACTIONS -> if (transactions != null) TransactionsScreen(transactionArgs, createViewModel = transactions) else TransactionsScreen()
                                     Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
                                     Screen.DOCUMENTS -> DocumentsScreen()
                                     Screen.REPORTS -> ReportsScreen()

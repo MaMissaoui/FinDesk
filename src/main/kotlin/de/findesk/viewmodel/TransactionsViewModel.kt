@@ -75,6 +75,11 @@ data class TransactionsState(
     val direction: Direction = Direction.ALL,
     val categoryFilter: CategoryFilter = CategoryFilter.Any,
     val accountId: Int? = null,
+    /** Balance after each shown booking's id, when one non-depot account is selected; null hides the column. */
+    val balances: Map<Int, de.findesk.util.RunningBalance.Entry>? = null,
+    /** The selected account's balance and currency, for the header. */
+    val currentBalance: BigDecimal? = null,
+    val balanceCurrency: String? = null,
     /** Per currency: the list may mix accounts in different currencies, whose amounts can't be added. */
     val totalIncome: Map<String, BigDecimal> = emptyMap(),
     val totalExpenses: Map<String, BigDecimal> = emptyMap(),
@@ -176,11 +181,21 @@ class TransactionsViewModel(
         _state.value.selected?.let { sel -> _state.update { it.copy(selected = transactions.firstOrNull { t -> t.id == sel.id } ?: sel) } }
         val categories = categoryRepository.findAllItems()
         val accounts = accountRepository.findAllItems()
+        // The running balance needs every booking of the account, not just the filtered list, so a text or period
+        // filter hides rows but never changes their balances. A depot's balance is a market value, not the sum of
+        // its bookings, so the column only makes sense for a single non-depot account.
+        val balanceAccount = accounts.firstOrNull { it.id == _state.value.accountId }?.takeIf { it.accountType != "depot" }
+        val balances = balanceAccount?.let {
+            de.findesk.util.RunningBalance.compute(it.balance, transactionRepository.findItems(TransactionFilter(accountId = it.id)))
+        }
         _state.update {
             it.copy(
                 transactions = transactions,
                 categories = categories,
                 accounts = accounts,
+                balances = balances,
+                currentBalance = balanceAccount?.balance,
+                balanceCurrency = balanceAccount?.currency,
                 totalIncome = Currencies.totals(transactions.filter { t -> t.amount.signum() > 0 }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount }),
                 totalExpenses = Currencies.totals(transactions.filter { t -> t.isExpense }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount.abs() }),
                 isLoading = false,
@@ -359,7 +374,7 @@ class TransactionsViewModel(
 
     /** Exports exactly what is currently shown. */
     fun exportCsv(file: File): Job = launchSafely(onError) {
-        val ok = reportService.exportToCsv(_state.value.transactions, file)
+        val ok = reportService.exportToCsv(_state.value.transactions, file, _state.value.balances?.mapValues { it.value.balance })
         _state.update {
             if (ok) it.copy(message = AppStrings.format(StringKey.MessageExportedCount, it.transactions.size, file.name)) else it.copy(error = AppStrings[StringKey.ErrorExportFailed])
         }

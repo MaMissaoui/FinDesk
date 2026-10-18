@@ -1,5 +1,7 @@
 package de.findesk.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,7 +78,8 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // The top bar names the screen; this row holds its summary and actions
             Text(
-                s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)),
+                s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)) +
+                    (state.currentBalance?.let { s.format(StringKey.TransactionsBalance, Formats.money(it, state.balanceCurrency ?: "EUR")) } ?: ""),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -168,6 +171,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                     HeaderCell(s[StringKey.ColDescription], 3f)
                     HeaderCell(s[StringKey.ColCategory], 1.4f)
                     HeaderCell(s[StringKey.ColAmount], 1.2f, TextAlign.End)
+                    if (state.balances != null) HeaderCell(s[StringKey.ColBalance], 1.2f, TextAlign.End)
                     Spacer(Modifier.width(40.dp))
                 }
                 HorizontalDivider()
@@ -189,6 +193,8 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                             TransactionRow(
                                 txn = txn,
                                 categories = state.categories,
+                                balance = state.balances?.get(txn.id),
+                                balanceCurrency = state.balanceCurrency,
                                 onCategory = { vm.updateTransactionCategory(txn.id, it) },
                                 onDelete = { confirmDelete = txn },
                                 onOpen = { vm.selectTransaction(txn) },
@@ -274,9 +280,12 @@ private fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = 
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun TransactionRow(
     txn: TransactionItem,
     categories: List<CategoryItem>,
+    balance: de.findesk.util.RunningBalance.Entry?,
+    balanceCurrency: String?,
     onCategory: (Int?) -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
@@ -344,6 +353,45 @@ private fun TransactionRow(
             modifier = Modifier.weight(1.2f),
             textAlign = TextAlign.End,
         )
+        if (balance != null) {
+            val currency = balanceCurrency ?: txn.currency
+            Row(
+                modifier = Modifier.weight(1.2f),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (balance.bankDifference != null) {
+                    val message = s.format(StringKey.BalanceBankMismatch, Formats.money(balance.balance, currency))
+                    TooltipArea(
+                        tooltip = {
+                            Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 2.dp) {
+                                Text(
+                                    message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                )
+                            }
+                        },
+                        delayMillis = 300,
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = message,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    Formats.money(balance.balance, currency),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (balance.balance.signum() < 0) amountColor(true) else MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
         Box(Modifier.width(40.dp), contentAlignment = Alignment.CenterEnd) {
             IconButton(onClick = { rowMenu = true }, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(18.dp))

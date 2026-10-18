@@ -198,35 +198,34 @@ class ReportService(
     }
 
     /**
-     * Export transactions to CSV (RFC 4180 quoting, UTF-8 with BOM so Excel detects the encoding)
+     * Export transactions to CSV (RFC 4180 quoting, UTF-8 with BOM so Excel detects the encoding). [balances] adds a
+     * trailing Balance column when the transactions list shows a running balance; the Reports export leaves it out.
      */
-    suspend fun exportToCsv(transactions: List<TransactionItem>, outputFile: File): Boolean = withContext(Dispatchers.IO) {
+    suspend fun exportToCsv(transactions: List<TransactionItem>, outputFile: File, balances: Map<Int, BigDecimal>? = null): Boolean = withContext(Dispatchers.IO) {
         try {
             outputFile.bufferedWriter(Charsets.UTF_8).use { writer ->
                 writer.write(UTF8_BOM)
-                writer.write(
-                    CsvFormat.row(
-                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColDate],
-                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColPartner],
-                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColPurpose],
-                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColCategory],
-                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAmount],
-                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColCurrency],
-                        de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAccount],
-                    ),
-                )
+                val header = listOf(
+                    de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColDate],
+                    de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColPartner],
+                    de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColPurpose],
+                    de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColCategory],
+                    de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAmount],
+                    de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColCurrency],
+                    de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAccount],
+                ) + if (balances != null) listOf(de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColBalance]) else emptyList()
+                writer.write(CsvFormat.row(*header.toTypedArray()))
                 transactions.forEach { txn ->
-                    writer.write(
-                        CsvFormat.row(
-                            txn.date.toString(),
-                            CsvFormat.text(txn.partnerName.orEmpty()),
-                            CsvFormat.text(txn.purpose.orEmpty()),
-                            CsvFormat.text(txn.categoryName.orEmpty()),
-                            txn.amount.toPlainString(),
-                            txn.currency,
-                            txn.accountIban,
-                        ),
-                    )
+                    val fields = listOf(
+                        txn.date.toString(),
+                        CsvFormat.text(txn.partnerName.orEmpty()),
+                        CsvFormat.text(txn.purpose.orEmpty()),
+                        CsvFormat.text(txn.categoryName.orEmpty()),
+                        txn.amount.toPlainString(),
+                        txn.currency,
+                        txn.accountIban,
+                    ) + if (balances != null) listOf(balances[txn.id]?.toPlainString().orEmpty()) else emptyList()
+                    writer.write(CsvFormat.row(*fields.toTypedArray()))
                 }
             }
             true
