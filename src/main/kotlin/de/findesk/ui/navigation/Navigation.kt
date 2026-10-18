@@ -31,8 +31,17 @@ enum class Screen(val icon: ImageVector) {
     }
 }
 
+/** Something a menu asks the target screen to open on arrival, e.g. File → New Transaction. */
+enum class ScreenRequest { NEW_TRANSACTION, IMPORT_STATEMENT }
+
 /** Optional context passed when navigating, e.g. "show transactions of this account". */
-data class NavigationArgs(val accountId: Int? = null, val uncategorizedOnly: Boolean = false)
+data class NavigationArgs(
+    val accountId: Int? = null,
+    val uncategorizedOnly: Boolean = false,
+    val request: ScreenRequest? = null,
+    /** Makes a repeated request a new value, so the screen sees it again. */
+    val requestId: Long = 0,
+)
 
 class NavigationState {
     // Compose state: plain vars don't trigger recomposition, so the sidebar used to do nothing visible
@@ -62,6 +71,17 @@ class NavigationState {
     }
 }
 
+/** ⌘/Ctrl + 1…7 open the screens in sidebar order; the macOS View menu lists the same keys. */
+val screenShortcutKeys: List<androidx.compose.ui.input.key.Key> = listOf(
+    androidx.compose.ui.input.key.Key.One,
+    androidx.compose.ui.input.key.Key.Two,
+    androidx.compose.ui.input.key.Key.Three,
+    androidx.compose.ui.input.key.Key.Four,
+    androidx.compose.ui.input.key.Key.Five,
+    androidx.compose.ui.input.key.Key.Six,
+    androidx.compose.ui.input.key.Key.Seven,
+)
+
 /**
  * Global shortcuts: Ctrl/Cmd+1..7 open the screens in sidebar order, Ctrl/Cmd+, opens Settings.
  * Returns the screen to open, or null if the key isn't a shortcut.
@@ -69,14 +89,5 @@ class NavigationState {
 fun shortcutScreen(key: androidx.compose.ui.input.key.Key, ctrlOrMeta: Boolean): Screen? {
     if (!ctrlOrMeta) return null
     if (key == androidx.compose.ui.input.key.Key.Comma) return Screen.SETTINGS
-    val digits = listOf(
-        androidx.compose.ui.input.key.Key.One,
-        androidx.compose.ui.input.key.Key.Two,
-        androidx.compose.ui.input.key.Key.Three,
-        androidx.compose.ui.input.key.Key.Four,
-        androidx.compose.ui.input.key.Key.Five,
-        androidx.compose.ui.input.key.Key.Six,
-        androidx.compose.ui.input.key.Key.Seven,
-    )
-    return digits.indexOf(key).takeIf { it >= 0 }?.let { Screen.entries.getOrNull(it) }
+    return screenShortcutKeys.indexOf(key).takeIf { it >= 0 }?.let { Screen.entries.getOrNull(it) }
 }

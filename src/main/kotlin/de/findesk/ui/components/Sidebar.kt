@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.strings
 import de.findesk.ui.navigation.Screen
@@ -32,13 +33,15 @@ fun Sidebar(
     profileName: String? = null,
     /** While set, only this screen can be selected (see NavigationState.lockedOn). */
     lockedOn: Screen? = null,
+    /** Room left free at the top, e.g. for the macOS window buttons over a unified title bar. */
+    topInset: Dp = 0.dp,
 ) {
     Column(
         modifier = modifier
             .width(240.dp)
             .fillMaxHeight()
             .background(sidebarColor())
-            .padding(16.dp),
+            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 16.dp + topInset),
     ) {
         // App Logo/Title
         Row(

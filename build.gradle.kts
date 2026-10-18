@@ -90,6 +90,20 @@ compose.desktop {
             // icon.icns/icon.ico are generated from FinDesk-icon.svg (see CONTRIBUTING.md).
             macOS {
                 bundleID = "de.findesk.app"
+                // The languages FinDesk is translated into, so macOS can use them for the system-provided parts of the
+                // UI. The JDK's own app-menu items (About, Preferences…, Hide, Quit) stay English regardless.
+                infoPlist {
+                    extraKeysRawXml = """
+                        <key>CFBundleAllowMixedLocalizations</key>
+                        <true/>
+                        <key>CFBundleLocalizations</key>
+                        <array>
+                            <string>en</string>
+                            <string>de</string>
+                            <string>fr</string>
+                        </array>
+                    """.trimIndent()
+                }
                 iconFile.set(project.file("src/main/resources/icons/icon.icns"))
             }
 

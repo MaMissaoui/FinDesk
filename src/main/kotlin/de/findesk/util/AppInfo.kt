@@ -9,6 +9,7 @@ import java.time.ZoneId
 object AppInfo {
     const val NAME = "FinDesk"
     const val VERSION = "1.2.0"
+    const val HOMEPAGE = "https://github.com/MaMissaoui/FinDesk"
 
     /** When this process started; anything still in flight from before it was interrupted by a quit or crash. */
     val startedAt: LocalDateTime = LocalDateTime.ofInstant(Instant.ofEpochMilli(ManagementFactory.getRuntimeMXBean().startTime), ZoneId.systemDefault())

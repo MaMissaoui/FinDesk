@@ -28,12 +28,17 @@ import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
 import de.findesk.repository.SettingsRepository
 import de.findesk.repository.SettingsRepositoryImpl
+import de.findesk.ui.components.AboutDialog
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.NavigationState
 import de.findesk.ui.navigation.Screen
+import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.navigation.shortcutScreen
+import de.findesk.ui.platform.AppMenuBar
+import de.findesk.ui.platform.MacAppMenuHandlers
+import de.findesk.ui.platform.Platform
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.util.AppPaths
@@ -43,6 +48,7 @@ import de.findesk.viewmodel.UnlockViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.awt.Dimension
 import java.io.File
 
 @Composable
@@ -52,15 +58,11 @@ fun App(
     language: AppLanguage = AppLanguage.EN,
     onLanguageChange: (AppLanguage) -> Unit = {},
     profileLabel: String? = null,
-    initialDarkTheme: Boolean = false,
+    isDarkTheme: Boolean = false,
+    setDarkTheme: (Boolean) -> Unit = {},
+    aboutOpen: Boolean = false,
+    onAboutClose: () -> Unit = {},
 ) {
-    val settings = remember { SettingsRepositoryImpl() }
-    val scope = rememberCoroutineScope()
-    var isDarkTheme by remember { mutableStateOf(initialDarkTheme) }
-    val setDarkTheme: (Boolean) -> Unit = { enabled ->
-        isDarkTheme = enabled
-        scope.launch(Dispatchers.IO) { settings.setValue(SettingsViewModel.KEY_DARK_THEME, enabled.toString()) }
-    }
     val navigate: (Screen, NavigationArgs) -> Unit = { screen, args -> navigationState.navigateTo(screen, args) }
     val strings = Translations.of(language)
     LaunchedEffect(language) { AppStrings.set(language) }
@@ -71,6 +73,7 @@ fun App(
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Row(modifier = Modifier.fillMaxSize()) {
                     Sidebar(
+                        topInset = Platform.titleBarHeight,
                         currentScreen = navigationState.currentScreen,
                         onScreenSelected = { navigationState.navigateTo(it) },
                         profileName = profileLabel,
@@ -117,12 +120,14 @@ fun App(
                         }
                     }
                 }
+                if (aboutOpen) AboutDialog(onAboutClose)
             }
         }
     }
 }
 
 fun main() {
+    Platform.configureProcess()
     // Profile first: it decides which data directory the database, documents and passports come from
     val profiles = ProfileStore()
     val profile = profiles.active()
@@ -187,6 +192,15 @@ private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs
         scope.launch(Dispatchers.IO) { settings.setValue(AppLanguage.KEY, lang.code) }
     }
     val strings = Translations.of(language)
+    // Up here rather than in App: the macOS View menu toggles it too
+    var darkTheme by remember { mutableStateOf(prefs.darkTheme) }
+    val setDarkTheme: (Boolean) -> Unit = { enabled ->
+        darkTheme = enabled
+        scope.launch(Dispatchers.IO) { settings.setValue(SettingsViewModel.KEY_DARK_THEME, enabled.toString()) }
+    }
+    var aboutOpen by remember { mutableStateOf(false) }
+    var requestId by remember { mutableLongStateOf(0L) }
+    val request: (ScreenRequest) -> Unit = { navigationState.navigateTo(Screen.TRANSACTIONS, NavigationArgs(request = it, requestId = ++requestId)) }
 
     Window(
         onCloseRequest = ::exitApplication,
@@ -199,6 +213,24 @@ private fun ApplicationScope.FinDeskWindow(profileLabel: String?, prefs: UiPrefs
         state = windowState,
         icon = painterResource("icon-512.png"),
     ) {
-        App(navigationState, language, setLanguage, profileLabel, initialDarkTheme = prefs.darkTheme)
+        LaunchedEffect(Unit) {
+            Platform.unifyTitleBar(window)
+            // Below this the stat cards and table columns break words mid-way
+            window.minimumSize = Dimension(1024, 700)
+        }
+        LaunchedEffect(darkTheme) { Platform.setDarkAppearance(window, darkTheme) }
+        MacAppMenuHandlers(onAbout = { aboutOpen = true }, onSettings = { navigationState.navigateTo(Screen.SETTINGS) })
+        AppMenuBar(
+            strings,
+            navigationState,
+            windowState,
+            darkTheme,
+            setDarkTheme,
+            onRequest = request,
+            onSettings = { navigationState.navigateTo(Screen.SETTINGS) },
+            onAbout = { aboutOpen = true },
+            onExit = ::exitApplication,
+        )
+        App(navigationState, language, setLanguage, profileLabel, darkTheme, setDarkTheme, aboutOpen, onAboutClose = { aboutOpen = false })
     }
 }

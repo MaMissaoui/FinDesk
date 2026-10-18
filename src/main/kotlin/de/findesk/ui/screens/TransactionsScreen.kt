@@ -31,6 +31,7 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
+import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.theme.amountColor
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
@@ -51,6 +52,20 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
     LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly) }
 
     var showAdd by remember { mutableStateOf(false) }
+    val openImport = {
+        FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
+    }
+    // A menu request (File → New Transaction / Import) runs once the accounts it needs have loaded
+    var pendingRequest by remember(args) { mutableStateOf(args.request) }
+    LaunchedEffect(pendingRequest, state.accounts.isNotEmpty()) {
+        val request = pendingRequest ?: return@LaunchedEffect
+        if (state.accounts.isEmpty()) return@LaunchedEffect
+        pendingRequest = null
+        when (request) {
+            ScreenRequest.NEW_TRANSACTION -> showAdd = true
+            ScreenRequest.IMPORT_STATEMENT -> openImport()
+        }
+    }
     var confirmDelete by remember { mutableStateOf<TransactionItem?>(null) }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
@@ -60,9 +75,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
             DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
                 OutlinedButton(
                     enabled = state.accounts.isNotEmpty(),
-                    onClick = {
-                        FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
-                    },
+                    onClick = { openImport() },
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
