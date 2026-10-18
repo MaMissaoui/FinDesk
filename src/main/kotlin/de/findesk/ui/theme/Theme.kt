@@ -1,8 +1,11 @@
 package de.findesk.ui.theme
 
+import androidx.compose.foundation.DefaultContextMenuRepresentation
+import androidx.compose.foundation.LocalContextMenuRepresentation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 internal val LightColorScheme = lightColorScheme(
@@ -75,6 +78,13 @@ fun FinDeskTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = FinDeskTypography,
-        content = content,
-    )
+    ) {
+        // Right-click menus (rows, and the text fields' Cut/Copy/Paste) are drawn by Compose Desktop, light-only by default
+        val menu = DefaultContextMenuRepresentation(
+            backgroundColor = colorScheme.surfaceContainerHigh,
+            textColor = colorScheme.onSurface,
+            itemHoverColor = colorScheme.onSurface.copy(alpha = 0.08f),
+        )
+        CompositionLocalProvider(LocalContextMenuRepresentation provides menu, content = content)
+    }
 }

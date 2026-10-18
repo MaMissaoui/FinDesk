@@ -24,6 +24,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
+import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.ui.components.*
 import de.findesk.util.Formats
@@ -256,22 +257,38 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
             SectionCard(s[StringKey.RecentTransfersLabel], Modifier.fillMaxWidth()) {
                 if (state.paymentOrders.isEmpty()) Text(s[StringKey.NoneYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 state.paymentOrders.forEach { order ->
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(order.recipientName ?: s.paymentAction(order.action), style = MaterialTheme.typography.bodySmall)
-                        order.amount?.let { Text(Formats.money(it, order.currency), style = MaterialTheme.typography.bodySmall) }
-                        Text(
-                            s.paymentStatus(order.status),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = paymentStatusColor(order.status),
-                        )
+                    // Transfer again only fills the form; sending still goes through the review and its confirmation
+                    val again = order.takeIf { it.recipientIban != null && it.amount != null && it.action != PaymentAction.STANDING_ORDER_DELETE }?.let { o ->
+                        menuItem(s[StringKey.TransferAgain]) {
+                            from = state.accounts.firstOrNull { it.iban == o.accountIban } ?: from
+                            name = o.recipientName.orEmpty()
+                            iban = o.recipientIban.orEmpty()
+                            bic = ""
+                            amount = o.amount?.toPlainString().orEmpty()
+                            purpose = o.purpose.orEmpty()
+                            execution = Execution.NOW
+                        }
                     }
-                    Text(
-                        "${s.paymentAction(order.action)} · ${Formats.dateTime(order.createdAt)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    order.bankOrderId?.let { Text("${s[StringKey.PaymentOrderId]}: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    order.message?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
+                    RowContextMenu(again) {
+                        Column(Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(order.recipientName ?: s.paymentAction(order.action), style = MaterialTheme.typography.bodySmall)
+                                order.amount?.let { Text(Formats.money(it, order.currency), style = MaterialTheme.typography.bodySmall) }
+                                Text(
+                                    s.paymentStatus(order.status),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = paymentStatusColor(order.status),
+                                )
+                            }
+                            Text(
+                                "${s.paymentAction(order.action)} · ${Formats.dateTime(order.createdAt)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            order.bankOrderId?.let { Text("${s[StringKey.PaymentOrderId]}: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            order.message?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
+                        }
+                    }
                     HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 }
             }

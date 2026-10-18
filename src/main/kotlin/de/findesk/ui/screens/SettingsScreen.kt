@@ -166,29 +166,34 @@ fun SettingsScreen(
                         Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     state.categories.forEach { c ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable(
-                                    onClick = { editCategory = c },
-                                    onClickLabel = s.format(StringKey.EditCategoryNamed, c.name),
-                                    role = Role.Button,
-                                )
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        RowContextMenu(
+                            menuItem(s[StringKey.MenuEdit]) { editCategory = c },
+                            menuItem(s[StringKey.Delete]) { confirmDeleteCategory = c },
                         ) {
-                            Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
-                            Spacer(Modifier.width(12.dp))
-                            Text(c.name, modifier = Modifier.weight(1f))
-                            if (c.isTaxRelevant) {
-                                CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
-                                Spacer(Modifier.width(8.dp))
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        onClick = { editCategory = c },
+                                        onClickLabel = s.format(StringKey.EditCategoryNamed, c.name),
+                                        role = Role.Button,
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
+                                Spacer(Modifier.width(12.dp))
+                                Text(c.name, modifier = Modifier.weight(1f))
+                                if (c.isTaxRelevant) {
+                                    CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                c.budgetLimit?.let {
+                                    Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                             }
-                            c.budgetLimit?.let {
-                                Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                         }
                         HorizontalDivider()
                     }
@@ -212,21 +217,26 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     state.rules.forEach { r ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable(
-                                    onClick = { editRule = r },
-                                    onClickLabel = s.format(StringKey.EditRuleNamed, r.pattern),
-                                    role = Role.Button,
-                                )
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        RowContextMenu(
+                            menuItem(s[StringKey.MenuEdit]) { editRule = r },
+                            menuItem(s[StringKey.Delete]) { vm.deleteRule(r.id) },
                         ) {
-                            Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                            Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
-                            Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
-                            IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        onClick = { editRule = r },
+                                        onClickLabel = s.format(StringKey.EditRuleNamed, r.pattern),
+                                        role = Role.Button,
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                                Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
+                                Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
+                                IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                            }
                         }
                         HorizontalDivider()
                     }

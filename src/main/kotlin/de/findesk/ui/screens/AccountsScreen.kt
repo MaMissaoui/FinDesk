@@ -192,55 +192,62 @@ private fun BankCard(
     val s = strings()
     FinDeskCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(bank.bankName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        s.format(StringKey.BlzPrefix, bank.blz) + (bank.bic.takeIf { it.isNotBlank() }?.let { " · ${s.format(StringKey.BicPrefix, it)}" } ?: "") +
-                            (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: ""),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (syncing) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(syncStep ?: s[StringKey.Syncing], style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.width(8.dp))
-                } else {
-                    OutlinedButton(onClick = onSync, enabled = syncEnabled) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(s[StringKey.Sync])
+            RowContextMenu(
+                syncEnabled.takeIf { it && !syncing }?.let { menuItem(s[StringKey.SyncNow], onSync) },
+                menuItem(s[StringKey.AddAccount], onAddAccount),
+                menuItem(s[StringKey.ConnectionSettings], onEditConnection),
+                menuItem(s[StringKey.RemoveBank], onDeleteBank),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(bank.bankName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            s.format(StringKey.BlzPrefix, bank.blz) + (bank.bic.takeIf { it.isNotBlank() }?.let { " · ${s.format(StringKey.BicPrefix, it)}" } ?: "") +
+                                (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                }
-                TextButton(onClick = onAddAccount) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(s[StringKey.AddAccountShort])
-                }
-                // Bank-wide actions live in a menu: a trash icon here looked like the account rows' delete below it,
-                // yet removes the bank with all its accounts
-                var bankMenu by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
-                    DropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(s[StringKey.ConnectionSettings]) },
-                            leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                            onClick = {
-                                bankMenu = false
-                                onEditConnection()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(s[StringKey.RemoveBank], color = MaterialTheme.colorScheme.error) },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                bankMenu = false
-                                onDeleteBank()
-                            },
-                        )
+                    if (syncing) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(syncStep ?: s[StringKey.Syncing], style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.width(8.dp))
+                    } else {
+                        OutlinedButton(onClick = onSync, enabled = syncEnabled) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(s[StringKey.Sync])
+                        }
+                    }
+                    TextButton(onClick = onAddAccount) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(s[StringKey.AddAccountShort])
+                    }
+                    // Bank-wide actions live in a menu: a trash icon here looked like the account rows' delete below it,
+                    // yet removes the bank with all its accounts
+                    var bankMenu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
+                        DropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(s[StringKey.ConnectionSettings]) },
+                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                onClick = {
+                                    bankMenu = false
+                                    onEditConnection()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(s[StringKey.RemoveBank], color = MaterialTheme.colorScheme.error) },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    bankMenu = false
+                                    onDeleteBank()
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -254,29 +261,36 @@ private fun BankCard(
             }
             accounts.forEach { account ->
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clickable(
-                            onClick = { onOpenAccount(account) },
-                            onClickLabel = s[StringKey.OpenAccount],
-                            role = Role.Button,
-                        ),
+                RowContextMenu(
+                    menuItem(s[StringKey.ShowTransactions]) { onTransactions(account) },
+                    menuItem(s[StringKey.MenuDetails]) { onOpenAccount(account) },
+                    menuItem(s[StringKey.EditBalance]) { onEditBalance(account) },
+                    menuItem(s[StringKey.DeleteAccount]) { onDeleteAccount(account) },
                 ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(s.accountType(account.accountType), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                        Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable(
+                                onClick = { onOpenAccount(account) },
+                                onClickLabel = s[StringKey.OpenAccount],
+                                role = Role.Button,
+                            ),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.accountType(account.accountType), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(
+                            Formats.money(account.balance, account.currency),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (account.balance.signum() < 0) amountColor(true) else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
+                        IconButton(onClick = { onEditBalance(account) }) { Icon(Icons.Default.Edit, contentDescription = s[StringKey.EditBalance]) }
+                        IconButton(onClick = { onDeleteAccount(account) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.DeleteAccount]) }
                     }
-                    Text(
-                        Formats.money(account.balance, account.currency),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = if (account.balance.signum() < 0) amountColor(true) else MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
-                    IconButton(onClick = { onEditBalance(account) }) { Icon(Icons.Default.Edit, contentDescription = s[StringKey.EditBalance]) }
-                    IconButton(onClick = { onDeleteAccount(account) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.DeleteAccount]) }
                 }
             }
         }
