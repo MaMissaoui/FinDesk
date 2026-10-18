@@ -23,6 +23,7 @@ import de.findesk.repository.AccountRepositoryImpl
 import de.findesk.repository.BankAccessRepositoryImpl
 import de.findesk.repository.NewTransaction
 import de.findesk.repository.PaymentOrderRepositoryImpl
+import de.findesk.repository.SettingsRepositoryImpl
 import de.findesk.repository.TransactionRepositoryImpl
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
@@ -32,6 +33,7 @@ import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.util.GroupKey
 import de.findesk.viewmodel.AccountSelection
+import de.findesk.viewmodel.AccountsViewModel
 import de.findesk.viewmodel.PaymentsViewModel
 import de.findesk.viewmodel.TransactionsViewModel
 import de.findesk.viewmodel.UnlockMode
@@ -197,11 +199,15 @@ class ScreenshotTest {
         val bank = BankAccessRepositoryImpl().create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
         val accounts = AccountRepositoryImpl()
         val named = accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
-        accounts.create(bank, "DE02120300000000202051", balance = BigDecimal("812.40"))
+        accounts.create(bank, "DE02120300000000202051", balance = BigDecimal("-45.10"))
         accounts.rename(named, "Haushalt")
 
         render("accounts-named", Screen.ACCOUNTS, dark = false)
         render("accounts-named-dark", Screen.ACCOUNTS, dark = true)
+
+        // The same bank, with its account rows folded away
+        SettingsRepositoryImpl().setValue(AccountsViewModel.KEY_COLLAPSED_BANKS, bank.toString())
+        render("accounts-collapsed", Screen.ACCOUNTS, dark = false)
     }
 
     /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */
@@ -225,7 +231,7 @@ class ScreenshotTest {
         accounts.rename(household, "Haushalt")
         accounts.create(bank, "DE02120300000000202051", balance = BigDecimal("812.40"))
         val savings = accounts.create(bank, "DE44500105175407324931", balance = BigDecimal("15000.00"), accountType = "savings").id.value
-        accounts.create(bank, "DE02120300000000202052", balance = BigDecimal("5400.00"), currency = "USD", accountType = "depot")
+        accounts.create(bank, "DE02120300000000202052", balance = BigDecimal("-5400.00"), currency = "USD", accountType = "depot")
         val reisen = AccountGroupRepositoryImpl().create("Reisen")
         accounts.setGroup(savings, reisen.id)
 

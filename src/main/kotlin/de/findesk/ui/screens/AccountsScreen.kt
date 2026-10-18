@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankDirectory
 import de.findesk.banking.BankingService
@@ -34,6 +35,7 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.balanceColor
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.AccountDetail
@@ -97,9 +99,12 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                 BankCard(
                     bank = bank,
                     accounts = accounts,
+                    collapsed = bank.id in state.collapsedBanks,
+                    primaryCurrency = state.primaryCurrency,
                     syncing = state.syncingBankId == bank.id,
                     syncStep = state.syncStep,
                     syncEnabled = state.syncingBankId == null,
+                    onToggleCollapse = { vm.toggleBankCollapsed(bank.id) },
                     onSync = { vm.syncBankAccess(bank.id) },
                     onEditConnection = {
                         focusName = false
@@ -238,9 +243,12 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
 private fun BankCard(
     bank: BankAccessItem,
     accounts: List<AccountItem>,
+    collapsed: Boolean,
+    primaryCurrency: String,
     syncing: Boolean,
     syncStep: String?,
     syncEnabled: Boolean,
+    onToggleCollapse: () -> Unit,
     onSync: () -> Unit,
     onEditConnection: () -> Unit,
     onRename: () -> Unit,
@@ -255,6 +263,9 @@ private fun BankCard(
     onRenameAccount: (AccountItem) -> Unit,
 ) {
     val s = strings()
+    // The collapsed header shows the connection's total, coloured green/red when it is a single currency
+    val totals = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
+    val totalColor = if (totals.size == 1) balanceColor(totals.values.first()) else MaterialTheme.colorScheme.onSurfaceVariant
     FinDeskCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             RowContextMenu(
@@ -266,8 +277,30 @@ private fun BankCard(
                 menuItem(s[StringKey.RemoveBank], onDeleteBank),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The chevron only folds the account rows away; sync and every header action stay reachable
+                    IconButton(onClick = onToggleCollapse) {
+                        Icon(
+                            if (collapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                            contentDescription = s[if (collapsed) StringKey.Expand else StringKey.Collapse],
+                        )
+                    }
                     Column(Modifier.weight(1f)) {
-                        Text(bank.bankName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                bank.bankName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (collapsed) {
+                                Spacer(Modifier.width(8.dp))
+                                Text(s.format(StringKey.AccountCount, accounts.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(8.dp))
+                                Text(Currencies.format(totals, primaryCurrency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = totalColor)
+                            }
+                        }
                         Text(
                             s.format(StringKey.BlzPrefix, bank.blz) + (bank.bic.takeIf { it.isNotBlank() }?.let { " · ${s.format(StringKey.BicPrefix, it)}" } ?: "") +
                                 (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: "") +
@@ -347,50 +380,52 @@ private fun BankCard(
                     }
                 }
             }
-            if (accounts.isEmpty()) {
-                Text(
-                    s[StringKey.NoAccountsYet],
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            accounts.forEach { account ->
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                RowContextMenu(
-                    menuItem(s[StringKey.ShowTransactions]) { onTransactions(account) },
-                    menuItem(s[StringKey.MenuDetails]) { onOpenAccount(account) },
-                    menuItem(s[StringKey.RenameAccount]) { onRenameAccount(account) },
-                    menuItem(s[StringKey.EditBalance]) { onEditBalance(account) },
-                    menuItem(s[StringKey.DeleteAccount]) { onDeleteAccount(account) },
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clickable(
-                                onClick = { onOpenAccount(account) },
-                                onClickLabel = s[StringKey.OpenAccount],
-                                role = Role.Button,
-                            ),
+            if (!collapsed) {
+                if (accounts.isEmpty()) {
+                    Text(
+                        s[StringKey.NoAccountsYet],
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+                accounts.forEach { account ->
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    RowContextMenu(
+                        menuItem(s[StringKey.ShowTransactions]) { onTransactions(account) },
+                        menuItem(s[StringKey.MenuDetails]) { onOpenAccount(account) },
+                        menuItem(s[StringKey.RenameAccount]) { onRenameAccount(account) },
+                        menuItem(s[StringKey.EditBalance]) { onEditBalance(account) },
+                        menuItem(s[StringKey.DeleteAccount]) { onDeleteAccount(account) },
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(s.accountName(account), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable(
+                                    onClick = { onOpenAccount(account) },
+                                    onClickLabel = s[StringKey.OpenAccount],
+                                    role = Role.Button,
+                                ),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(s.accountName(account), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                Text(
+                                    account.name?.let { "${s.accountType(account.accountType)} · ${Formats.iban(account.iban)}" } ?: Formats.iban(account.iban),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Text(
-                                account.name?.let { "${s.accountType(account.accountType)} · ${Formats.iban(account.iban)}" } ?: Formats.iban(account.iban),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                Formats.money(account.balance, account.currency),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = balanceColor(account.balance),
                             )
+                            Spacer(Modifier.width(8.dp))
+                            IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
+                            IconButton(onClick = { onEditBalance(account) }) { Icon(Icons.Default.Edit, contentDescription = s[StringKey.EditBalance]) }
+                            IconButton(onClick = { onDeleteAccount(account) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.DeleteAccount]) }
                         }
-                        Text(
-                            Formats.money(account.balance, account.currency),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = if (account.balance.signum() < 0) amountColor(true) else MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
-                        IconButton(onClick = { onEditBalance(account) }) { Icon(Icons.Default.Edit, contentDescription = s[StringKey.EditBalance]) }
-                        IconButton(onClick = { onDeleteAccount(account) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.DeleteAccount]) }
                     }
                 }
             }
@@ -819,7 +854,12 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(Formats.iban(a.iban), style = MaterialTheme.typography.bodySmall)
-                        Text(Formats.money(a.balance, a.currency), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            Formats.money(a.balance, a.currency),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = balanceColor(a.balance),
+                        )
                     }
                     listOf(30, 90, 365).forEach { d ->
                         FilterChip(selected = detail.days == d, onClick = { onDays(d) }, label = { Text(if (d == 365) s[StringKey.OneYear] else s.format(StringKey.DaysCount, d)) })

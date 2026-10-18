@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import java.math.BigDecimal
 
 // Primary Colors
 val PrimaryBlue = Color(0xFF2D6CDF)
@@ -39,6 +40,18 @@ fun amountColor(isExpense: Boolean): Color = if (MaterialTheme.colorScheme.surfa
     if (isExpense) Error else Success
 } else {
     if (isExpense) ErrorDark else SuccessDark
+}
+
+/**
+ * The colour for an amount or balance: green above zero, red below, and the theme's text colour at exactly
+ * zero. Amounts and balances use the same green/red as [amountColor], so the light/dark contrast already
+ * covered by `ContrastTest` applies here too.
+ */
+@Composable
+fun balanceColor(value: BigDecimal): Color = when (value.signum()) {
+    1 -> amountColor(false)
+    -1 -> amountColor(true)
+    else -> MaterialTheme.colorScheme.onSurface
 }
 
 // Category Colors

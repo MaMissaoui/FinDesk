@@ -533,6 +533,40 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `collapsed bank connections persist and toggling twice expands again`() = runBlocking {
+        val bank = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "user").id.value
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+        vm.toggleBankCollapsed(bank).join()
+        assertEquals(setOf(bank), vm.state.value.collapsedBanks)
+        vm.close()
+
+        val restored = AccountsViewModel()
+        restored.loadAccounts().join()
+        assertEquals(setOf(bank), restored.state.value.collapsedBanks, "the collapsed bank is restored")
+
+        restored.toggleBankCollapsed(bank).join()
+        assertTrue(restored.state.value.collapsedBanks.isEmpty(), "toggling twice expands again")
+        restored.close()
+    }
+
+    @Test
+    fun `a collapsed bank whose bank was deleted is ignored on load`() = runBlocking {
+        val gone = data.bankAccessRepo.create("Gone Bank", "12030000", "", "user").id.value
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+        vm.toggleBankCollapsed(gone).join()
+        vm.deleteBankAccess(gone).join()
+        vm.close()
+
+        val restored = AccountsViewModel()
+        restored.loadAccounts().join()
+        assertTrue(restored.state.value.collapsedBanks.isEmpty(), "a deleted bank's id is ignored")
+        assertNull(restored.state.value.error)
+        restored.close()
+    }
+
+    @Test
     fun `sync start date is validated and can be cleared`() = runBlocking {
         val vm = AccountsViewModel(today = { today })
         vm.loadAccounts().join()
