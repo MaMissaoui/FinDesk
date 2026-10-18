@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -27,6 +28,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.Success
+import de.findesk.ui.theme.readableOn
 import de.findesk.viewmodel.BaseViewModel
 import kotlinx.coroutines.delay
 import java.awt.FileDialog
@@ -173,11 +175,13 @@ fun categoryColor(hex: String?, fallbackKey: String? = null): Color {
 fun CategoryBadge(name: String?, colorHex: String?, modifier: Modifier = Modifier) {
     val label = name ?: strings()[StringKey.Uncategorized]
     val color = if (name == null) MaterialTheme.colorScheme.onSurfaceVariant else categoryColor(colorHex, name)
-    Surface(modifier = modifier, shape = RoundedCornerShape(4.dp), color = color.copy(alpha = 0.12f)) {
+    val tint = color.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surfaceContainerHighest)
+    Surface(modifier = modifier, shape = RoundedCornerShape(4.dp), color = tint) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = color,
+            // Lime or orange text on its own light tint was below 2:1 in the light theme, purple and brown in the dark one
+            color = readableOn(color, tint, MaterialTheme.colorScheme.onSurface),
             maxLines = 1,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )

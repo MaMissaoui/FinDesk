@@ -89,7 +89,7 @@ fun DocumentsScreen() {
         Spacer(Modifier.height(12.dp))
         TabRow(selectedTabIndex = state.tab.ordinal) {
             DocumentTab.entries.forEach { tab ->
-                Tab(selected = state.tab == tab, onClick = { vm.selectTab(tab) }, text = { Text(s.documentTab(tab)) })
+                Tab(selected = state.tab == tab, onClick = { vm.selectTab(tab) }, text = { Text(s.documentTab(tab)) }, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(16.dp))

@@ -98,7 +98,7 @@ fun ReportsScreen() {
         Spacer(Modifier.height(16.dp))
         TabRow(selectedTabIndex = selectedTab) {
             listOf(StringKey.TabTaxSummary, StringKey.TabMonthlyBreakdown, StringKey.TabCategoryAnalysis, StringKey.TabRecurring).forEachIndexed { i, key ->
-                Tab(selected = selectedTab == i, onClick = { selectedTab = i }, text = { Text(s[key]) })
+                Tab(selected = selectedTab == i, onClick = { selectedTab = i }, text = { Text(s[key]) }, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(24.dp))

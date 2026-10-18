@@ -53,16 +53,17 @@ class ScreenshotTest {
             ?: Files.createTempDirectory("findesk-shots").toFile()
         DatabaseFactory.init(dataDir.absolutePath, System.getenv("FINDESK_SCREENSHOT_PASSPHRASE")?.takeIf { it.isNotEmpty() })
 
+        // Every screen in both themes: dark mode regressions (black text on black) only show up when rendered
         Screen.entries.forEach { screen ->
             render("${screen.ordinal}-${screen.name.lowercase()}", screen, dark = false)
+            render("${screen.ordinal}-${screen.name.lowercase()}-dark", screen, dark = true)
         }
         // The narrowest common window: stat-card subtitles wrap here, so the cards must still line up
         render("11-dashboard-narrow", 1024, 900) { Frame(Screen.DASHBOARD, dark = false) }
-        render("9-dashboard-dark", Screen.DASHBOARD, dark = true)
-        // Page headings sit straight on the background, so they show whether the content colour follows the theme
-        render("10-transactions-dark", Screen.TRANSACTIONS, dark = true)
         render("8-dashboard-full", Screen.DASHBOARD, dark = false, height = 1800)
+        render("8-dashboard-full-dark", Screen.DASHBOARD, dark = true, height = 1800)
         render("7-settings-full", Screen.SETTINGS, dark = false, height = 2400)
+        render("7-settings-full-dark", Screen.SETTINGS, dark = true, height = 2400)
     }
 
     @Test
