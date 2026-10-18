@@ -46,6 +46,8 @@ data class AccountsState(
     val savedPins: Set<Int> = emptySet(),
     /** Whether the operating system offers a credential store, so the UI may offer to remember a PIN. */
     val canRememberPin: Boolean = false,
+    /** Bank access ids whose account rows are collapsed on the Accounts screen. */
+    val collapsedBanks: Set<Int> = emptySet(),
 ) {
     /** Balances per currency, primary first; different currencies are never added up. */
     val totals: Map<String, BigDecimal> get() = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
@@ -65,6 +67,9 @@ class AccountsViewModel(
     private val _state = MutableStateFlow(AccountsState())
     val state: StateFlow<AccountsState> = _state.asStateFlow()
 
+    /** The collapsed bank connections are read once; afterwards the in-memory set is the truth. */
+    private var collapsedBanksLoaded = false
+
     private val onError: (Exception) -> Unit = { e -> _state.update { it.copy(isLoading = false, error = e.userMessage()) } }
 
     fun loadAccounts(): Job {
@@ -83,8 +88,29 @@ class AccountsViewModel(
                 primaryCurrency = Currencies.primary(settingsRepository),
                 canRememberPin = bankingService.canRememberPin,
                 savedPins = bankAccesses.filter { bank -> bankingService.hasSavedPin(bank.id) }.map { bank -> bank.id }.toSet(),
+                // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
+                collapsedBanks = if (collapsedBanksLoaded) it.collapsedBanks else loadCollapsedBanks(bankAccesses).also { collapsedBanksLoaded = true },
             )
         }
+    }
+
+    /** The stored collapsed bank ids, minus any that no longer name a bank (e.g. after it was deleted). */
+    private fun loadCollapsedBanks(bankAccesses: List<BankAccessItem>): Set<Int> {
+        val known = bankAccesses.map { it.id }.toSet()
+        return settingsRepository.getValue(KEY_COLLAPSED_BANKS)
+            ?.split(",")
+            ?.mapNotNull { it.trim().toIntOrNull() }
+            ?.filter { it in known }
+            ?.toSet()
+            ?: emptySet()
+    }
+
+    /** Collapses or expands a bank connection's account rows; view state only, so it is persisted but not audited. */
+    fun toggleBankCollapsed(bankAccessId: Int): Job {
+        val collapsed = _state.value.collapsedBanks
+        val next = if (bankAccessId in collapsed) collapsed - bankAccessId else collapsed + bankAccessId
+        _state.update { it.copy(collapsedBanks = next) }
+        return launchSafely(onError) { settingsRepository.setValue(KEY_COLLAPSED_BANKS, next.sorted().joinToString(",")) }
     }
 
     /** Validates input; returns an error message or null. Exposed for the dialog's inline validation. */
@@ -288,5 +314,10 @@ class AccountsViewModel(
 
     fun clearMessages() {
         _state.update { it.copy(error = null, message = null) }
+    }
+
+    companion object {
+        /** Settings key holding the collapsed bank connection ids, per profile. */
+        const val KEY_COLLAPSED_BANKS = "accounts.collapsedBanks"
     }
 }

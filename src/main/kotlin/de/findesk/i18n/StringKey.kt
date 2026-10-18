@@ -93,6 +93,7 @@ enum class StringKey {
 
     // Accounts
     AccountsTotal,
+    AccountCount,
     AddBank,
     NoBanksYet,
     NoBanksDescription,

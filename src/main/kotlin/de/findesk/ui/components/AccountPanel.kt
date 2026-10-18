@@ -28,9 +28,8 @@ import de.findesk.i18n.strings
 import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
 import de.findesk.repository.MAX_ACCOUNT_GROUP_NAME_LENGTH
-import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.balanceColor
 import de.findesk.util.AccountGroupView
-import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
 import de.findesk.viewmodel.AccountSelection
@@ -82,7 +81,7 @@ fun AccountPanel(
                     Text(s[StringKey.AllAccounts], style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     Column(horizontalAlignment = Alignment.End) {
                         grandTotal.forEach { (currency, amount) ->
-                            Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                            Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(amount, selection == AccountSelection.All))
                         }
                     }
                 }
@@ -183,6 +182,13 @@ fun AccountPanel(
     }
 }
 
+/**
+ * Green/red by sign, except on the selection highlight: there green or red on the container colour is unreadable,
+ * so a selected row keeps the container's own content colour.
+ */
+@Composable
+private fun panelAmountColor(value: java.math.BigDecimal, selected: Boolean): Color = if (selected) LocalContentColor.current else balanceColor(value)
+
 /** One clickable entry that is highlighted (and announced) while selected. */
 @Composable
 private fun SelectableRow(
@@ -223,7 +229,18 @@ private fun GroupHeaderRow(
             )
         }
         Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Text(Currencies.format(view.totals, primaryCurrency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, textAlign = TextAlign.End)
+        // One line per currency, each coloured by its own sign
+        Column(horizontalAlignment = Alignment.End) {
+            view.totals.ifEmpty { mapOf(primaryCurrency to BigDecimal.ZERO) }.forEach { (currency, amount) ->
+                Text(
+                    Formats.money(amount, currency),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.End,
+                    color = panelAmountColor(amount, selected),
+                )
+            }
+        }
     }
 }
 
@@ -247,7 +264,7 @@ private fun AccountRow(account: AccountItem, selected: Boolean, onSelect: () -> 
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.End,
-            color = if (account.balance.signum() < 0) amountColor(true) else MaterialTheme.colorScheme.onSurface,
+            color = panelAmountColor(account.balance, selected),
         )
     }
 }

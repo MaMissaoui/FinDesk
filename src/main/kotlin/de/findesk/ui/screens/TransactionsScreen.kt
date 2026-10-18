@@ -18,9 +18,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
@@ -35,6 +38,7 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.balanceColor
 import de.findesk.util.AccountGroupView
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
@@ -106,6 +110,8 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
             }
             Column(modifier = Modifier.weight(1f)) {
                 // The summary and the actions wrap onto new lines rather than squeezing a button's label into a column
+                val headerBalance = state.currentBalance
+                val headerBalanceColor = if (headerBalance != null) balanceColor(headerBalance) else MaterialTheme.colorScheme.onSurfaceVariant
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -113,8 +119,21 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                 ) {
                     // The top bar names the screen; this row holds its summary and actions
                     Text(
-                        s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)) +
-                            (state.currentBalance?.let { s.format(StringKey.TransactionsBalance, Formats.money(it, state.balanceCurrency ?: "EUR")) } ?: ""),
+                        buildAnnotatedString {
+                            append(
+                                s.format(
+                                    StringKey.TransactionsSummary,
+                                    state.transactions.size,
+                                    Currencies.format(state.totalIncome, Currencies.DEFAULT),
+                                    Currencies.format(state.totalExpenses, Currencies.DEFAULT),
+                                ),
+                            )
+                            if (headerBalance != null) {
+                                withStyle(SpanStyle(color = headerBalanceColor)) {
+                                    append(s.format(StringKey.TransactionsBalance, Formats.money(headerBalance, state.balanceCurrency ?: "EUR")))
+                                }
+                            }
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -464,7 +483,7 @@ private fun TransactionRow(
                 Text(
                     Formats.money(balance.balance, currency),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (balance.balance.signum() < 0) amountColor(true) else MaterialTheme.colorScheme.onSurface,
+                    color = balanceColor(balance.balance),
                     textAlign = TextAlign.End,
                 )
             }
