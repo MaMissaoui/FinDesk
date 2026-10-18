@@ -56,6 +56,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     var confirmDeleteAccount by remember { mutableStateOf<AccountItem?>(null) }
     var confirmDeleteBank by remember { mutableStateOf<BankAccessItem?>(null) }
     var editConnection by remember { mutableStateOf<BankAccessItem?>(null) }
+    var editConnectionBlz by remember { mutableStateOf<String?>(null) }
     var fetchHistoryFor by remember { mutableStateOf<BankAccessItem?>(null) }
     var renameAccount by remember { mutableStateOf<AccountItem?>(null) }
 
@@ -102,10 +103,17 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     onSync = { vm.syncBankAccess(bank.id) },
                     onEditConnection = {
                         focusName = false
+                        editConnectionBlz = null
                         editConnection = bank
                     },
                     onRename = {
                         focusName = true
+                        editConnectionBlz = null
+                        editConnection = bank
+                    },
+                    onUseCentralBlz = { mapped ->
+                        focusName = false
+                        editConnectionBlz = mapped
                         editConnection = bank
                     },
                     onAddAccount = { addAccountFor = bank },
@@ -146,14 +154,16 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     editConnection?.let { bank ->
         ConnectionDialog(
             bank = bank,
-            defaultUrl = vm.lookupBank(bank.blz)?.pinTanUrl,
+            initialBlz = editConnectionBlz,
+            lookup = vm::lookupBank,
             focusName = focusName,
             hasSavedPin = bank.id in state.savedPins,
             canRememberPin = state.canRememberPin,
+            syncing = state.syncingBankId == bank.id,
             onForgetPin = { vm.forgetPin(bank.id) },
             onDismiss = { editConnection = null },
-            onConfirm = { name, userId, url ->
-                vm.updateConnection(bank.id, name, userId, url)
+            onConfirm = { name, blz, userId, url ->
+                vm.updateConnection(bank.id, name, blz, userId, url)
                 editConnection = null
             },
         )
@@ -234,6 +244,7 @@ private fun BankCard(
     onSync: () -> Unit,
     onEditConnection: () -> Unit,
     onRename: () -> Unit,
+    onUseCentralBlz: (String) -> Unit,
     onAddAccount: () -> Unit,
     onDeleteBank: () -> Unit,
     onFetchHistory: () -> Unit,
@@ -264,6 +275,17 @@ private fun BankCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        val centralBlz = BankDirectory.finTsBlz(bank.blz)
+                        if (centralBlz != bank.blz) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    s.format(StringKey.CentralBlzHint, centralBlz),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                TextButton(onClick = { onUseCentralBlz(centralBlz) }) { Text(s.format(StringKey.UseBlz, centralBlz)) }
+                            }
+                        }
                     }
                     if (syncing) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -390,6 +412,9 @@ internal fun AddBankDialog(
     var bic by remember { mutableStateOf("") }
     var userId by remember { mutableStateOf("") }
     var touched by remember { mutableStateOf(false) }
+
+    /** The branch BLZ a picked/typed bank had before it was mapped to the central FinTS BLZ, while that is shown. */
+    var originalBlz by remember { mutableStateOf<String?>(null) }
     val error = validate(bankName, blz)
     val s = strings()
     // Recompute per keystroke; it is an in-memory scan over the bundled bank directory.
@@ -398,7 +423,9 @@ internal fun AddBankDialog(
     val knownBank = remember(blz) { if (blz.length == 8) lookup(blz) else null }
 
     fun applySuggestion(entry: BankDirectory.Entry) {
-        blz = entry.blz
+        val mapped = BankDirectory.finTsBlz(entry.blz)
+        blz = mapped
+        originalBlz = entry.blz.takeIf { it != mapped }
         bankName = entry.name
         bic = entry.bic
         query = ""
@@ -442,6 +469,9 @@ internal fun AddBankDialog(
                         blz = input.filter(Char::isDigit).take(8)
                         if (blz.length == 8) {
                             lookup(blz)?.let { entry ->
+                                val mapped = BankDirectory.finTsBlz(entry.blz)
+                                originalBlz = entry.blz.takeIf { it != mapped }
+                                if (mapped != entry.blz) blz = mapped
                                 if (bankName.isBlank()) bankName = entry.name
                                 if (bic.isBlank()) bic = entry.bic
                             }
@@ -451,6 +481,13 @@ internal fun AddBankDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                originalBlz?.takeIf { BankDirectory.finTsBlz(it) == blz }?.let { original ->
+                    Text(
+                        s.format(StringKey.CentralBlzNote, blz, original),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 OutlinedTextField(bic, { bic = it.uppercase() }, label = { Text(s[StringKey.BicOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.OnlineUserIdOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 ConnectionProposal(knownBank, blz)
@@ -625,20 +662,35 @@ private fun RenameAccountDialog(account: AccountItem, onDismiss: () -> Unit, onC
 @Composable
 private fun ConnectionDialog(
     bank: BankAccessItem,
-    defaultUrl: String?,
+    initialBlz: String?,
+    lookup: (String) -> BankDirectory.Entry?,
     focusName: Boolean,
     hasSavedPin: Boolean,
     canRememberPin: Boolean,
+    syncing: Boolean,
     onForgetPin: () -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, userId: String, url: String) -> Unit,
+    onConfirm: (name: String, blz: String, userId: String, url: String) -> Unit,
 ) {
     var name by remember { mutableStateOf(bank.bankName) }
+    var blzField by remember { mutableStateOf(initialBlz ?: bank.blz) }
     var userId by remember { mutableStateOf(bank.userId) }
+    var url by remember { mutableStateOf(bank.serverUrl.orEmpty()) }
     val nameField = remember { FocusRequester() }
     LaunchedEffect(focusName) { if (focusName) runCatching { nameField.requestFocus() } }
-    var url by remember { mutableStateOf(bank.serverUrl.orEmpty()) }
     val s = strings()
+    val knownField = if (blzField.length == 8) lookup(blzField) else null
+    // The endpoint follows what the field says now, not the stored BLZ, so a correction updates the proposal too.
+    val defaultUrl = knownField?.pinTanUrl
+    val oldBicPrefix = bank.bic.take(6)
+    val otherBank = knownField != null && oldBicPrefix.isNotBlank() && !knownField.bic.take(6).equals(oldBicPrefix, ignoreCase = true)
+    val blzHint = when {
+        otherBank -> s.format(StringKey.BlzOtherBank, knownField!!.name)
+        knownField != null -> listOfNotNull(knownField.name, knownField.city.takeIf { it.isNotBlank() }).joinToString(", ")
+        blzField.length == 8 -> s[StringKey.BlzNotInDirectory]
+        else -> null
+    }
+    val loginChanged = blzField.trim() != bank.blz || userId.trim() != bank.userId || url.trim() != bank.serverUrl.orEmpty()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.format(StringKey.OnlineBankingFor, bank.bankName)) },
@@ -653,6 +705,15 @@ private fun ConnectionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().focusRequester(nameField),
                 )
+                OutlinedTextField(
+                    blzField,
+                    { blzField = it.filter(Char::isDigit).take(8) },
+                    label = { Text(s[StringKey.BlzDigits]) },
+                    supportingText = blzHint?.let { hint -> { Text(hint, color = if (otherBank) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) } },
+                    isError = otherBank,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.UserIdLogin]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(
                     url,
@@ -663,6 +724,13 @@ private fun ConnectionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                if (loginChanged) {
+                    Text(
+                        s[StringKey.LoginResetNote],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 bank.tanMethod?.let { Text(s.format(StringKey.RememberedTan, it), style = MaterialTheme.typography.bodySmall) }
                 when {
                     hasSavedPin -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -686,9 +754,10 @@ private fun ConnectionDialog(
             }
         },
         confirmButton = {
+            // A warning (unknown BLZ, another bank) never blocks saving; a wrong login is still confirmed with Save
             Button(
-                enabled = name.isNotBlank() && userId.isNotBlank() && (url.isBlank() || url.trim().startsWith("https://")),
-                onClick = { onConfirm(name, userId, url) },
+                enabled = name.isNotBlank() && userId.isNotBlank() && blzField.length == 8 && !syncing && (url.isBlank() || url.trim().startsWith("https://")),
+                onClick = { onConfirm(name, blzField, userId, url) },
             ) { Text(s[StringKey.Save]) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },

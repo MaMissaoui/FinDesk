@@ -2,6 +2,13 @@ package de.findesk.viewmodel
 
 import de.findesk.TestData
 import de.findesk.TestDatabase
+import de.findesk.banking.AccountSnapshot
+import de.findesk.banking.BankingInteraction
+import de.findesk.banking.BankingService
+import de.findesk.banking.FinTSClient
+import de.findesk.banking.FinTSConnection
+import de.findesk.banking.FinTSGateway
+import de.findesk.banking.TransferOrder
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
@@ -20,6 +27,8 @@ import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class ViewModelsTest {
     private lateinit var data: TestData
@@ -315,7 +324,7 @@ class ViewModelsTest {
 
         val vm = AccountsViewModel()
         vm.loadAccounts().join()
-        vm.updateConnection(business, "DKB Business", "business", "").join()
+        vm.updateConnection(business, "DKB Business", "12030000", "business", "").join()
 
         val names = vm.state.value.bankAccesses.associate { it.id to it.bankName }
         assertEquals("DKB", names[personal])
@@ -334,7 +343,7 @@ class ViewModelsTest {
         val vm = AccountsViewModel()
         vm.loadAccounts().join()
 
-        vm.updateConnection(bankId, "   ", "user", "").join()
+        vm.updateConnection(bankId, "   ", "12030000", "user", "").join()
 
         assertEquals(AppStrings[StringKey.BankNameRequired], vm.state.value.error)
         assertEquals("DKB", data.bankAccessRepo.findItem(bankId)!!.bankName)
@@ -348,10 +357,10 @@ class ViewModelsTest {
         val vm = AccountsViewModel()
         vm.loadAccounts().join()
 
-        vm.updateConnection(bankId, "  DKB Business  ", "user", "").join()
+        vm.updateConnection(bankId, "  DKB Business  ", "12030000", "user", "").join()
         assertEquals("DKB Business", data.bankAccessRepo.findItem(bankId)!!.bankName)
 
-        vm.updateConnection(bankId, "x".repeat(MAX_BANK_NAME_LENGTH + 45), "user", "").join()
+        vm.updateConnection(bankId, "x".repeat(MAX_BANK_NAME_LENGTH + 45), "12030000", "user", "").join()
         val stored = data.bankAccessRepo.findItem(bankId)!!.bankName
         assertEquals(MAX_BANK_NAME_LENGTH, stored.length)
         vm.close()
@@ -362,7 +371,7 @@ class ViewModelsTest {
         val bankId = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "user").id.value
         val before = AccountsViewModel()
         before.loadAccounts().join()
-        before.updateConnection(bankId, "DKB Business", "user", "").join()
+        before.updateConnection(bankId, "DKB Business", "12030000", "user", "").join()
         before.close()
 
         val restarted = AccountsViewModel()
@@ -488,5 +497,50 @@ class ViewModelsTest {
             de.findesk.banking.ProtocolTraceStore.enabled = false
             vm.close()
         }
+    }
+
+    @Test
+    fun `updateConnection rejects a bank code that is not 8 digits`() = runBlocking {
+        val bankId = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "user").id.value
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+
+        vm.updateConnection(bankId, "DKB", "1203000", "user", "").join()
+
+        assertEquals(AppStrings[StringKey.BlzMustBe8Digits], vm.state.value.error)
+        assertEquals("12030000", data.bankAccessRepo.findItem(bankId)!!.blz)
+        vm.close()
+    }
+
+    @Test
+    fun `updateConnection refuses while the bank is syncing`() = runBlocking {
+        val bankId = data.bankAccessRepo.create("DKB", "12030000", "BYLADEM1001", "user").id.value
+        data.bankAccessRepo.updateConnection(bankId, serverUrl = "https://fints.example/pintan")
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val gateway = object : FinTSGateway {
+            override fun fetchAll(connection: FinTSConnection, interaction: BankingInteraction, since: (String) -> LocalDate?, to: LocalDate): List<AccountSnapshot> {
+                entered.countDown()
+                release.await(5, TimeUnit.SECONDS)
+                return emptyList()
+            }
+
+            override fun transfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = throw UnsupportedOperationException()
+        }
+        val service = BankingService(finTSClient = FinTSClient(gateway = gateway, passportDir = File(tmp, "sync-passports")), today = { today })
+        val vm = AccountsViewModel(bankingService = service)
+        vm.loadAccounts().join()
+
+        val sync = vm.syncBankAccess(bankId)
+        assertTrue(entered.await(5, TimeUnit.SECONDS), "the sync reached the gateway")
+        assertEquals(bankId, vm.state.value.syncingBankId)
+
+        vm.updateConnection(bankId, "DKB", "12030000", "user", "").join()
+
+        assertEquals(AppStrings[StringKey.ErrorConnectionBusy], vm.state.value.error)
+
+        release.countDown()
+        sync.join()
+        vm.close()
     }
 }

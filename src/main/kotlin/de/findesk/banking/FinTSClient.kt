@@ -287,9 +287,18 @@ class FinTSClient(
 
     /** Removes the bank's stored passport file, passphrase and any remembered PIN; call when the bank access is deleted. */
     fun deleteStoredCredentials(bankAccessId: Int) {
-        File(passportDir, "bank-$bankAccessId.dat").delete()
+        resetLogin(bankAccessId, forgetPin = true)
+    }
+
+    /**
+     * Forgets everything tied to the old login after a login field (BLZ, user id or server URL) changed: the
+     * HBCI4Java passport file, its passphrase and, when [forgetPin] is set, a remembered PIN. The next dialog
+     * then asks HBCI4Java for the login again instead of reusing the old institute's values.
+     */
+    fun resetLogin(bankAccessId: Int, forgetPin: Boolean) {
+        gateway.resetPassport(File(passportDir, "bank-$bankAccessId.dat"))
         settingsRepository.delete("fints.passport.$bankAccessId")
-        forgetPin(bankAccessId)
+        if (forgetPin) forgetPin(bankAccessId)
     }
 
     /**

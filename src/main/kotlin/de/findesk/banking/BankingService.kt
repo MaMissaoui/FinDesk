@@ -3,6 +3,7 @@ package de.findesk.banking
 import de.findesk.data.entity.BankAccess
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.model.BankAccessItem
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
 import de.findesk.util.Formats
@@ -97,6 +98,48 @@ class BankingService(
             _error.value = e.message
             null
         }
+    }
+
+    /**
+     * Saves a bank login's connection settings. The name is only a label; when the BLZ, user id or server URL
+     * changed, FinDesk's registration with the bank is reset (passport deleted, PIN forgotten when the login
+     * changed) so the next sync registers again instead of reusing the old institute's values.
+     */
+    suspend fun updateConnection(bankAccessId: Int, name: String, blz: String, userId: String, serverUrl: String): BankAccessItem? = withContext(Dispatchers.IO) {
+        val previous = bankAccessRepository.findItem(bankAccessId)
+        val newBlz = blz.trim()
+        val newUserId = userId.trim()
+        val newUrl = serverUrl.trim().ifEmpty { null }
+        val blzChanged = previous != null && previous.blz != newBlz
+        val userChanged = previous != null && previous.userId != newUserId
+        val urlChanged = previous != null && previous.serverUrl != newUrl
+
+        val loginChanged = blzChanged || userChanged || urlChanged
+        // Reset before saving: a failed save then only costs a fresh registration, while a failed reset after the
+        // save would leave the old passport in use with the new settings shown, the silent state this prevents
+        if (loginChanged) finTSClient.resetLogin(bankAccessId, forgetPin = blzChanged || userChanged)
+        val updated = bankAccessRepository.updateConnection(
+            bankAccessId,
+            serverUrl = serverUrl,
+            userId = userId,
+            bankName = name,
+            blz = blz,
+            // The BIC follows the BLZ only when the directory knows the new one; otherwise the old BIC stays.
+            bic = if (blzChanged) BankDirectory.lookup(newBlz)?.bic else null,
+        )
+        if (loginChanged) {
+            bankAccessRepository.clearLoginState(bankAccessId)
+            val fields = buildList {
+                if (blzChanged) add("bank code")
+                if (userChanged) add("user ID")
+                if (urlChanged) add("server URL")
+            }.joinToString(", ")
+            auditLogRepository.log("RESET_FINTS_LOGIN", "user", "Bank access $bankAccessId: $fields changed, passport reset")
+        }
+        if (blzChanged) {
+            auditLogRepository.log("CHANGE_BANK_CODE", "user", "Bank access $bankAccessId: BLZ ${previous?.blz} -> $newBlz")
+        }
+        updated
     }
 
     /**

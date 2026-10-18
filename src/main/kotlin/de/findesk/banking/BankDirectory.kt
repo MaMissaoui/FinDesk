@@ -26,6 +26,13 @@ object BankDirectory {
     private val entries: Map<String, Entry> by lazy { load() }
     private val all: List<Entry> by lazy { entries.values.toList() }
 
+    /**
+     * Banks whose FinTS server only accepts the central bank code, keyed by the first 8 characters of the BIC.
+     * The evidence is a real dialog: a login with the branch BLZ got HTTP 500 on the first message, while the
+     * central BLZ initialised the dialog. Don't add other banks without such evidence.
+     */
+    private val CENTRAL_FINTS_BLZ = mapOf("HYVEDEMM" to "70020270")
+
     /** One representative bank per BIC, preferring entries that have a FinTS server. */
     private val bicIndex: Map<String, Entry> by lazy {
         val index = LinkedHashMap<String, Entry>()
@@ -35,6 +42,17 @@ object BankDirectory {
     }
 
     fun lookup(blz: String): Entry? = entries[blz.trim()]
+
+    /**
+     * The BLZ whose FinTS server speaks for [blz]'s bank: the central bank code for the few banks in
+     * [CENTRAL_FINTS_BLZ], otherwise [blz] unchanged. The add-bank dialog stores this one as the connection's
+     * BLZ; the directory lookups (BIC, IBAN) keep using the real branch entries.
+     */
+    fun finTsBlz(blz: String): String {
+        val trimmed = blz.trim()
+        val bic = lookup(trimmed)?.bic ?: return trimmed
+        return CENTRAL_FINTS_BLZ.entries.firstOrNull { bic.startsWith(it.key) }?.value ?: trimmed
+    }
 
     /** A bank with this BIC, if the directory knows it. */
     fun byBic(bic: String): Entry? = bicIndex[bic.trim().uppercase()]

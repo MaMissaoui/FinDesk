@@ -312,7 +312,7 @@ class SavedPinTest {
         val vm = de.findesk.viewmodel.AccountsViewModel(bankingService = service)
         vm.loadAccounts().join()
 
-        vm.updateConnection(bankId, "Sparkasse", " demo-user ", "").join()
+        vm.updateConnection(bankId, "Sparkasse", "37050198", " demo-user ", "").join()
 
         assertTrue(service.hasSavedPin(bankId))
         assertEquals("12345", store.entries[pinKey()])
@@ -325,7 +325,7 @@ class SavedPinTest {
         val vm = de.findesk.viewmodel.AccountsViewModel(bankingService = service)
         vm.loadAccounts().join()
 
-        vm.updateConnection(bankId, "Sparkasse", "other-user", "").join()
+        vm.updateConnection(bankId, "Sparkasse", "37050198", "other-user", "").join()
 
         assertEquals("other-user", data.bankAccessRepo.findItem(bankId)!!.userId)
         assertTrue(store.entries.isEmpty())
@@ -351,6 +351,80 @@ class SavedPinTest {
 
         assertTrue(store.entries.isEmpty())
         vm.close()
+    }
+
+    @Test
+    fun `changing only the URL resets the passport and clears capabilities but keeps the PIN`() = runBlocking {
+        storePin()
+        data.bankAccessRepo.updateCapabilities(bankId, "SaldoReq,UebSEPA")
+        data.bankAccessRepo.updateConnection(bankId, tanMethod = "942")
+        SettingsRepositoryImpl().setValue("fints.passport.$bankId", "old-passphrase")
+        val passport = File(passportDir(), "bank-$bankId.dat").apply { parentFile.mkdirs() }.also { it.writeText("passport") }
+
+        service.updateConnection(bankId, "Sparkasse", "37050198", "demo-user", "https://new.example/fints")
+
+        assertFalse(passport.exists(), "the passport holds the old server URL")
+        assertNull(SettingsRepositoryImpl().getValue("fints.passport.$bankId"))
+        val bank = data.bankAccessRepo.findItem(bankId)!!
+        assertNull(bank.capabilities, "stale capabilities must not gate orders after the login changed")
+        assertNull(bank.tanMethod, "the remembered TAN method belonged to the old login")
+        assertEquals("https://new.example/fints", bank.serverUrl)
+        assertTrue(service.hasSavedPin(bankId), "the same user id keeps the saved PIN")
+        assertEquals("12345", store.entries[pinKey()])
+        assertEquals(1, AuditLogRepositoryImpl().findByAction("RESET_FINTS_LOGIN").size)
+    }
+
+    @Test
+    fun `changing the user ID resets the passport and forgets the PIN`() = runBlocking {
+        storePin()
+        SettingsRepositoryImpl().setValue("fints.passport.$bankId", "old-passphrase")
+        val passport = File(passportDir(), "bank-$bankId.dat").apply { parentFile.mkdirs() }.also { it.writeText("passport") }
+
+        service.updateConnection(bankId, "Sparkasse", "37050198", "new-user", "")
+
+        assertFalse(passport.exists())
+        assertNull(SettingsRepositoryImpl().getValue("fints.passport.$bankId"))
+        assertEquals("new-user", data.bankAccessRepo.findItem(bankId)!!.userId)
+        assertTrue(store.entries.isEmpty(), "the PIN belonged to the old user id")
+        assertFalse(service.hasSavedPin(bankId))
+        assertEquals(1, AuditLogRepositoryImpl().findByAction("RESET_FINTS_LOGIN").size)
+    }
+
+    @Test
+    fun `changing the BLZ resets, follows the directory BIC and keeps the accounts`() = runBlocking {
+        storePin()
+        val account = data.accountRepo.findAllItems().single().id
+        data.txn(account, today.minusDays(1), "-5.00", partner = "Shop", purpose = "A")
+        SettingsRepositoryImpl().setValue("fints.passport.$bankId", "old-passphrase")
+        val passport = File(passportDir(), "bank-$bankId.dat").apply { parentFile.mkdirs() }.also { it.writeText("passport") }
+
+        service.updateConnection(bankId, "Sparkasse", "70020270", "demo-user", "")
+
+        assertFalse(passport.exists())
+        assertTrue(store.entries.isEmpty())
+        assertFalse(service.hasSavedPin(bankId))
+        val bank = data.bankAccessRepo.findItem(bankId)!!
+        assertEquals("70020270", bank.blz)
+        assertEquals("HYVEDEMMXXX", bank.bic, "the BIC follows the new BLZ from the directory")
+        assertTrue(AuditLogRepositoryImpl().findByAction("CHANGE_BANK_CODE").any { it.details!!.contains("37050198 -> 70020270") })
+        assertTrue(data.accountRepo.findAllItems().any { it.id == account }, "a login change never drops the accounts")
+        assertTrue(data.transactionRepo.findItems().any { it.accountId == account }, "nor their transactions")
+    }
+
+    @Test
+    fun `saving unchanged values resets nothing`() = runBlocking {
+        storePin()
+        SettingsRepositoryImpl().setValue("fints.passport.$bankId", "keep-passphrase")
+        val passport = File(passportDir(), "bank-$bankId.dat").apply { parentFile.mkdirs() }.also { it.writeText("passport") }
+
+        service.updateConnection(bankId, "Sparkasse KölnBonn", "37050198", "demo-user", "")
+
+        assertTrue(passport.exists(), "an unchanged save must not touch the login")
+        assertEquals("keep-passphrase", SettingsRepositoryImpl().getValue("fints.passport.$bankId"))
+        assertTrue(store.entries.isNotEmpty(), "the PIN is kept")
+        assertTrue(service.hasSavedPin(bankId))
+        assertTrue(AuditLogRepositoryImpl().findByAction("RESET_FINTS_LOGIN").isEmpty())
+        assertTrue(AuditLogRepositoryImpl().findByAction("CHANGE_BANK_CODE").isEmpty())
     }
 
     @Test
