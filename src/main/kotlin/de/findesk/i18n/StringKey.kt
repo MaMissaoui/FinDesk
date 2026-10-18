@@ -101,6 +101,13 @@ enum class StringKey {
     SyncedPrefix,
     Syncing,
     Sync,
+    FetchHistory,
+    FetchHistoryFor,
+    FetchHistoryDate,
+    FetchHistoryHint,
+    Fetch,
+    Reset,
+    NextSyncFrom,
     ConnectionSettings,
     RenameConnection,
     ConnectionName,
@@ -530,6 +537,8 @@ enum class StringKey {
     ErrorInvalidRegex,
     ErrorPdfExportFailed,
     ErrorCsvExportFailed,
+    ErrorSyncFromDateInvalid,
+    ErrorSyncFromDateFuture,
 
     // Banking errors & progress
     ErrorBankConnectionNotFound,
@@ -592,6 +601,7 @@ enum class StringKey {
     SyncSummaryTransactions,
     SyncSummaryCategorized,
     SyncSummaryDuplicates,
+    SyncSummaryHistoryFrom,
 
     // Import
     ImportSummary,

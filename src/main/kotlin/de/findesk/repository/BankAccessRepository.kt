@@ -8,6 +8,7 @@ import de.findesk.model.toItem
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 interface BankAccessRepository {
@@ -20,6 +21,9 @@ interface BankAccessRepository {
     fun updateLastSync(id: Int): BankAccess?
     fun findAllItems(): List<BankAccessItem>
     fun findItem(id: Int): BankAccessItem?
+
+    /** Stores (or clears, with null) the start date the next sync fetches history from for every account. */
+    fun setSyncFrom(id: Int, date: LocalDate?): BankAccessItem?
 
     /**
      * Stores the FinTS server URL, the chosen TAN method, the login and/or the display name (null leaves a value
@@ -76,6 +80,10 @@ class BankAccessRepositoryImpl : BankAccessRepository {
         BankAccess.findById(id)?.apply {
             lastSync = LocalDateTime.now()
         }
+    }
+
+    override fun setSyncFrom(id: Int, date: LocalDate?): BankAccessItem? = transaction {
+        BankAccess.findById(id)?.apply { syncFrom = date }?.toItem()
     }
 
     override fun findAllItems(): List<BankAccessItem> = transaction {

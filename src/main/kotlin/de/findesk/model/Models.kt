@@ -25,6 +25,8 @@ data class BankAccessItem(
     val lastSync: LocalDateTime?,
     /** Comma-separated BPD/UPD job names the login supports; null until the first sync. */
     val capabilities: String? = null,
+    /** Chosen start date for the next sync (fetch older history); null uses the normal delta sync. */
+    val syncFrom: LocalDate? = null,
 )
 
 data class AccountItem(

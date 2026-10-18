@@ -5,6 +5,7 @@ import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
+import de.findesk.util.Formats
 import de.findesk.util.Iban
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -57,6 +58,8 @@ class BankingService(
         val duplicates: Int,
         val categorized: Int,
         val warnings: List<String>,
+        /** Start date the user chose to fetch older history from, if the sync used one. */
+        val historyFrom: LocalDate? = null,
     ) {
         fun summary(): String = buildString {
             append(AppStrings.format(StringKey.SyncSummary, accountsSynced))
@@ -64,6 +67,7 @@ class BankingService(
             append(AppStrings.format(StringKey.SyncSummaryTransactions, imported))
             if (categorized > 0) append(AppStrings.format(StringKey.SyncSummaryCategorized, categorized))
             if (duplicates > 0) append(AppStrings.format(StringKey.SyncSummaryDuplicates, duplicates))
+            historyFrom?.let { append(AppStrings.format(StringKey.SyncSummaryHistoryFrom, Formats.date(it))) }
         }
     }
 
@@ -108,12 +112,17 @@ class BankingService(
             val known = withContext(Dispatchers.IO) { accountRepository.findAllItems() }.filter { it.bankAccessId == bankAccessId }
             val now = today()
             val defaultStart = now.minusDays(INITIAL_SYNC_DAYS)
+            // A chosen history start applies to every account, known or new, and is not coerced to defaultStart: the
+            // point is to reach further back than the initial window. It never narrows the normal window, though, or a
+            // start after the last sync would skip the bookings in between while lastSync still advanced.
+            val historyFrom = bankAccess.syncFrom
             val since: (String) -> LocalDate = { iban ->
-                if (known.any { it.iban.equals(iban, true) }) {
+                val normal = if (known.any { it.iban.equals(iban, true) }) {
                     bankAccess.lastSync?.toLocalDate()?.minusDays(SYNC_OVERLAP_DAYS)?.coerceAtLeast(defaultStart) ?: defaultStart
                 } else {
                     defaultStart
                 }
+                historyFrom?.let { minOf(it, normal) } ?: normal
             }
 
             val snapshots = when (val r = finTSClient.fetchAll(bankAccessId, interaction, since, now)) {
@@ -148,8 +157,12 @@ class BankingService(
                     categorized += result.categorized
                 }
                 // If statements failed for any account, keep the old sync date so the next sync re-fetches that window
-                if (warnings.isEmpty()) bankAccessRepository.updateLastSync(bankAccessId)
-                val report = SyncReport(snapshots.size, added, imported, duplicates, categorized, warnings)
+                if (warnings.isEmpty()) {
+                    bankAccessRepository.updateLastSync(bankAccessId)
+                    // The chosen history start is one-shot: a fully successful sync clears it, a failure keeps it
+                    if (historyFrom != null) bankAccessRepository.setSyncFrom(bankAccessId, null)
+                }
+                val report = SyncReport(snapshots.size, added, imported, duplicates, categorized, warnings, historyFrom = historyFrom)
                 auditLogRepository.log("SYNC_BANK", "user", "${bankAccess.bankName}: ${report.summary()}")
                 BankingResult.Success(report)
             }

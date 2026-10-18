@@ -9,6 +9,7 @@ import de.findesk.model.AccountItem
 import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
 import de.findesk.util.Currencies
+import de.findesk.util.Formats
 import de.findesk.util.Iban
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.math.BigDecimal
+import java.time.LocalDate
 
 data class AccountDetail(
     val account: AccountItem,
@@ -189,6 +191,27 @@ class AccountsViewModel(
         }
         refresh()
         _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
+    }
+
+    /** Validates the start date of a historical sync ("dd.MM.yyyy"); returns an error message or null. */
+    fun validateSyncFrom(input: String): String? {
+        val date = Formats.parseDate(input) ?: return AppStrings[StringKey.ErrorSyncFromDateInvalid]
+        return if (date.isAfter(today())) AppStrings[StringKey.ErrorSyncFromDateFuture] else null
+    }
+
+    /** Stores [date] as the start of the next sync's history window, then starts that sync for [bankAccessId]. */
+    fun fetchHistoryFrom(bankAccessId: Int, date: LocalDate): Job = launchSafely(onError) {
+        bankAccessRepository.setSyncFrom(bankAccessId, date)
+        auditLogRepository.log("SET_SYNC_FROM", "user", "Bank access $bankAccessId: history from $date")
+        refresh()
+        syncBankAccess(bankAccessId).join()
+    }
+
+    /** Drops a stored history start so the next sync uses the normal delta window again. */
+    fun clearSyncFrom(bankAccessId: Int): Job = launchSafely(onError) {
+        bankAccessRepository.setSyncFrom(bankAccessId, null)
+        auditLogRepository.log("SET_SYNC_FROM", "user", "Bank access $bankAccessId: history start reset")
+        refresh()
     }
 
     /** Online sync via FinTS. Prompts for PIN/TAN through [bankingInteraction]. */

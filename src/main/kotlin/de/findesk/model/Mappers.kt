@@ -21,6 +21,7 @@ fun BankAccess.toItem() = BankAccessItem(
     serverUrl = serverUrl,
     lastSync = lastSync,
     capabilities = capabilities,
+    syncFrom = syncFrom,
 )
 
 fun Account.toItem() = AccountItem(

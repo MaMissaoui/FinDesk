@@ -257,6 +257,92 @@ class BankingSyncTest {
     }
 
     @Test
+    fun `a chosen history start reaches known and new accounts and is cleared after a successful sync`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        val from = today.minusDays(400)
+        data.bankAccessRepo.setSyncFrom(bankId, from)
+        gateway.snapshots = listOf(
+            snapshot(giro, "95.00", booking(giro, from.plusDays(1), "-5.00", "Old Shop", "A", balanceAfter = "95.00")),
+            snapshot(savings, "200.00", booking(savings, from.plusDays(2), "-2.00", "Old Shop", "B", balanceAfter = "198.00")),
+        )
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(from, gateway.sinceRequests[giro], "a known account uses the chosen date, not lastSync")
+        assertEquals(from, gateway.sinceRequests[savings], "a new account uses the chosen date, not the 90-day default")
+        assertEquals(from, report.historyFrom)
+        assertEquals(2, report.imported)
+        assertNull(data.bankAccessRepo.findItem(bankId)!!.syncFrom)
+    }
+
+    @Test
+    fun `a chosen history start after the last sync never narrows the window`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = LocalDateTime.of(2026, 9, 4, 12, 0) }
+
+        // Starting at yesterday would skip everything booked since the last sync, yet lastSync would still advance
+        data.bankAccessRepo.setSyncFrom(bankId, today.minusDays(1))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        assertEquals(LocalDate.of(2026, 8, 25), gateway.sinceRequests[giro], "last sync minus the overlap")
+    }
+
+    @Test
+    fun `re-fetching bookings that were imported before imports none of them`() = runBlocking {
+        val existing = booking(giro, today.minusDays(3), "-20.00", "Shop", "A", balanceAfter = "980.00")
+        gateway.snapshots = listOf(snapshot(giro, "980.00", existing))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        data.bankAccessRepo.setSyncFrom(bankId, today.minusDays(400))
+        gateway.snapshots = listOf(snapshot(giro, "980.00", existing))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(0, report.imported)
+        assertEquals(1, report.duplicates)
+    }
+
+    @Test
+    fun `a warning, an error or a cancel keeps the chosen history start for a retry`() = runBlocking {
+        val from = today.minusDays(400)
+        data.bankAccessRepo.setSyncFrom(bankId, from)
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00").copy(statementError = "9010 Auftrag abgelehnt"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        assertEquals(from, data.bankAccessRepo.findItem(bankId)!!.syncFrom, "a statement warning keeps it")
+
+        gateway.snapshots = emptyList()
+        gateway.failWith = RuntimeException("9931 PIN gesperrt")
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        assertEquals(from, data.bankAccessRepo.findItem(bankId)!!.syncFrom, "an error keeps it")
+
+        gateway.failWith = null
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction(pinValue = null))
+        assertEquals(from, data.bankAccessRepo.findItem(bankId)!!.syncFrom, "a cancel keeps it")
+    }
+
+    @Test
+    fun `existing databases get the new sync_from column`() {
+        val dir = File(tmp, "old-sync-from").apply { mkdirs() }
+        val db = Database.connect("jdbc:sqlite:${File(dir, "findesk.db").absolutePath}", driver = "org.sqlite.JDBC")
+        transaction(db) {
+            exec("CREATE TABLE bank_access (id INTEGER PRIMARY KEY AUTOINCREMENT, bank_name VARCHAR(255) NOT NULL, blz VARCHAR(20) NOT NULL, bic VARCHAR(20) NOT NULL, user_id VARCHAR(100) NOT NULL, hbci_version VARCHAR(10) DEFAULT '300' NOT NULL, tan_method VARCHAR(50) NULL, last_sync TEXT NULL)")
+            exec("INSERT INTO bank_access (bank_name, blz, bic, user_id) VALUES ('Old Bank', '37050198', '', 'u')")
+        }
+        TransactionManager.closeAndUnregister(db)
+
+        DatabaseFactory.init(dir.absolutePath)
+
+        val bank = data.bankAccessRepo.findAllItems().single()
+        assertEquals("Old Bank", bank.bankName)
+        assertNull(bank.syncFrom)
+        data.bankAccessRepo.setSyncFrom(bank.id, LocalDate.of(2025, 1, 3))
+        assertEquals(LocalDate.of(2025, 1, 3), data.bankAccessRepo.findItem(bank.id)!!.syncFrom)
+    }
+
+    @Test
     fun `confirming twice sends one transfer`() = runBlocking {
         gateway.snapshots = listOf(snapshot(giro, "500.00"))
         service.syncBankConnection(bankId, ScriptedInteraction())

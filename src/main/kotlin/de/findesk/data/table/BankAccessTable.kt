@@ -1,6 +1,7 @@
 package de.findesk.data.table
 
 import org.jetbrains.exposed.dao.id.IntIdTable
+import org.jetbrains.exposed.sql.javatime.date
 import org.jetbrains.exposed.sql.javatime.datetime
 
 object BankAccessTable : IntIdTable("bank_access") {
@@ -12,6 +13,9 @@ object BankAccessTable : IntIdTable("bank_access") {
     val tanMethod = varchar("tan_method", 50).nullable()
     val serverUrl = varchar("server_url", 255).nullable()
     val lastSync = datetime("last_sync").nullable()
+
+    /** Chosen start date for the next sync of every account (fetch older history); null uses the normal delta sync. */
+    val syncFrom = date("sync_from").nullable()
 
     /** Comma-separated BPD/UPD job names the login supports (see BankCapabilities); null until the first sync. */
     val capabilities = text("capabilities").nullable()

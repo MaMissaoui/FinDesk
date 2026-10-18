@@ -321,6 +321,26 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `sync start date is validated and can be cleared`() = runBlocking {
+        val vm = AccountsViewModel(today = { today })
+        vm.loadAccounts().join()
+
+        assertNotNull(vm.validateSyncFrom("31.02.2026"), "an impossible calendar date is rejected")
+        assertNotNull(vm.validateSyncFrom("abc"), "a non-date is rejected")
+        assertNotNull(vm.validateSyncFrom("21.03.2026"), "a date after today is rejected")
+        assertNull(vm.validateSyncFrom("01.03.2026"), "a past date is accepted")
+
+        val bankId = vm.state.value.bankAccesses.first().id
+        data.bankAccessRepo.setSyncFrom(bankId, today.minusDays(30))
+        assertNotNull(data.bankAccessRepo.findItem(bankId)!!.syncFrom)
+
+        vm.clearSyncFrom(bankId).join()
+        assertNull(data.bankAccessRepo.findItem(bankId)!!.syncFrom)
+        assertTrue(AuditLogRepositoryImpl().findByAction("SET_SYNC_FROM").isNotEmpty())
+        vm.close()
+    }
+
+    @Test
     fun `reports view model loads and exports`() = runBlocking {
         val vm = ReportsViewModel()
         vm.loadTaxReport(2026).join()
