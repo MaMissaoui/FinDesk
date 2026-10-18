@@ -56,6 +56,8 @@ class ScreenshotTest {
         Screen.entries.forEach { screen ->
             render("${screen.ordinal}-${screen.name.lowercase()}", screen, dark = false)
         }
+        // The narrowest common window: stat-card subtitles wrap here, so the cards must still line up
+        render("11-dashboard-narrow", 1024, 900) { Frame(Screen.DASHBOARD, dark = false) }
         render("9-dashboard-dark", Screen.DASHBOARD, dark = true)
         // Page headings sit straight on the background, so they show whether the content colour follows the theme
         render("10-transactions-dark", Screen.TRANSACTIONS, dark = true)
@@ -147,6 +149,7 @@ class ScreenshotTest {
             // loads (state landing in the last frame, half the screen recomposed), so wait until 10 frames in a
             // row are identical, at least 1 s, at most 15 s.
             var frame = 0L
+
             fun next() = scene.render(frame++ * 16_000_000L).encodeToData(EncodedImageFormat.PNG)?.bytes ?: error("encode failed")
             var png = next()
             var stable = 0

@@ -41,12 +41,14 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        // Keyed: items come and go as the dashboard loads (welcome card, upcoming, budgets), so each keeps its own
+        // identity instead of taking over whatever slot its position used to be
         if (state.error != null) {
-            item { MessageBanner(null, state.error) { vm.loadDashboard() } }
+            item(key = "error") { MessageBanner(null, state.error) { vm.loadDashboard() } }
         }
 
         if (!state.isLoading && !state.hasAccounts) {
-            item {
+            item(key = "welcome") {
                 Card {
                     EmptyState(
                         icon = AppIcons.AccountBalance,
@@ -59,18 +61,19 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
-        item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        item(key = "stats") {
+            // Equal heights even when a subtitle wraps in a narrow window
+            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(
                     s[StringKey.TotalBalance],
                     Formats.money(state.totalBalance, state.currency),
                     AppIcons.AccountBalance,
                     PrimaryBlue,
-                    Modifier.weight(1f),
+                    Modifier.weight(1f).fillMaxHeight(),
                     subtitle = state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
                 )
-                StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome, state.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
-                StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses, state.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome, state.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f).fillMaxHeight())
+                StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses, state.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f).fillMaxHeight())
                 StatCard(
                     s[StringKey.PendingTasks],
                     state.pendingTasks.toString(),
@@ -78,6 +81,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     Warning,
                     Modifier
                         .weight(1f)
+                        .fillMaxHeight()
                         .clickable(
                             enabled = state.uncategorizedCount > 0,
                             onClick = {
@@ -91,7 +95,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
-        item {
+        item(key = "charts") {
             Row(modifier = Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionCard(s[StringKey.ExpensesByCategory], Modifier.weight(1f).fillMaxHeight()) {
                     if (state.expensesByCategory.isEmpty()) {
@@ -107,7 +111,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         }
 
         if (state.upcoming.isNotEmpty()) {
-            item {
+            item(key = "upcoming") {
                 SectionCard(s[StringKey.Upcoming30Days], Modifier.fillMaxWidth()) {
                     state.upcoming.forEach { r ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -132,14 +136,14 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         }
 
         if (state.budgets.isNotEmpty()) {
-            item {
+            item(key = "budgets") {
                 SectionCard(s[StringKey.BudgetsThisMonth], Modifier.fillMaxWidth()) {
                     state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
                 }
             }
         }
 
-        item {
+        item(key = "tax") {
             SectionCard(s[StringKey.TaxDeductibleYtd], Modifier.fillMaxWidth()) {
                 if (state.taxDeductionsByCategory.isEmpty()) {
                     Text(
@@ -152,7 +156,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
 
-        item {
+        item(key = "recent") {
             SectionCard(
                 s[StringKey.RecentTransactions],
                 Modifier.fillMaxWidth(),
