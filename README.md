@@ -101,6 +101,15 @@ Packages are built for the operating system you run the build on.
 ./gradlew packageRpm    # Fedora/RHEL
 ```
 
+### Install on this Mac from source
+
+Double-click **`install-mac.command`** in Finder (or run `./gradlew installMacApp`).
+It builds a self-contained `FinDesk.app` (it carries its own Java runtime) and
+copies it into `/Applications`. A previously installed `FinDesk.app` is moved to
+the Trash rather than deleted, so you can drag it back. Quit FinDesk first; the
+installer refuses to replace an app that is running. Building needs a JDK 21.
+Your data in `~/.findesk` is not touched.
+
 ## Data, privacy and security
 
 - All data lives in a single directory: `~/.findesk`
