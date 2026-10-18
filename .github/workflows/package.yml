@@ -1,16 +1,29 @@
 name: Package
 
 # Installers are built for the current OS only, so each runner builds its own formats.
-# Runs on every pull request (artifacts appear on the run / PR checks) and attaches the
-# installers to the release when one is published.
+# Runs on every pull request that can affect packaging (artifacts appear on the run / PR checks),
+# on every push to main, and attaches the installers to the release when one is published.
+# The main push also builds the installers and verifies them; it additionally writes the Gradle
+# caches for the three OS runners (gradle/actions/setup-gradle only saves a cache from the
+# default branch), so PR packaging runs start warm instead of cold.
 on:
   release:
     types: [published]
+  push:
+    branches: [main]
   pull_request:
-    # Installers are expensive to build and never affected by prose changes
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
+    # Installers are expensive to build, so a PR only builds them when a change can alter
+    # the packaged result. Kotlin source changes are deliberately not listed: ci.yml compiles
+    # and tests them on the same commit, and the main push run above still packages them, so
+    # a PR does not need an installer to know whether the code is good.
+    paths:
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - "gradle/**"
+      - "src/main/resources/**"
+      - ".github/workflows/package.yml"
+      - "install-mac.command"
   workflow_dispatch:
 
 concurrency:
