@@ -80,7 +80,8 @@ class Hbci4JavaGatewaySmokeTest {
             ProtocolTraceStore.clear()
             runCatching { gateway.fetchAll(connection(blz, url), quietInteraction(), { LocalDate.now().minusDays(1) }, LocalDate.now()) }
             val lines = ProtocolTraceStore.last()?.lines.orEmpty().map { it.message }
-            return lines.filter { it.contains("KIK.blz") || it.contains("Verbinde mit") }
+            // HBCI4Java's LOG_CONNECT follows the JVM locale: "Verbinde mit …" (de) or "creating a connection to …" (en, as on CI)
+            return lines.filter { it.contains("KIK.blz") || it.contains("Verbinde mit") || it.contains("creating a connection to") }
         }
 
         ProtocolTraceStore.enabled = true
