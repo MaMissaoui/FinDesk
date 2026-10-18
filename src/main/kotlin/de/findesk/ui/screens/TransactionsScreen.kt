@@ -224,7 +224,9 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
 
                 Spacer(Modifier.height(16.dp))
 
-                FinDeskCard(modifier = Modifier.fillMaxWidth()) {
+                // With the chart below, the list takes the remaining height so the chart stays in view; otherwise
+                // the card wraps its rows as before
+                FinDeskCard(modifier = if (state.balanceChart != null) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth()) {
                     Column {
                         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                             HeaderCell(s[StringKey.ColDate], 1f)
@@ -265,6 +267,17 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                             }
                         }
                     }
+                }
+
+                // Same balances as the column, so the two can never disagree; only a single non-depot account shows it
+                state.balanceChart?.let { chart ->
+                    Spacer(Modifier.height(12.dp))
+                    BalanceHistoryCard(
+                        points = chart,
+                        collapsed = state.chartCollapsed,
+                        currency = state.balanceCurrency ?: Currencies.DEFAULT,
+                        onToggle = { vm.toggleChart() },
+                    )
                 }
             }
         }
@@ -381,6 +394,47 @@ private fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = 
         modifier = Modifier.weight(weight),
         textAlign = align,
     )
+}
+
+/** The balance chart below the booking list: a foldable card over the running-balance column's own points. */
+@Composable
+private fun BalanceHistoryCard(
+    points: List<Pair<LocalDate, BigDecimal>>,
+    collapsed: Boolean,
+    currency: String,
+    onToggle: () -> Unit,
+) {
+    val s = strings()
+    FinDeskCard(modifier = Modifier.fillMaxWidth()) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onToggle, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        if (collapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                        contentDescription = s[if (collapsed) StringKey.Expand else StringKey.Collapse],
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Text(
+                    s[StringKey.BalanceHistory],
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (!collapsed) {
+                BalanceLineChart(
+                    points = points,
+                    title = s[StringKey.BalanceHistory],
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp).height(160.dp),
+                    currency = currency,
+                )
+            }
+        }
+    }
 }
 
 @Composable

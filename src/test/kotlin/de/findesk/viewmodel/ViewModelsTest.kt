@@ -338,6 +338,75 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `the balance chart spans the shown period, clamped to today, and ends at the account balance`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start(accountId = account).join()
+        vm.updatePeriod(Period.THIS_MONTH).join()
+
+        val chart = vm.state.value.balanceChart
+        assertNotNull(chart, "a single checking account shows the chart")
+        assertEquals(LocalDate.of(2026, 3, 1), chart!!.first().first, "starts at the period's start")
+        assertEquals(today, chart.last().first, "ends at today, not the month's end")
+        assertEquals(20, chart.size)
+        assertEquals(BigDecimal("1500.00"), chart.last().second, "the last value is the balance after today's bookings")
+        vm.close()
+    }
+
+    @Test
+    fun `a text search never changes the balance chart`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start(accountId = account).join()
+        vm.updatePeriod(Period.THIS_MONTH).join()
+        val before = vm.state.value.balanceChart
+        assertNotNull(before)
+
+        vm.updateSearchQuery("rewe").join()
+
+        assertEquals(listOf("REWE"), vm.state.value.transactions.map { it.partnerName })
+        assertEquals(before, vm.state.value.balanceChart, "the chart shows the account balance, not the filtered rows")
+        vm.close()
+    }
+
+    @Test
+    fun `All accounts, a group and a depot show no balance chart`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        assertNull(vm.state.value.balanceChart, "All accounts")
+
+        vm.selectAccounts(AccountSelection.Account(account)).join()
+        assertNotNull(vm.state.value.balanceChart, "one non-depot account shows it")
+
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Type("checking"))).join()
+        assertNull(vm.state.value.balanceChart, "a group hides it")
+
+        val depotBank = data.bankAccessRepo.create("Depot Bank", "12345678", "", "depot-user").id.value
+        val depot = data.accountRepo.create(depotBank, "DE02120300000000202051", balance = BigDecimal("5000.00"), accountType = "depot").id.value
+        vm.start(accountId = depot).join()
+        assertNull(vm.state.value.balanceChart, "a depot's balance is a market value, not the sum of its bookings")
+        vm.close()
+    }
+
+    @Test
+    fun `the collapsed balance chart persists and a refresh never undoes a toggle`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start(accountId = account).join()
+        assertFalse(vm.state.value.chartCollapsed)
+
+        vm.toggleChart().join()
+        assertTrue(vm.state.value.chartCollapsed)
+        vm.loadTransactions().join()
+        assertTrue(vm.state.value.chartCollapsed, "a refresh keeps the toggled state")
+        vm.close()
+
+        val restored = TransactionsViewModel(today = { today })
+        restored.start(accountId = account).join()
+        assertTrue(restored.state.value.chartCollapsed, "the collapsed chart is restored")
+        restored.toggleChart().join()
+        assertFalse(restored.state.value.chartCollapsed)
+        restored.close()
+    }
+
+    @Test
     fun `opening an account clears its unread count but keeps its bookings bold`() = runBlocking {
         val fresh = newBooking(account, "-12.00", "Fresh")
         assertEquals(mapOf(account to 1), data.transactionRepo.countNew())
