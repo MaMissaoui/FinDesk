@@ -39,6 +39,8 @@ data class AccountItem(
     val currency: String,
     val accountType: String,
     val lastUpdate: LocalDateTime?,
+    /** The user's own label for the account; null shows the account type instead. */
+    val name: String? = null,
 )
 
 data class CategoryItem(

@@ -91,4 +91,39 @@ class AccountRepositoryTest {
         assertTrue(accountRepo.delete(account.id.value))
         assertNull(accountRepo.findById(account.id.value))
     }
+
+    @Test
+    fun `test rename trims, clears blanks and caps the length`() {
+        val account = accountRepo.create(testBankAccessId, "DE89370400440532013008")
+        val id = account.id.value
+
+        assertEquals("Haushalt", accountRepo.rename(id, "  Haushalt  ")!!.name, "trimmed")
+        assertNull(accountRepo.rename(id, "   ")!!.name, "blank stores null")
+        assertNull(accountRepo.rename(id, "")!!.name, "empty stores null")
+        assertEquals("Reisekasse", accountRepo.rename(id, "Reisekasse")!!.name)
+        assertNull(accountRepo.rename(id, null)!!.name, "null clears")
+        assertEquals(MAX_ACCOUNT_NAME_LENGTH, accountRepo.rename(id, "x".repeat(300))!!.name!!.length, "cut to the column length")
+    }
+
+    @Test
+    fun `test findAllItems returns the name and rename of an unknown id is null`() {
+        val account = accountRepo.create(testBankAccessId, "DE89370400440532013009")
+        accountRepo.rename(account.id.value, "Haushalt")
+
+        assertEquals("Haushalt", accountRepo.findAllItems().first { it.id == account.id.value }.name)
+        assertNull(accountRepo.rename(999999, "Nope"))
+    }
+
+    @Test
+    fun `test update keeps the name`() {
+        val account = accountRepo.create(testBankAccessId, "DE89370400440532013010")
+        accountRepo.rename(account.id.value, "Haushalt")
+
+        accountRepo.update(account.id.value, iban = "DE89370400440532013011", accountType = "savings")
+
+        val item = accountRepo.findAllItems().first { it.id == account.id.value }
+        assertEquals("Haushalt", item.name)
+        assertEquals("savings", item.accountType)
+        assertEquals("DE89370400440532013011", item.iban)
+    }
 }

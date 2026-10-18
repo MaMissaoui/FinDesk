@@ -10,5 +10,6 @@ object AccountsTable : IntIdTable("accounts") {
     val balance = decimal("balance", 15, 2).default(0.toBigDecimal())
     val currency = varchar("currency", 3).default("EUR")
     val accountType = varchar("account_type", 20).default("checking")
+    val name = varchar("name", 255).nullable()
     val lastUpdate = datetime("last_update").nullable()
 }

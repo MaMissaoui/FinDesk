@@ -2,8 +2,10 @@ package de.findesk.data
 
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.data.table.*
+import de.findesk.repository.AccountRepositoryImpl
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
@@ -87,5 +89,32 @@ class DatabaseFactoryTest {
             assertTrue(transactionColumns.contains("category_id"))
             assertTrue(transactionColumns.contains("hash"))
         }
+    }
+
+    @Test
+    fun `a database without accounts name gets the column and existing rows read null`() {
+        val dir = File(tempDir, "old-account-name").apply { mkdirs() }
+        val db = Database.connect("jdbc:sqlite:${File(dir, "findesk.db").absolutePath}", driver = "org.sqlite.JDBC")
+        transaction(db) {
+            exec(
+                "CREATE TABLE bank_access (id INTEGER PRIMARY KEY AUTOINCREMENT, bank_name VARCHAR(255) NOT NULL, blz VARCHAR(20) NOT NULL, " +
+                    "bic VARCHAR(20) NOT NULL, user_id VARCHAR(100) NOT NULL, hbci_version VARCHAR(10) DEFAULT '300' NOT NULL, " +
+                    "tan_method VARCHAR(50) NULL, last_sync TEXT NULL)",
+            )
+            exec(
+                "CREATE TABLE accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, bank_access_id INTEGER NOT NULL, iban VARCHAR(34) NOT NULL, " +
+                    "account_number VARCHAR(34) NULL, balance DECIMAL(15,2) DEFAULT 0 NOT NULL, currency VARCHAR(3) DEFAULT 'EUR' NOT NULL, " +
+                    "account_type VARCHAR(20) DEFAULT 'checking' NOT NULL, last_update TEXT NULL)",
+            )
+            exec("INSERT INTO bank_access (bank_name, blz, bic, user_id) VALUES ('Old Bank', '37050198', '', 'u')")
+            exec("INSERT INTO accounts (bank_access_id, iban) VALUES (1, 'DE89370400440532013000')")
+        }
+        TransactionManager.closeAndUnregister(db)
+
+        DatabaseFactory.init(dir.absolutePath, null)
+
+        val account = AccountRepositoryImpl().findAllItems().single()
+        assertEquals("DE89370400440532013000", account.iban)
+        assertNull(account.name, "an existing row gets name = null")
     }
 }

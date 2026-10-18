@@ -3,6 +3,7 @@ package de.findesk.i18n
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import de.findesk.document.RecurringDetector
+import de.findesk.model.AccountItem
 import de.findesk.model.Direction
 import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
@@ -35,6 +36,9 @@ class Strings(
         "depot" -> this[StringKey.TypeDepot]
         else -> type
     }
+
+    /** The user's own account name, or the localized account type when none is set. */
+    fun accountName(account: AccountItem): String = account.name ?: accountType(account.accountType)
 
     fun period(period: Period): String = when (period) {
         Period.THIS_MONTH -> this[StringKey.PeriodThisMonth]

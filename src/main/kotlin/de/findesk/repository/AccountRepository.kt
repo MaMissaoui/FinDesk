@@ -15,6 +15,9 @@ import org.jetbrains.exposed.sql.update
 import java.math.BigDecimal
 import java.time.LocalDateTime
 
+/** Length of the `name` column on accounts. */
+const val MAX_ACCOUNT_NAME_LENGTH = 255
+
 interface AccountRepository {
     fun findAll(): List<Account>
     fun findById(id: Int): Account?
@@ -30,6 +33,13 @@ interface AccountRepository {
     ): Account
     fun updateBalance(id: Int, balance: BigDecimal): Account?
     fun update(id: Int, iban: String? = null, accountType: String? = null): Account?
+
+    /**
+     * Sets (or clears, with null or blank) the user's own name for the account. The name is trimmed and capped at
+     * [MAX_ACCOUNT_NAME_LENGTH]; unlike [update] it may also clear the value. Returns the updated item, or null for
+     * an unknown id.
+     */
+    fun rename(id: Int, name: String?): AccountItem?
     fun delete(id: Int): Boolean
 
     /** Sum of the balances of accounts in [currency]; balances in different currencies can't be added. */
@@ -89,6 +99,12 @@ class AccountRepositoryImpl : AccountRepository {
             iban?.let { this.iban = it }
             accountType?.let { this.accountType = it }
         }
+    }
+
+    override fun rename(id: Int, name: String?): AccountItem? = transaction {
+        val account = Account.findById(id) ?: return@transaction null
+        account.name = name?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_ACCOUNT_NAME_LENGTH)
+        account.toItem()
     }
 
     override fun delete(id: Int): Boolean = transaction {

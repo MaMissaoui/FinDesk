@@ -87,9 +87,9 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(s[StringKey.From], style = MaterialTheme.typography.labelLarge)
                     DropdownSelector(
-                        label = from?.let { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance, it.currency)})" } ?: s[StringKey.ChooseAccount],
+                        label = from?.let { "${accountLabel(it)} (${Formats.money(it.balance, it.currency)})" } ?: s[StringKey.ChooseAccount],
                         options = state.accounts,
-                        optionLabel = { "${it.bankName} ${Formats.iban(it.iban)} (${Formats.money(it.balance, it.currency)})" },
+                        optionLabel = { "${accountLabel(it)} (${Formats.money(it.balance, it.currency)})" },
                         onSelect = { from = it },
                     )
                     OutlinedTextField(name, { name = it.take(BankingService.MAX_NAME_LENGTH) }, label = { Text(s[StringKey.RecipientName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -295,7 +295,7 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
                     val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.AmountEuro], s[StringKey.Purpose], s[StringKey.Execution])
-                    ReviewRow(s[StringKey.From], "${account.bankName} ${Formats.iban(account.iban)}", labels)
+                    ReviewRow(s[StringKey.From], accountLabel(account), labels)
                     ReviewRow(s[StringKey.To], order.recipientName, labels)
                     ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)), labels)
                     order.recipientBic?.let { ReviewRow("BIC", it, labels) }
