@@ -43,6 +43,8 @@ data class AccountItem(
     val name: String? = null,
     /** Custom group the account belongs to; null keeps it in its account-type group. */
     val groupId: Int? = null,
+    /** Bookings a bank sync brought in that the user has not read yet (see TransactionsViewModel.boldIds). */
+    val newCount: Int = 0,
 )
 
 data class AccountGroupItem(
@@ -75,6 +77,8 @@ data class TransactionItem(
     val categoryColor: String?,
     val isTaxRelevant: Boolean,
     val documentCount: Int,
+    /** A bank sync brought this booking in and its account has not been opened since. */
+    val isNew: Boolean = false,
 ) {
     val description: String get() = partnerName?.takeIf { it.isNotBlank() } ?: purpose?.takeIf { it.isNotBlank() } ?: "—"
     val isExpense: Boolean get() = amount.signum() < 0

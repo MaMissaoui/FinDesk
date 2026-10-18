@@ -352,6 +352,9 @@ enum class StringKey {
     LastFetched,
     Collapse,
     Expand,
+    NewBookingsCount,
+    NewBooking,
+    MarkAsRead,
 
     // Payments
     SepaTransfer,

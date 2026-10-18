@@ -2,11 +2,13 @@ package de.findesk.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -104,6 +107,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                     onDeleteGroup = { vm.deleteGroup(it) },
                     onMoveGroup = { id, up -> vm.moveGroup(id, up) },
                     onMoveAccount = { id, groupId -> vm.moveAccountToGroup(id, groupId) },
+                    onMarkRead = { vm.markRead(it) },
                     modifier = Modifier.width(260.dp).fillMaxHeight(),
                 )
                 Spacer(Modifier.width(16.dp))
@@ -251,6 +255,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                                         categories = state.categories,
                                         balance = state.balances?.get(txn.id),
                                         balanceCurrency = state.balanceCurrency,
+                                        isNew = txn.id in state.boldIds,
                                         onCategory = { vm.updateTransactionCategory(txn.id, it) },
                                         onDelete = { confirmDelete = txn },
                                         onOpen = { vm.selectTransaction(txn) },
@@ -336,11 +341,14 @@ private fun compactSelectionLabel(selection: AccountSelection, groups: List<Acco
     is AccountSelection.Account -> accounts.firstOrNull { it.id == selection.id }?.let { accountLabel(it) } ?: s[StringKey.AllAccounts]
 }
 
-/** Menu text for the compact selector: groups as they are, accounts indented under them. */
-private fun compactOptionLabel(selection: AccountSelection, groups: List<AccountGroupView>, accounts: List<AccountItem>, s: Strings): String = when (selection) {
-    AccountSelection.All -> s[StringKey.AllAccounts]
-    is AccountSelection.Group -> groups.firstOrNull { it.key == selection.key }?.let { groupLabel(it, s) } ?: s[StringKey.AllAccounts]
-    is AccountSelection.Account -> accounts.firstOrNull { it.id == selection.id }?.let { "  " + accountLabel(it) } ?: s[StringKey.AllAccounts]
+/** Menu text for the compact selector: groups as they are, accounts indented under them, each with its new count. */
+private fun compactOptionLabel(selection: AccountSelection, groups: List<AccountGroupView>, accounts: List<AccountItem>, s: Strings): String {
+    fun withCount(label: String, count: Int) = if (count > 0) "$label ($count)" else label
+    return when (selection) {
+        AccountSelection.All -> withCount(s[StringKey.AllAccounts], accounts.sumOf { it.newCount })
+        is AccountSelection.Group -> groups.firstOrNull { it.key == selection.key }?.let { withCount(groupLabel(it, s), it.newCount) } ?: s[StringKey.AllAccounts]
+        is AccountSelection.Account -> accounts.firstOrNull { it.id == selection.id }?.let { withCount("  " + accountLabel(it), it.newCount) } ?: s[StringKey.AllAccounts]
+    }
 }
 
 /**
@@ -382,6 +390,7 @@ private fun TransactionRow(
     categories: List<CategoryItem>,
     balance: de.findesk.util.RunningBalance.Entry?,
     balanceCurrency: String?,
+    isNew: Boolean,
     onCategory: (Int?) -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
@@ -401,10 +410,27 @@ private fun TransactionRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(Formats.date(txn.date), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        // The dot sits inside the date cell, so a new row's columns stay aligned with the header
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            if (isNew) {
+                // A booking a bank sync brought in and the user hasn't opened yet: a dot plus bold type
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .semantics { contentDescription = s[StringKey.NewBooking] },
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                Formats.date(txn.date),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isNew) FontWeight.Bold else FontWeight.Normal,
+            )
+        }
         Column(Modifier.weight(3f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(txn.description, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(txn.description, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isNew) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (txn.documentCount > 0) {
                     Spacer(Modifier.width(6.dp))
                     Icon(AppIcons.AttachFile, contentDescription = s.format(StringKey.DocumentsCount, txn.documentCount), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
@@ -444,7 +470,7 @@ private fun TransactionRow(
         Text(
             Formats.money(txn.amount, txn.currency, signed = true),
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = if (isNew) FontWeight.Bold else FontWeight.SemiBold,
             color = amountColor(txn.isExpense),
             modifier = Modifier.weight(1.2f),
             textAlign = TextAlign.End,

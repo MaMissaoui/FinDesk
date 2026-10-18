@@ -13,6 +13,7 @@ class AccountGroupingTest {
         currency: String = "EUR",
         balance: String = "0",
         groupId: Int? = null,
+        newCount: Int = 0,
     ) = AccountItem(
         id = id,
         bankAccessId = 1,
@@ -25,6 +26,7 @@ class AccountGroupingTest {
         lastUpdate = null,
         name = null,
         groupId = groupId,
+        newCount = newCount,
     )
 
     private fun customGroup(id: Int, name: String, sortOrder: Int = id) = AccountGroupItem(id, name, sortOrder)
@@ -106,5 +108,20 @@ class AccountGroupingTest {
     fun `group key ids are stable`() {
         assertEquals("type:checking", GroupKey.Type("checking").id)
         assertEquals("custom:7", GroupKey.Custom(7).id)
+    }
+
+    @Test
+    fun `a group's new count is the sum of its accounts`() {
+        val accounts = listOf(account(1, "checking", newCount = 2), account(2, "checking", newCount = 3), account(3, "savings"))
+        val views = group(accounts, emptyList(), "EUR")
+        assertEquals(5, views.first { it.key == GroupKey.Type("checking") }.newCount)
+        assertEquals(0, views.first { it.key == GroupKey.Type("savings") }.newCount, "nothing new stays zero")
+    }
+
+    @Test
+    fun `a custom group's new count sums the accounts moved into it`() {
+        val accounts = listOf(account(1, "savings", groupId = 10, newCount = 4), account(2, "savings", groupId = 10, newCount = 1))
+        val views = group(accounts, listOf(customGroup(10, "Reisen")), "EUR")
+        assertEquals(5, views.single { it.key == GroupKey.Custom(10) }.newCount)
     }
 }

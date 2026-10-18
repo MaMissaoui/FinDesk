@@ -116,6 +116,16 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `a manually added booking is never marked new`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.addManualTransaction(account, today, BigDecimal("-12.34"), "EDEKA Center", null, null).join()
+
+        assertTrue(data.transactionRepo.findItems().none { it.isNew }, "the user just made it, so it is already read")
+        assertTrue(data.transactionRepo.countNew().isEmpty())
+        vm.close()
+    }
+
+    @Test
     fun `a confirmed identical manual entry is added as a second booking`() = runBlocking {
         val vm = TransactionsViewModel(today = { today })
         repeat(2) { vm.addManualTransaction(account, today, BigDecimal("-3.50"), "Café", "Coffee", null).join() }
@@ -223,6 +233,16 @@ class ViewModelsTest {
         return savings
     }
 
+    /** A booking only a bank sync creates: unread until its account is opened. */
+    private fun newBooking(accountId: Int, amount: String, partner: String, day: Int = 3): Int = data.transactionRepo.create(
+        accountId = accountId,
+        date = LocalDate.of(2026, 3, day),
+        amount = BigDecimal(amount),
+        partnerName = partner,
+        hash = "new-$accountId-$partner-$day",
+        isNew = true,
+    ).id.value
+
     @Test
     fun `selecting a group filters to its accounts and an empty custom group shows none`() = runBlocking {
         savingsAccountWithBooking()
@@ -315,6 +335,129 @@ class ViewModelsTest {
         assertNull(vm.state.value.balances, "a group hides it")
         assertNull(vm.state.value.accountId)
         vm.close()
+    }
+
+    @Test
+    fun `opening an account clears its unread count but keeps its bookings bold`() = runBlocking {
+        val fresh = newBooking(account, "-12.00", "Fresh")
+        assertEquals(mapOf(account to 1), data.transactionRepo.countNew())
+
+        val vm = TransactionsViewModel(today = { today })
+        vm.start(accountId = account).join()
+
+        assertTrue(fresh in vm.state.value.boldIds, "the freshly imported booking stays bold")
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "opening the account marks it read in the database")
+        assertEquals(0, vm.state.value.accounts.first { it.id == account }.newCount, "the panel badge drops to zero")
+        assertNull(vm.state.value.error)
+        vm.close()
+    }
+
+    @Test
+    fun `a new booking dated last month stays bold after opening the account`() = runBlocking {
+        val late = data.transactionRepo.create(
+            accountId = account,
+            date = LocalDate.of(2026, 2, 27),
+            amount = BigDecimal("-8.00"),
+            partnerName = "Late",
+            hash = "new-late",
+            isNew = true,
+        ).id.value
+
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.selectAccounts(AccountSelection.Account(account)).join()
+        assertTrue(vm.state.value.transactions.none { it.id == late }, "this month's list doesn't show it")
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "opening the account clears it anyway")
+
+        vm.updatePeriod(Period.ALL).join()
+        assertTrue(vm.state.value.transactions.any { it.id == late })
+        assertTrue(late in vm.state.value.boldIds, "it was captured before the clear, so it is still shown as new")
+        vm.close()
+    }
+
+    @Test
+    fun `selecting another account replaces the bold bookings`() = runBlocking {
+        val other = data.account(iban = "DE44500105175407324931", balance = "0")
+        val first = newBooking(account, "-12.00", "Fresh")
+        val second = newBooking(other, "-3.00", "OtherFresh")
+
+        val vm = TransactionsViewModel(today = { today })
+        vm.start(accountId = account).join()
+        assertEquals(setOf(first), vm.state.value.boldIds)
+
+        vm.selectAccounts(AccountSelection.Account(other)).join()
+        assertEquals(setOf(second), vm.state.value.boldIds, "a changed selection replaces the bold set, it never accumulates")
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "the newly opened account is read too")
+        vm.close()
+    }
+
+    @Test
+    fun `all accounts and groups never clear the counter automatically`() = runBlocking {
+        val accountNew = newBooking(account, "-12.00", "Fresh")
+        val other = data.account(iban = "DE44500105175407324931", balance = "0")
+        val otherNew = newBooking(other, "-3.00", "OtherFresh")
+
+        val vm = TransactionsViewModel(today = { today })
+        vm.loadTransactions().join()
+        vm.updatePeriod(Period.ALL).join()
+
+        assertEquals(mapOf(account to 1, other to 1), data.transactionRepo.countNew(), "the default All view clears nothing")
+        assertEquals(setOf(accountNew, otherNew), vm.state.value.boldIds)
+        assertEquals(2, vm.state.value.accounts.sumOf { it.newCount }, "All accounts and each account show their count")
+
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Type("checking"))).join()
+        assertEquals(mapOf(account to 1, other to 1), data.transactionRepo.countNew(), "selecting a group clears nothing either")
+        vm.close()
+    }
+
+    @Test
+    fun `markRead clears a group's accounts and All clears everything`() = runBlocking {
+        val accountNew = newBooking(account, "-12.00", "Fresh")
+        val other = data.account(iban = "DE44500105175407324931", balance = "0")
+        val otherNew = newBooking(other, "-3.00", "OtherFresh")
+        val savings = data.accountRepo.create(
+            data.bankAccessRepo.create("Savings Bank", "12345678", "", "savings-user").id.value,
+            "DE02120300000000202051",
+            accountType = "savings",
+        ).id.value
+        newBooking(savings, "-1.00", "SavingsFresh", day = 4)
+
+        val vm = TransactionsViewModel(today = { today })
+        vm.loadTransactions().join()
+        vm.updatePeriod(Period.ALL).join()
+
+        vm.markRead(AccountSelection.Group(GroupKey.Type("checking"))).join()
+        assertEquals(mapOf(savings to 1), data.transactionRepo.countNew(), "only the group's checking accounts are cleared")
+        assertTrue(vm.state.value.boldIds.containsAll(listOf(accountNew, otherNew)), "the explicit action keeps the bold rows")
+
+        vm.markRead(AccountSelection.All).join()
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "All clears whatever is left")
+        assertNull(vm.state.value.error)
+        vm.close()
+    }
+
+    @Test
+    fun `a restored account selection and a deep link clear the count like a click`() = runBlocking {
+        newBooking(account, "-12.00", "Fresh")
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.selectAccounts(AccountSelection.Account(account)).join()
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "a click clears it")
+        vm.close()
+
+        // A later sync makes the account unread again
+        data.transactionRepo.create(account, LocalDate.of(2026, 3, 5), BigDecimal("-2.00"), hash = "new-restored", isNew = true)
+        val restored = TransactionsViewModel(today = { today })
+        restored.start().join()
+        assertEquals(AccountSelection.Account(account), restored.state.value.selection)
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "restoring the stored selection clears it like a click")
+        restored.close()
+
+        data.transactionRepo.create(account, LocalDate.of(2026, 3, 6), BigDecimal("-2.00"), hash = "new-deep-link", isNew = true)
+        val linked = TransactionsViewModel(today = { today })
+        linked.start(accountId = account).join()
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "start(accountId) clears it like a click")
+        linked.close()
     }
 
     @Test

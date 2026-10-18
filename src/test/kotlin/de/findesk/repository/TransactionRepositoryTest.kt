@@ -100,4 +100,29 @@ class TransactionRepositoryTest {
 
         assertTrue(transactionRepo.findItems(TransactionFilter(accountIds = emptySet())).isEmpty(), "an empty set matches nothing")
     }
+
+    @Test
+    fun `countNew is per account and markRead clears the requested scope`() {
+        val bank = bankAccessRepo.create("Third Bank", "99999999", "THIRDDEFF", "user3")
+        val second = accountRepo.create(bank.id.value, "DE44500105175407324931").id.value
+        // One booking far outside any period on screen: opening the account must still clear it
+        transactionRepo.create(testAccountId, LocalDate.of(2020, 1, 1), BigDecimal("-1.00"), hash = "new-a-old", isNew = true)
+        transactionRepo.create(testAccountId, LocalDate.now(), BigDecimal("-2.00"), hash = "new-a-now", isNew = true)
+        transactionRepo.create(second, LocalDate.now(), BigDecimal("-3.00"), hash = "new-b", isNew = true)
+        transactionRepo.create(second, LocalDate.now(), BigDecimal("-4.00"), hash = "read-b")
+
+        assertEquals(mapOf(testAccountId to 2, second to 1), transactionRepo.countNew())
+
+        transactionRepo.markRead(emptySet())
+        assertEquals(mapOf(testAccountId to 2, second to 1), transactionRepo.countNew(), "an empty set clears nothing")
+
+        transactionRepo.markRead(setOf(testAccountId))
+        assertEquals(mapOf(second to 1), transactionRepo.countNew(), "only the named account is cleared, however old its bookings")
+
+        transactionRepo.markRead(null)
+        assertTrue(transactionRepo.countNew().isEmpty(), "null clears every account")
+
+        // This class shares one database across its tests, so leave the extra account out of it again
+        accountRepo.deleteWithTransactions(second)
+    }
 }

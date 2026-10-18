@@ -242,6 +242,8 @@ class BankingService(
             transactionRepository,
         )
         val rules = ruleRepository.matcher()
+        // The first import into an account is its history, not news: connecting a bank must not make 90 days bold
+        val isFirstImport = !transactionRepository.hasBookings(accountId)
         val rows = plan.toImport.map { candidate ->
             val t = candidate.item
             NewTransaction(
@@ -254,6 +256,7 @@ class BankingService(
                 categoryId = rules.categoryFor(purpose = t.purpose, partnerName = t.partnerName),
                 hash = candidate.hash,
                 balanceAfter = t.balanceAfter,
+                isNew = !isFirstImport,
             )
         }
         val imported = transactionRepository.createAll(rows)

@@ -313,6 +313,16 @@ class StatementImportServiceTest {
         assertBalanceChainHasNoMismatch()
     }
 
+    @Test
+    fun `bookings from an imported file are never marked new`() = runBlocking {
+        val csv = file("plain.csv", "Buchungstag;Betrag;Beguenstigter/Zahlungspflichtiger;Verwendungszweck\n03.10.2026;-4,50;Bäcker;Kaffee\n02.10.2026;-10,00;Kiosk;Zeitung\n")
+        val report = service.import(account, service.read(csv))
+
+        assertEquals(2, report.imported)
+        assertTrue(data.transactionRepo.findItems().none { it.isNew }, "a file the user chose is not bank news")
+        assertTrue(data.transactionRepo.countNew().isEmpty())
+    }
+
     /** The stored balances must chain back from the account balance without any gap. */
     private fun assertBalanceChainHasNoMismatch() {
         val balance = data.accountRepo.findAllItems().single { it.id == account }.balance

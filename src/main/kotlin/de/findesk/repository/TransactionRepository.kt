@@ -14,6 +14,7 @@ import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -34,6 +35,8 @@ data class NewTransaction(
     val hash: String,
     /** The bank's running balance after this booking, when the statement reported one. */
     val balanceAfter: BigDecimal? = null,
+    /** Only a bank sync sets this; see [BankingService.importTransactions]. */
+    val isNew: Boolean = false,
 )
 
 interface TransactionRepository {
@@ -53,6 +56,7 @@ interface TransactionRepository {
         documentId: Int? = null,
         hash: String,
         balanceAfter: BigDecimal? = null,
+        isNew: Boolean = false,
     ): Transaction
 
     /** Inserts all [bookings] in one database transaction: all or none, and far faster than one commit per booking. */
@@ -60,6 +64,18 @@ interface TransactionRepository {
     fun updateCategory(id: Int, categoryId: Int?): Transaction?
     fun delete(id: Int): Boolean
     fun findByHash(hash: String): Transaction?
+
+    /** Whether [accountId] has any booking yet; used to keep a bank's first import from looking all new. */
+    fun hasBookings(accountId: Int): Boolean
+
+    /** New (unread) bookings per account; accounts with none are absent from the map. */
+    fun countNew(): Map<Int, Int>
+
+    /**
+     * Marks every booking of [accountIds] as read (null = all accounts; an empty set does nothing). Covers the whole
+     * account, not only the period on screen, so a late booking dated last month cannot keep the counter up.
+     */
+    fun markRead(accountIds: Set<Int>?)
 
     /** Filtered, newest-first snapshot safe to use outside a transaction. */
     fun findItems(filter: TransactionFilter = TransactionFilter(), limit: Int? = null): List<TransactionItem>
@@ -108,6 +124,7 @@ class TransactionRepositoryImpl : TransactionRepository {
         documentId: Int?,
         hash: String,
         balanceAfter: BigDecimal?,
+        isNew: Boolean,
     ): Transaction = transaction {
         val account = Account.findById(accountId)
             ?: throw IllegalArgumentException("Account with id $accountId not found")
@@ -123,12 +140,13 @@ class TransactionRepositoryImpl : TransactionRepository {
             this.category = category
             this.hash = hash
             this.createdAt = LocalDateTime.now()
+            this.isNew = isNew
         }
     }
 
     override fun createAll(bookings: List<NewTransaction>): Int = transaction {
         bookings.forEach { b ->
-            create(b.accountId, b.date, b.amount, b.currency, b.partnerName, b.purpose, b.categoryId, hash = b.hash, balanceAfter = b.balanceAfter)
+            create(b.accountId, b.date, b.amount, b.currency, b.partnerName, b.purpose, b.categoryId, hash = b.hash, balanceAfter = b.balanceAfter, isNew = b.isNew)
         }
         bookings.size
     }
@@ -207,5 +225,33 @@ class TransactionRepositoryImpl : TransactionRepository {
         TransactionsTable.selectAll().where {
             (TransactionsTable.accountId eq accountId) and (TransactionsTable.date eq date) and (TransactionsTable.amount eq amount)
         }.count().toInt()
+    }
+
+    override fun hasBookings(accountId: Int): Boolean = transaction {
+        Transaction.find { TransactionsTable.accountId eq accountId }.limit(1).any()
+    }
+
+    override fun countNew(): Map<Int, Int> = transaction {
+        val count = TransactionsTable.id.count()
+        TransactionsTable
+            .select(TransactionsTable.accountId, count)
+            .where { TransactionsTable.isNew eq true }
+            .groupBy(TransactionsTable.accountId)
+            .associate { it[TransactionsTable.accountId].value to it[count].toInt() }
+    }
+
+    override fun markRead(accountIds: Set<Int>?) {
+        // An empty set names no account, so there is nothing to clear
+        if (accountIds != null && accountIds.isEmpty()) return
+        transaction {
+            with(SqlExpressionBuilder) {
+                val condition = if (accountIds == null) {
+                    TransactionsTable.isNew eq true
+                } else {
+                    (TransactionsTable.accountId inList accountIds) and (TransactionsTable.isNew eq true)
+                }
+                TransactionsTable.update({ condition }) { it[isNew] = false }
+            }
+        }
     }
 }

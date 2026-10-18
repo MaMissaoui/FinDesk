@@ -254,6 +254,33 @@ class ScreenshotTest {
         render("transactions-panel-narrow", 1024, 800) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
     }
 
+    /** The unread-booking counter: panel badges, a bold account name and bold rows for a sync's fresh bookings. */
+    @Test
+    fun `render transactions with new bookings`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-new").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        val household = accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        accounts.rename(household, "Haushalt")
+        val joint = accounts.create(bank, "DE44500105175407324931", balance = BigDecimal("812.40")).id.value
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(household, today.minusDays(2), BigDecimal("-20.00"), "EUR", "Bäckerei", "Brötchen", null, "new-1", isNew = true),
+                NewTransaction(household, today.minusDays(1), BigDecimal("120.00"), "EUR", "Employer GmbH", "Gehalt", null, "new-2", isNew = true),
+                NewTransaction(joint, today, BigDecimal("-9.99"), "EUR", "Kiosk", "Zeitung", null, "new-3", isNew = true),
+            ),
+        )
+
+        // A group selection keeps its badge while highlighted; selecting one account would clear its own badge,
+        // so the group shows the badge-on-highlight case (readable in dark mode) plus the bold rows underneath.
+        fun panel(): TransactionsViewModel = TransactionsViewModel().apply {
+            runBlocking { selectAccounts(AccountSelection.Group(GroupKey.Type("checking"))).join() }
+        }
+        render("transactions-new", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::panel) }
+        render("transactions-new-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel) }
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {

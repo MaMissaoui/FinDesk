@@ -172,6 +172,41 @@ class BankingSyncTest {
     }
 
     @Test
+    fun `the first import into an empty account marks no booking new`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "980.00", booking(giro, today.minusDays(3), "-20.00", "Shop", "A", balanceAfter = "980.00")))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        assertEquals(1, data.transactionRepo.findItems().size)
+        assertTrue(data.transactionRepo.findItems().none { it.isNew }, "connecting a bank must not make its history bold")
+        assertTrue(data.transactionRepo.countNew().isEmpty(), "the first import has nothing unread")
+    }
+
+    @Test
+    fun `a second import marks exactly the new bookings and never re-flags duplicates`() = runBlocking {
+        val existing = booking(giro, today.minusDays(3), "-20.00", "Shop", "A", balanceAfter = "980.00")
+        gateway.snapshots = listOf(snapshot(giro, "980.00", existing))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        data.bankAccessRepo.setSyncFrom(bankId, today.minusDays(400))
+        gateway.snapshots = listOf(
+            snapshot(
+                giro,
+                "945.00",
+                existing,
+                booking(giro, today.minusDays(1), "-5.00", "Shop", "B", balanceAfter = "975.00"),
+                booking(giro, today, "-30.00", "Shop", "C", balanceAfter = "945.00"),
+            ),
+        )
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(2, report.imported)
+        assertEquals(1, report.duplicates)
+        val accountId = data.accountRepo.findAllItems().single().id
+        assertEquals(mapOf(accountId to 2), data.transactionRepo.countNew(), "only the two freshly imported bookings are unread")
+        assertEquals(setOf("B", "C"), data.transactionRepo.findItems().filter { it.isNew }.map { it.purpose }.toSet(), "the re-fetched duplicate stays read")
+    }
+
+    @Test
     fun `same-day bookings keep their running balances and chain without a mismatch`() = runBlocking {
         gateway.snapshots = listOf(
             snapshot(

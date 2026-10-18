@@ -22,4 +22,5 @@ class Transaction(id: EntityID<Int>) : IntEntity(id) {
     var document by Document optionalReferencedOn TransactionsTable.documentId
     var hash by TransactionsTable.hash
     var createdAt by TransactionsTable.createdAt
+    var isNew by TransactionsTable.isNew
 }
