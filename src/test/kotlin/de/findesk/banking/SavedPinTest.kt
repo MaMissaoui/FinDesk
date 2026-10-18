@@ -334,6 +334,26 @@ class SavedPinTest {
     }
 
     @Test
+    fun `deleting a profile forgets the PINs remembered in it`() = runBlocking {
+        val root = File(tmp, "root")
+        val profiles = de.findesk.util.ProfileStore(root)
+        val business = profiles.create("Business")
+        val passports = File(business.dir, "passports")
+        val profileClient = FinTSClient(gateway = gateway, passportDir = passports, credentialStore = { store })
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        BankingService(finTSClient = profileClient, today = { today }).syncBankConnection(bankId, PinAnsweringInteraction(remember = true))
+        // HBCI4Java writes the passport during the dialog; the fake gateway doesn't
+        File(passports, "bank-$bankId.dat").apply { parentFile.mkdirs() }.writeText("passport")
+        assertEquals("12345", store.entries[FinTSClient.pinKey(business.dir, bankId)], "precondition: kept under the profile's key")
+
+        val vm = de.findesk.viewmodel.SettingsViewModel(dataDirectory = tmp.absolutePath, profileStore = profiles, openProfile = null, credentialStore = { store })
+        vm.deleteProfile(business.slug!!).join()
+
+        assertTrue(store.entries.isEmpty())
+        vm.close()
+    }
+
+    @Test
     fun `tests never reach a real credential store`() {
         assertSame(NoCredentialStore, CredentialStores.system())
         assertFalse(CredentialStores.system().isAvailable)

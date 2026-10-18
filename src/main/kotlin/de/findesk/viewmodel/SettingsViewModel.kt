@@ -310,8 +310,8 @@ class SettingsViewModel(
         if (!store.isAvailable) return
         val passports = profileDir.resolve("passports")
         passports.listFiles { file -> file.isFile && file.name.startsWith("bank-") && file.name.endsWith(".dat") }.orEmpty().forEach { passport ->
-            val id = passport.name.removePrefix("bank-").removeSuffix(".dat")
-            runCatching { store.delete("${profileDir.absolutePath}#bank-$id") }
+            val id = passport.name.removePrefix("bank-").removeSuffix(".dat").toIntOrNull() ?: return@forEach
+            runCatching { store.delete(de.findesk.banking.FinTSClient.pinKey(profileDir, id)) }
         }
     }
 
