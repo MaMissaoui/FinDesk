@@ -112,6 +112,25 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `show all from a partner clears the narrowing filters`() = runBlocking {
+        val other = data.account(iban = "DE44500105175407324931", balance = "0")
+        data.txn(other, LocalDate.of(2025, 11, 3), "-12.00", partner = "REWE")
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.updateDirection(Direction.INCOME).join()
+        vm.updateAccountFilter(account).join()
+
+        vm.showPartner("REWE").join()
+
+        val s = vm.state.value
+        assertEquals(listOf("REWE", "REWE"), s.transactions.map { it.partnerName }, "this month and last year, both accounts")
+        assertEquals(Period.ALL, s.period)
+        assertEquals(Direction.ALL, s.direction)
+        assertNull(s.accountId)
+        vm.close()
+    }
+
+    @Test
     fun `the manual duplicate check is per account`() = runBlocking {
         val other = data.account(iban = "DE44500105175407324931", balance = "0")
         val vm = TransactionsViewModel(today = { today })

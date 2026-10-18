@@ -165,7 +165,13 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                 if (state.recentTransactions.isEmpty()) {
                     Text(s[StringKey.NoTransactionsYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                state.recentTransactions.forEach { RecentTransactionRow(it) }
+                state.recentTransactions.forEach { txn ->
+                    RowContextMenu(
+                        txn.partnerName?.let { partner ->
+                            menuItem(s.format(StringKey.ShowAllFromPartner, partner)) { onNavigate(Screen.TRANSACTIONS, NavigationArgs(partner = partner)) }
+                        },
+                    ) { RecentTransactionRow(txn) }
+                }
             }
         }
     }

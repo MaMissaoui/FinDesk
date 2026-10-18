@@ -38,6 +38,8 @@ enum class ScreenRequest { NEW_TRANSACTION, IMPORT_STATEMENT }
 data class NavigationArgs(
     val accountId: Int? = null,
     val uncategorizedOnly: Boolean = false,
+    /** Show every booking from this partner (search set to the name, other filters cleared). */
+    val partner: String? = null,
     val request: ScreenRequest? = null,
     /** Makes a repeated request a new value, so the screen sees it again. */
     val requestId: Long = 0,

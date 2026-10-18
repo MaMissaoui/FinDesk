@@ -29,6 +29,7 @@ import de.findesk.i18n.strings
 import de.findesk.model.DocumentItem
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
+import de.findesk.ui.platform.Platform
 import de.findesk.ui.theme.Success
 import de.findesk.util.Formats
 import de.findesk.viewmodel.DocumentTab
@@ -104,7 +105,14 @@ fun DocumentsScreen() {
                 }
                 LazyColumn {
                     items(state.documents, key = { it.id }) { doc ->
-                        DocumentRow(doc, selected = state.selectedDocument?.id == doc.id) { vm.selectDocument(doc) }
+                        RowContextMenu(
+                            menuItem(s[StringKey.Open]) { openExternally(File(doc.filePath)) },
+                            menuItem(s[revealLabel()]) { revealInFileManager(File(doc.filePath)) },
+                            doc.linkedTransactionId?.let { menuItem(s[StringKey.Unlink]) { vm.unlinkFromTransaction(doc.id) } },
+                            menuItem(s[StringKey.Delete]) { confirmDelete = doc },
+                        ) {
+                            DocumentRow(doc, selected = state.selectedDocument?.id == doc.id) { vm.selectDocument(doc) }
+                        }
                         HorizontalDivider()
                     }
                 }
@@ -276,6 +284,28 @@ private fun LinkCandidateRow(txn: TransactionItem, badge: String?, onLink: () ->
         }
         TextButton(onClick = onLink) { Text(strings()[StringKey.Link]) }
     }
+}
+
+/** What the file manager is called here: Finder, Explorer, or a plain folder on Linux. */
+private fun revealLabel(): StringKey = when {
+    Platform.isMac -> StringKey.ShowInFinder
+    Platform.isWindows -> StringKey.ShowInExplorer
+    else -> StringKey.ShowInFolder
+}
+
+/** Shows [file] selected in the file manager; where the JDK can't select it (Linux), opens its folder instead. */
+private fun revealInFileManager(file: File) {
+    if (!file.exists()) return
+    Thread {
+        runCatching {
+            val desktop = Desktop.getDesktop()
+            when {
+                desktop.isSupported(Desktop.Action.BROWSE_FILE_DIR) -> desktop.browseFileDirectory(file)
+                Platform.isWindows -> ProcessBuilder("explorer.exe", "/select,", file.absolutePath).start()
+                else -> desktop.open(file.parentFile)
+            }
+        }
+    }.start()
 }
 
 private fun openExternally(file: File) {

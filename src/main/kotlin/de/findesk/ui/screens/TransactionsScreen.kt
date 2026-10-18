@@ -49,9 +49,13 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
-    LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly) }
+    LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly, args.partner) }
 
     var showAdd by remember { mutableStateOf(false) }
+    val attachReceipt: (Int) -> Unit = { transactionId ->
+        val files = FileDialogs.openFiles(s[StringKey.AttachReceipt], de.findesk.document.DocumentService.SUPPORTED_EXTENSIONS)
+        if (files.isNotEmpty()) vm.attachDocuments(transactionId, files)
+    }
     val openImport = {
         FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
     }
@@ -177,13 +181,20 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                 }
                 LazyColumn {
                     items(state.transactions, key = { it.id }) { txn ->
-                        TransactionRow(
-                            txn = txn,
-                            categories = state.categories,
-                            onCategory = { vm.updateTransactionCategory(txn.id, it) },
-                            onDelete = { confirmDelete = txn },
-                            onOpen = { vm.selectTransaction(txn) },
-                        )
+                        RowContextMenu(
+                            menuItem(s[StringKey.OpenDetails]) { vm.selectTransaction(txn) },
+                            menuItem(s[StringKey.AttachReceipt]) { attachReceipt(txn.id) },
+                            txn.partnerName?.let { partner -> menuItem(s.format(StringKey.ShowAllFromPartner, partner)) { vm.showPartner(partner) } },
+                            menuItem(s[StringKey.Delete]) { confirmDelete = txn },
+                        ) {
+                            TransactionRow(
+                                txn = txn,
+                                categories = state.categories,
+                                onCategory = { vm.updateTransactionCategory(txn.id, it) },
+                                onDelete = { confirmDelete = txn },
+                                onOpen = { vm.selectTransaction(txn) },
+                            )
+                        }
                         HorizontalDivider()
                     }
                 }
@@ -199,10 +210,7 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
             account = state.accounts.firstOrNull { it.id == txn.accountId },
             suggestedPattern = vm.rulePatternFor(txn),
             onCategory = { vm.updateTransactionCategory(txn.id, it) },
-            onAttach = {
-                val files = FileDialogs.openFiles(s[StringKey.AttachReceipt], de.findesk.document.DocumentService.SUPPORTED_EXTENSIONS)
-                if (files.isNotEmpty()) vm.attachDocuments(txn.id, files)
-            },
+            onAttach = { attachReceipt(txn.id) },
             onCreateRule = { pattern, categoryId -> vm.createRule(pattern, categoryId) },
             onClose = { vm.selectTransaction(null) },
         )

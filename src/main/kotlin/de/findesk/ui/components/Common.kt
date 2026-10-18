@@ -1,5 +1,7 @@
 package de.findesk.ui.components
 
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.layout.*
@@ -284,3 +286,18 @@ fun DisabledReason(reason: String?, content: @Composable () -> Unit) {
         Box(Modifier.semantics { stateDescription = reason }) { content() }
     }
 }
+
+/**
+ * A right-click menu on [content] with shortcuts to actions that are also reachable through visible buttons, since
+ * context menus are mouse-only. Null entries are left out, for actions that don't apply to this row.
+ */
+@Composable
+fun RowContextMenu(vararg items: Pair<String, () -> Unit>?, content: @Composable () -> Unit) {
+    val entries = items.filterNotNull()
+    // No applicable action: no menu at all rather than an empty one
+    if (entries.isEmpty()) return content()
+    ContextMenuArea(items = { entries.map { (label, action) -> ContextMenuItem(label, action) } }, content = content)
+}
+
+/** One [RowContextMenu] entry; taking `() -> Unit` here lets actions that return a value (e.g. a Job) be used as is. */
+fun menuItem(label: String, action: () -> Unit): Pair<String, () -> Unit> = label to action
