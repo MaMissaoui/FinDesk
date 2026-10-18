@@ -15,8 +15,10 @@ import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
 import de.findesk.util.AccountGroupView
+import de.findesk.util.BalanceHistory
 import de.findesk.util.Currencies
 import de.findesk.util.GroupKey
+import de.findesk.util.RunningBalance
 import de.findesk.util.grandTotal
 import de.findesk.util.group
 import kotlinx.coroutines.CoroutineScope
@@ -106,7 +108,11 @@ data class TransactionsState(
     /** The custom groups as loaded, for rename, move and delete. */
     val customGroups: List<AccountGroupItem> = emptyList(),
     /** Balance after each shown booking's id, when one non-depot account is selected; null hides the column. */
-    val balances: Map<Int, de.findesk.util.RunningBalance.Entry>? = null,
+    val balances: Map<Int, RunningBalance.Entry>? = null,
+    /** The selected account's balance per day over the shown period, oldest first; null hides the chart. */
+    val balanceChart: List<Pair<LocalDate, BigDecimal>>? = null,
+    /** Whether the balance-chart card's body is folded away; persisted per profile, view state only. */
+    val chartCollapsed: Boolean = false,
     /** The selected account's balance and currency, for the header. */
     val currentBalance: BigDecimal? = null,
     val balanceCurrency: String? = null,
@@ -160,6 +166,8 @@ class TransactionsViewModel(
     private var restoreSelection = false
 
     private var collapsedLoaded = false
+
+    private var chartCollapsedLoaded = false
 
     /** The selection the last [refresh] resolved, so a changed selection can reset [TransactionsState.boldIds]. */
     private var lastRefreshedSelection: AccountSelection? = null
@@ -258,6 +266,7 @@ class TransactionsViewModel(
                 grandTotal = grandTotal(accounts, primary),
                 // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
                 collapsed = if (collapsedLoaded) it.collapsed else loadCollapsed().also { collapsedLoaded = true },
+                chartCollapsed = if (chartCollapsedLoaded) it.chartCollapsed else loadChartCollapsed().also { chartCollapsedLoaded = true },
                 selection = selection,
                 accountId = (selection as? AccountSelection.Account)?.id,
             )
@@ -284,8 +293,13 @@ class TransactionsViewModel(
         // filter hides rows but never changes their balances. A depot's balance is a market value, not the sum of
         // its bookings, so the column only makes sense for a single non-depot account.
         val balanceAccount = accounts.firstOrNull { it.id == _state.value.accountId }?.takeIf { it.accountType != "depot" }
-        val balances = balanceAccount?.let {
-            de.findesk.util.RunningBalance.compute(it.balance, transactionRepository.findItems(TransactionFilter(accountId = it.id)))
+        // One query feeds both the column and the chart, so the two can never disagree.
+        val accountBookings = balanceAccount?.let { transactionRepository.findItems(TransactionFilter(accountId = it.id)).toList() }
+        val balances = if (balanceAccount != null && accountBookings != null) RunningBalance.compute(balanceAccount.balance, accountBookings) else null
+        val balanceChart = if (balanceAccount != null && accountBookings != null && balances != null) {
+            balanceChartPoints(accountBookings, balances, _state.value.period, today())
+        } else {
+            null
         }
         _state.update {
             it.copy(
@@ -296,6 +310,7 @@ class TransactionsViewModel(
                 grandTotal = grandTotal(accounts, primary),
                 boldIds = boldIds,
                 balances = balances,
+                balanceChart = balanceChart,
                 currentBalance = balanceAccount?.balance,
                 balanceCurrency = balanceAccount?.currency,
                 totalIncome = Currencies.totals(transactions.filter { t -> t.amount.signum() > 0 }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount }),
@@ -349,6 +364,26 @@ class TransactionsViewModel(
         ?.filter { it.isNotEmpty() }
         ?.toSet()
         .orEmpty()
+
+    private fun loadChartCollapsed(): Boolean = settingsRepository.getValue(KEY_CHART_COLLAPSED)?.toBooleanStrictOrNull() ?: false
+
+    /**
+     * One point per day over the shown period, clamped to [now]: `Period.ALL` starts at the account's oldest
+     * booking. The chart follows the running-balance entries, so it shows the account's balance whatever the
+     * search, direction, category or amount filters do to the list.
+     */
+    private fun balanceChartPoints(
+        bookings: List<TransactionItem>,
+        running: Map<Int, RunningBalance.Entry>,
+        period: Period,
+        now: LocalDate,
+    ): List<Pair<LocalDate, BigDecimal>> {
+        val (start, end) = period.range(now)
+        val from = start ?: bookings.minOfOrNull { it.date } ?: return emptyList()
+        // The period's end, but never past today: the balance of a future day is not known
+        val to = if (end == null || end.isAfter(now)) now else end
+        return BalanceHistory.fromRunning(bookings, running, from, to)
+    }
 
     /** Debounced so typing doesn't fire a query per keystroke. */
     fun updateSearchQuery(query: String): Job {
@@ -411,6 +446,13 @@ class TransactionsViewModel(
         val next = if (key.id in collapsed) collapsed - key.id else collapsed + key.id
         _state.update { it.copy(collapsed = next) }
         return launchSafely(onError) { settingsRepository.setValue(KEY_COLLAPSED, next.sorted().joinToString(",")) }
+    }
+
+    /** Collapses or expands the balance chart; view state only, so it is persisted but not audited. */
+    fun toggleChart(): Job {
+        val next = !_state.value.chartCollapsed
+        _state.update { it.copy(chartCollapsed = next) }
+        return launchSafely(onError) { settingsRepository.setValue(KEY_CHART_COLLAPSED, next.toString()) }
     }
 
     /** Filters the panel's account rows by name, IBAN or bank; the booking list is unaffected. */
@@ -654,5 +696,8 @@ class TransactionsViewModel(
         /** Settings keys holding the account panel's selection and collapsed groups, per profile. */
         const val KEY_SELECTION = "transactions.selection"
         const val KEY_COLLAPSED = "accountGroups.collapsed"
+
+        /** Whether the balance chart is folded away, per profile. */
+        const val KEY_CHART_COLLAPSED = "transactions.chartCollapsed"
     }
 }

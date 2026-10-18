@@ -191,6 +191,9 @@ class ScreenshotTest {
         fun showing(): TransactionsViewModel = TransactionsViewModel()
         render("transactions-balance", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
         render("transactions-balance-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+        // The chart folded away: only its header row remains, restored from the stored setting
+        SettingsRepositoryImpl().setValue(TransactionsViewModel.KEY_CHART_COLLAPSED, "true")
+        render("transactions-chart-collapsed", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
     }
 
     @Test
