@@ -1,5 +1,6 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.io.File
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.file.Files
@@ -222,6 +223,16 @@ fun runTool(vararg command: String): String {
     return output.trim()
 }
 
+/** [runTool] without the exit-code check, for probes whose "no" is an answer: null when the tool is missing. */
+fun runToolOrNull(vararg command: String): Pair<Int, String>? = try {
+    val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+    val output = process.inputStream.bufferedReader().readText()
+    // trimEnd, not trim: porcelain's first line starts with the index status, and a leading space is meaningful
+    process.waitFor() to output.trimEnd()
+} catch (_: IOException) {
+    null // e.g. git is not installed
+}
+
 /** Mounts [dmg] at a fresh directory, runs [action] on the mount point and always detaches it again. */
 fun <T> withMountedDmg(dmg: File, readOnly: Boolean, action: (File) -> T): T {
     val mount = layout.buildDirectory.dir("tmp/dmg-mount").get().asFile.apply {
@@ -316,6 +327,46 @@ tasks.register("verifyInstallerIcon") {
     }
 }
 
+// Refuses to install a work-in-progress build: `install-mac.command` / `./gradlew installMacApp`
+// otherwise package whatever the checkout holds, so a feature branch with uncommitted, unreviewed
+// changes silently became the user's real app. installMacApp depends on this, and
+// createDistributable/verifyInstallerIcon wait for it, so a failing check builds nothing.
+//   ./gradlew checkInstallSource [-Pforce]
+tasks.register("checkInstallSource") {
+    group = "distribution"
+    description = "Fails when this checkout has uncommitted changes or its HEAD is not a release tag (pass -Pforce to install anyway)"
+    doLast {
+        val force = providers.gradleProperty("force").isPresent
+        // git is not required: a source zip has no checkout to verify, and installing from one was always allowed
+        val status = runToolOrNull("git", "status", "--porcelain")?.takeIf { it.first == 0 }
+        val source: String
+        if (status == null) {
+            println("Warning: not a git checkout (or git is not installed), so FinDesk cannot tell whether this is a released build.")
+            source = "an unversioned checkout"
+        } else {
+            // Porcelain lines are "XY <path>"; name the first five so the failure is actionable
+            val changed = status.second.lines().map { it.drop(3).trim() }.filter { it.isNotEmpty() }
+            if (changed.isNotEmpty() && !force) {
+                error("This checkout has uncommitted changes (${changed.take(5).joinToString(", ")}). Install from a clean checkout of a release, or pass -Pforce to install it anyway.")
+            }
+            val described = runToolOrNull("git", "describe", "--tags", "--exact-match", "--match", "v*", "HEAD") ?: (1 to "")
+            val tag = described.second.takeIf { described.first == 0 && it.isNotEmpty() }
+            val sha = runTool("git", "rev-parse", "--short", "HEAD")
+            val branch = runTool("git", "rev-parse", "--abbrev-ref", "HEAD").let { if (it == "HEAD") "detached HEAD" else it }
+            if (tag == null && !force) {
+                error("HEAD ($sha on $branch) is not a release. Check out a release first, e.g. git checkout v$version, or pass -Pforce.")
+            }
+            source = tag ?: "$branch@$sha"
+        }
+        if (force) println("Warning: -Pforce is set, installing FinDesk $version from $source even if it is not a clean release.")
+        println("Installing FinDesk $version from $source")
+    }
+}
+
+// Decide before anything is packaged, so a failed check leaves the build directory untouched
+tasks.matching { it.name == "createDistributable" }.configureEach { mustRunAfter("checkInstallSource") }
+tasks.matching { it.name == "verifyInstallerIcon" }.configureEach { mustRunAfter("checkInstallSource") }
+
 // One-step local install on macOS: builds the self-contained FinDesk.app (it carries its own Java runtime) and
 // puts it into /Applications. A previous FinDesk.app is moved to the Trash, not deleted, so it can be dragged
 // back. `install-mac.command` runs this on a double-click in Finder.
@@ -323,7 +374,7 @@ tasks.register("verifyInstallerIcon") {
 tasks.register("installMacApp") {
     group = "distribution"
     description = "Builds FinDesk.app and installs it into /Applications (a previous version goes to the Trash)"
-    dependsOn("createDistributable", "verifyInstallerIcon")
+    dependsOn("createDistributable", "verifyInstallerIcon", "checkInstallSource")
     val installDir = providers.gradleProperty("installDir").orElse("/Applications")
     doLast {
         check(isMacHost) { "installMacApp builds a macOS app bundle and only runs on macOS" }
