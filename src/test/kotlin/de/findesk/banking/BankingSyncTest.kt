@@ -719,6 +719,18 @@ class HbciCallbackTest {
         assertEquals("checking", Hbci4JavaGateway.accountTypeFor(null))
     }
 
+    /** DKB's account data has no BIC, and HBCI4Java then refuses to queue CAMT statements ("KUmsZeitCamt1"). */
+    @Test
+    fun `an account without a BIC gets its bank's BIC`() {
+        assertEquals("BYLADEM1001", Hbci4JavaGateway.bicFor(null, "12030000", "DE02120300000000202051", "12030000"))
+        assertEquals("BYLADEM1001", Hbci4JavaGateway.bicFor("", null, "DE02120300000000202051", null))
+        assertEquals("BYLADEM1001", Hbci4JavaGateway.bicFor(null, null, null, "12030000"))
+        // A BIC from the bank always wins
+        assertEquals("COBADEFFXXX", Hbci4JavaGateway.bicFor("COBADEFFXXX", "12030000", null, null))
+        // Nothing to go on: left as it was, and HBCI4Java reports the missing BIC
+        assertNull(Hbci4JavaGateway.bicFor(null, "99999999", "FR7630006000011234567890189", null))
+    }
+
     @Test
     fun `closing the screen unblocks a waiting prompt and refuses new ones`() {
         val ui = UiBankingInteraction()

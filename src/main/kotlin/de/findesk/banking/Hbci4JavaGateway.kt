@@ -51,7 +51,7 @@ class Hbci4JavaGateway : FinTSGateway {
         to: LocalDate,
     ): List<AccountSnapshot> = withHandler(connection, interaction) { handler ->
         lastCapabilities = null
-        val kontos = handler.passport.accounts.orEmpty().toList()
+        val kontos = handler.kontos()
 
         class Pending(val konto: Konto, val from: LocalDate?) {
             var saldo: HBCIJob<*>? = null
@@ -110,7 +110,8 @@ class Hbci4JavaGateway : FinTSGateway {
     }.fold(
         onSuccess = { it to null },
         // A bank simply not offering the job shouldn't look like an error; anything else should be shown
-        onFailure = { e -> null to e.message?.takeIf { e !is JobNotSupportedException } },
+        // HBCI4Java wraps the reason in "error while adding task …"; the innermost message says what is actually wrong
+        onFailure = { e -> null to e.takeIf { it !is JobNotSupportedException }?.let { generateSequence(it) { c -> c.cause }.mapNotNull { c -> c.message }.lastOrNull() } },
     )
 
     override fun transfer(
@@ -311,7 +312,10 @@ class Hbci4JavaGateway : FinTSGateway {
         orderOutcome(job.jobResult.jobStatus, exec.errorString)?.let { throw it }
     }
 
-    private fun HBCIHandler.findKonto(iban: String): Konto = passport.accounts.orEmpty().firstOrNull { it.iban.equals(iban, ignoreCase = true) }
+    /** The login's accounts with their BIC filled in where the bank left it out; see [bicFor]. */
+    private fun HBCIHandler.kontos(): List<Konto> = passport.accounts.orEmpty().toList().onEach { it.bic = bicFor(it.bic, it.blz, it.iban, passport.blz) }
+
+    private fun HBCIHandler.findKonto(iban: String): Konto = kontos().firstOrNull { it.iban.equals(iban, ignoreCase = true) }
         ?: throw OrderNotExecutedException("Account ${iban.takeLast(4)} is not available with this bank login")
 
     private fun Konto.toAccount(connection: FinTSConnection) = FinTSAccount(
@@ -356,6 +360,16 @@ class Hbci4JavaGateway : FinTSGateway {
             val reason = status?.toString()?.trim()?.ifEmpty { null } ?: dialogError?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejected]
             return if (status != null && status.hasErrors() && !status.hasExceptions()) OrderNotExecutedException(reason) else IllegalStateException(reason)
         }
+
+        /**
+         * HBCI4Java requires the account's own BIC for balances, CAMT statements and every SEPA order, but takes it only
+         * from the bank's account data (UPD), and some banks (DKB) leave it out. Without it the job can't even be queued
+         * ("error while adding task KUmsZeitCamt1"). The BIC follows from the BLZ, so it is looked up in the bank directory.
+         */
+        internal fun bicFor(bic: String?, blz: String?, iban: String?, loginBlz: String?): String? = bic?.takeIf { it.isNotBlank() }
+            ?: listOfNotNull(blz, iban?.let(BankDirectory::blzFromIban), loginBlz)
+                .firstNotNullOfOrNull { BankDirectory.lookup(it)?.bic?.takeIf(String::isNotBlank) }
+            ?: bic
 
         /** FinTS account type codes: 1-9 checking, 10-19 savings, 30-39 depot, 50-59 credit card. */
         internal fun accountTypeFor(code: String?): String = when (code?.toIntOrNull()) {
