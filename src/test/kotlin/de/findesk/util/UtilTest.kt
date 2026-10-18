@@ -23,6 +23,17 @@ class UtilTest {
     }
 
     @Test
+    fun `date input accepts short and padded days and rejects impossible ones`() {
+        assertEquals(java.time.LocalDate.of(2026, 11, 5), Formats.parseDate("5.11.2026"))
+        assertEquals(java.time.LocalDate.of(2026, 11, 5), Formats.parseDate(" 05.11.2026 "))
+        assertEquals(java.time.LocalDate.of(2028, 2, 29), Formats.parseDate("29.02.2028"))
+        // Lenient parsing turned these into 28.02.; a scheduled transfer would then run on another day
+        assertNull(Formats.parseDate("31.02.2026"))
+        assertNull(Formats.parseDate("29.02.2027"))
+        assertNull(Formats.parseDate("32.01.2026"))
+    }
+
+    @Test
     fun `amount parsing accepts german and english input`() {
         assertEquals(BigDecimal("1234.56"), Formats.parseAmount("1.234,56"))
         assertEquals(BigDecimal("1234.56"), Formats.parseAmount("1,234.56"))

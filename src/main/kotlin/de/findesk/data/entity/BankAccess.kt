@@ -17,6 +17,7 @@ class BankAccess(id: EntityID<Int>) : IntEntity(id) {
     var tanMethod by BankAccessTable.tanMethod
     var serverUrl by BankAccessTable.serverUrl
     var lastSync by BankAccessTable.lastSync
+    var syncFrom by BankAccessTable.syncFrom
     var capabilities by BankAccessTable.capabilities
 
     val accounts by Account referrersOn AccountsTable.bankAccessId

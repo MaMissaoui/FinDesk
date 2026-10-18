@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankDirectory
+import de.findesk.banking.BankingService
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
@@ -35,6 +36,7 @@ import de.findesk.util.Formats
 import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
 import java.math.BigDecimal
+import java.time.LocalDate
 
 private val ACCOUNT_TYPES = listOf("checking", "savings", "credit_card", "depot")
 
@@ -51,6 +53,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     var confirmDeleteAccount by remember { mutableStateOf<AccountItem?>(null) }
     var confirmDeleteBank by remember { mutableStateOf<BankAccessItem?>(null) }
     var editConnection by remember { mutableStateOf<BankAccessItem?>(null) }
+    var fetchHistoryFor by remember { mutableStateOf<BankAccessItem?>(null) }
 
     // Rename opens the connection settings with the name field focused
     var focusName by remember { mutableStateOf(false) }
@@ -103,6 +106,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     },
                     onAddAccount = { addAccountFor = bank },
                     onDeleteBank = { confirmDeleteBank = bank },
+                    onFetchHistory = { fetchHistoryFor = bank },
                     onTransactions = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(accountId = it.id)) },
                     onEditBalance = { editBalance = it },
                     onDeleteAccount = { confirmDeleteAccount = it },
@@ -132,6 +136,21 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             onConfirm = { name, userId, url ->
                 vm.updateConnection(bank.id, name, userId, url)
                 editConnection = null
+            },
+        )
+    }
+    fetchHistoryFor?.let { bank ->
+        FetchHistoryDialog(
+            bank = bank,
+            validate = vm::validateSyncFrom,
+            onDismiss = { fetchHistoryFor = null },
+            onFetch = { date ->
+                vm.fetchHistoryFrom(bank.id, date)
+                fetchHistoryFor = null
+            },
+            onReset = {
+                vm.clearSyncFrom(bank.id)
+                fetchHistoryFor = null
             },
         )
     }
@@ -198,6 +217,7 @@ private fun BankCard(
     onRename: () -> Unit,
     onAddAccount: () -> Unit,
     onDeleteBank: () -> Unit,
+    onFetchHistory: () -> Unit,
     onTransactions: (AccountItem) -> Unit,
     onEditBalance: (AccountItem) -> Unit,
     onDeleteAccount: (AccountItem) -> Unit,
@@ -208,6 +228,7 @@ private fun BankCard(
         Column(Modifier.padding(16.dp)) {
             RowContextMenu(
                 syncEnabled.takeIf { it && !syncing }?.let { menuItem(s[StringKey.SyncNow], onSync) },
+                syncEnabled.takeIf { it }?.let { menuItem(s[StringKey.FetchHistory], onFetchHistory) },
                 menuItem(s[StringKey.AddAccount], onAddAccount),
                 menuItem(s[StringKey.RenameConnection], onRename),
                 menuItem(s[StringKey.ConnectionSettings], onEditConnection),
@@ -218,7 +239,8 @@ private fun BankCard(
                         Text(bank.bankName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Text(
                             s.format(StringKey.BlzPrefix, bank.blz) + (bank.bic.takeIf { it.isNotBlank() }?.let { " · ${s.format(StringKey.BicPrefix, it)}" } ?: "") +
-                                (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: ""),
+                                (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: "") +
+                                (bank.syncFrom?.let { " · ${s.format(StringKey.NextSyncFrom, Formats.date(it))}" } ?: ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -246,6 +268,15 @@ private fun BankCard(
                     Box {
                         IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
                         DropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(s[StringKey.FetchHistory]) },
+                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                enabled = syncEnabled,
+                                onClick = {
+                                    bankMenu = false
+                                    onFetchHistory()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text(s[StringKey.RenameConnection]) },
                                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
@@ -590,6 +621,49 @@ private fun ConnectionDialog(
             ) { Text(s[StringKey.Save]) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+    )
+}
+
+/** Asks the bank for bookings from a chosen date on (defaults to the initial window), or resets a stored one. */
+@Composable
+private fun FetchHistoryDialog(
+    bank: BankAccessItem,
+    validate: (String) -> String?,
+    onDismiss: () -> Unit,
+    onFetch: (LocalDate) -> Unit,
+    onReset: () -> Unit,
+) {
+    var input by remember { mutableStateOf(Formats.date(bank.syncFrom ?: LocalDate.now().minusDays(BankingService.INITIAL_SYNC_DAYS))) }
+    val date = Formats.parseDate(input)
+    val error = validate(input)
+    val s = strings()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s.format(StringKey.FetchHistoryFor, bank.bankName)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.width(460.dp)) {
+                OutlinedTextField(
+                    input,
+                    { input = it },
+                    label = { Text(s[StringKey.FetchHistoryDate]) },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = { Text(error ?: s[StringKey.FetchHistoryHint]) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(enabled = date != null && error == null, onClick = { date?.let(onFetch) }) { Text(s[StringKey.Fetch]) }
+        },
+        dismissButton = {
+            Row {
+                if (bank.syncFrom != null) {
+                    TextButton(onClick = onReset) { Text(s[StringKey.Reset]) }
+                }
+                TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) }
+            }
+        },
     )
 }
 

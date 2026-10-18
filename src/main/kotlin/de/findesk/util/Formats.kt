@@ -38,8 +38,13 @@ object Formats {
 
     fun date(date: LocalDate): String = date.format(dateFormatter)
 
-    /** Parses what users type in date fields: "05.11.2026" or "5.11.2026". */
-    fun parseDate(input: String): LocalDate? = runCatching { LocalDate.parse(input.trim(), java.time.format.DateTimeFormatter.ofPattern("d.M.yyyy")) }.getOrNull()
+    /**
+     * Parses what users type in date fields: "05.11.2026" or "5.11.2026". Strict, so an impossible day such as
+     * 31.02. is rejected instead of silently becoming 28.02. (these dates schedule real transfers).
+     */
+    fun parseDate(input: String): LocalDate? = runCatching { LocalDate.parse(input.trim(), strictDateInput) }.getOrNull()
+
+    private val strictDateInput = java.time.format.DateTimeFormatter.ofPattern("d.M.uuuu").withResolverStyle(java.time.format.ResolverStyle.STRICT)
 
     fun dateTime(dateTime: LocalDateTime): String = dateTime.format(dateTimeFormatter)
 
