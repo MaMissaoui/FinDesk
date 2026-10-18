@@ -16,8 +16,10 @@ import org.kapott.hbci.callback.AbstractHBCICallback
 import org.kapott.hbci.callback.HBCICallback
 import org.kapott.hbci.exceptions.JobNotSupportedException
 import org.kapott.hbci.manager.HBCIHandler
+import org.kapott.hbci.manager.HBCIUtils
 import org.kapott.hbci.manager.MatrixCode
 import org.kapott.hbci.manager.QRCode
+import org.kapott.hbci.passport.AbstractHBCIPassport
 import org.kapott.hbci.passport.HBCIPassport
 import org.kapott.hbci.status.HBCIExecStatus
 import org.kapott.hbci.status.HBCIStatus
@@ -48,10 +50,14 @@ class Hbci4JavaGateway : FinTSGateway {
     /**
      * Deletes the passport under [LOCK] so a dialog in flight can't save the old passport after the delete
      * (HBCI4Java writes the passport, including BPD/UPD and system id, when a dialog ends).
+     *
+     * `File.delete()` can fail silently, so a passport that is still there afterwards is an error: the login
+     * would otherwise keep using the old institute's values while the settings show the new ones.
      */
     override fun resetPassport(passportFile: File) {
         synchronized(LOCK) {
             passportFile.delete()
+            if (passportFile.exists()) throw IllegalStateException(AppStrings[StringKey.ErrorPassportReset])
         }
     }
 
@@ -267,6 +273,9 @@ class Hbci4JavaGateway : FinTSGateway {
         }
         // HBCI4Java keeps per-thread global state; serialise dialogs
         synchronized(LOCK) {
+            // Before anything is sent: an existing passport with a different login would silently win over the
+            // connection's values, so it is healed (deleted) first and recreated by this dialog from [connection].
+            healStalePassport(connection, callback)
             try {
                 HBCI4JavaClient(HBCI4JavaConfig(props), callback).use { client ->
                     client.createSession(HBCI4JavaBankAccount(HBCI4JavaBankAccount.Type.PINTAN, connection.passportFile)).use { session ->
@@ -286,6 +295,58 @@ class Hbci4JavaGateway : FinTSGateway {
             } finally {
                 // The passport file holds the bank's keys; keep it readable only by the owner
                 FileSecurity.secureFile(connection.passportFile)
+            }
+        }
+    }
+
+    /**
+     * HBCI4Java takes the BLZ, user id and host from an existing passport file and ignores what FinDesk passes in,
+     * so a connection edited before FinDesk started resetting the passport (or while a reset was still in flight)
+     * would silently keep the old login. Read the passport's stored values offline and delete it on any mismatch;
+     * this dialog then creates a fresh passport from [connection] in the same call.
+     *
+     * Reading uses the same callback (so the passphrase is answered, no dialog is shown) and only local file and
+     * bank-directory lookups: no HBCI session, handler or network traffic happens before this check returns.
+     */
+    private fun healStalePassport(connection: FinTSConnection, callback: FinDeskHbciCallback) {
+        if (!connection.passportFile.exists()) return
+        val stored = try {
+            storedLogin(connection, callback)
+        } catch (e: Exception) {
+            // A wrong passphrase must never destroy a passport: keep it and let the dialog report the failure
+            callback.log("FinDesk: could not read the stored bank registration (${e.javaClass.simpleName}); keeping it", HBCIUtils.LOG_WARN, null, null)
+            return
+        }
+        if (!passportMismatch(stored, connection)) return
+        // Field names only, never values: shows up in a protocol trace if a passport is ever reset unexpectedly
+        val fields = listOfNotNull(
+            "blz".takeIf { stored.blz != connection.blz },
+            "user id".takeIf { stored.userId.trim() != connection.userId.trim() },
+            "host".takeIf { normaliseHost(stored.host) != normaliseHost(FinDeskHbciCallback.hostFor(connection.serverUrl)) },
+        )
+        callback.log("FinDesk: stored bank registration differs from the connection (${fields.joinToString()}); resetting it", HBCIUtils.LOG_WARN, null, null)
+        connection.passportFile.delete()
+        if (connection.passportFile.exists()) throw IllegalStateException(AppStrings[StringKey.ErrorPassportReset])
+    }
+
+    /**
+     * Reads the login HBCI4Java stored in the passport file. A throwaway client registers our callback (for the
+     * passport's passphrase) and, like the real dialog, loads the PinTan passport from disk; the Passport is closed
+     * right away so it is never written.
+     */
+    private fun storedLogin(connection: FinTSConnection, callback: FinDeskHbciCallback): StoredLogin {
+        val props = Properties().apply {
+            setProperty("client.passport.default", "PinTan")
+            setProperty("client.passport.PinTan.filename", connection.passportFile.absolutePath)
+            setProperty("client.passport.PinTan.init", "1")
+            setProperty("log.loglevel.default", "1")
+        }
+        return HBCI4JavaClient(HBCI4JavaConfig(props), callback).use {
+            val passport = AbstractHBCIPassport.getInstance("PinTan", connection.passportFile)
+            try {
+                StoredLogin(blz = passport.blz, userId = passport.userId, host = passport.host)
+            } finally {
+                passport.close()
             }
         }
     }
@@ -556,4 +617,26 @@ internal class FinDeskHbciCallback(
         setLength(0)
         append(value)
     }
+}
+
+/** The login HBCI4Java has stored in an existing passport file, read offline (see [Hbci4JavaGateway.storedLogin]). */
+internal data class StoredLogin(val blz: String, val userId: String, val host: String)
+
+/**
+ * Whether an existing passport's stored login differs from [connection]. HBCI4Java takes the BLZ, user id and
+ * host from the passport file and ignores what is passed in, so any mismatch means the passport has to be reset.
+ *
+ * The BLZ is compared exactly and the user id after trimming; hosts are normalised because HBCI4Java may store
+ * them with an explicit `:443` port or a trailing slash.
+ */
+internal fun passportMismatch(stored: StoredLogin, connection: FinTSConnection): Boolean {
+    if (stored.blz != connection.blz) return true
+    if (stored.userId.trim() != connection.userId.trim()) return true
+    return normaliseHost(stored.host) != normaliseHost(FinDeskHbciCallback.hostFor(connection.serverUrl))
+}
+
+/** Lower-cases a stored host and drops a trailing slash and an explicit `:443` port that HBCI4Java may add. */
+internal fun normaliseHost(host: String): String {
+    val lower = host.trim().lowercase()
+    return lower.replace(":443/", "/").removeSuffix(":443").removeSuffix("/")
 }
