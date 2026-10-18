@@ -1,5 +1,7 @@
 package de.findesk.util
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
 import java.math.BigDecimal
@@ -73,3 +75,23 @@ fun group(accounts: List<AccountItem>, groups: List<AccountGroupItem>, primary: 
 fun grandTotal(accounts: List<AccountItem>, primary: String): Map<String, BigDecimal> = totals(accounts, primary)
 
 private fun totals(accounts: List<AccountItem>, primary: String): Map<String, BigDecimal> = Currencies.totals(accounts, primary, { it.currency }, { it.balance })
+
+/** The custom group [key] stands for, or null for a type group (clearing the group sends an account back to its type). */
+internal fun groupIdFor(key: GroupKey): Int? = (key as? GroupKey.Custom)?.groupId
+
+/**
+ * The header under [pointer] that [account] may be dropped on, or null when the drop would do nothing. [headers]
+ * holds every group header's bounds in one shared coordinate space and [pointer] is in that same space.
+ *
+ * A custom group accepts every account. A type group accepts an account only when it is the account's own type and
+ * the account currently sits in a custom group ([currentKey] is one), which moves it back to its type group. Dropping
+ * on the account's current group, on a type group of another type or on no header at all is not a target.
+ */
+internal fun dropTarget(pointer: Offset, headers: Map<GroupKey, Rect>, account: AccountItem, currentKey: GroupKey): GroupKey? {
+    val hit = headers.entries.firstOrNull { it.value.contains(pointer) }?.key ?: return null
+    if (hit == currentKey) return null
+    return when (hit) {
+        is GroupKey.Custom -> hit
+        is GroupKey.Type -> hit.takeIf { currentKey is GroupKey.Custom && it.type == account.accountType }
+    }
+}

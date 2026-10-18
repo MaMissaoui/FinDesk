@@ -2,6 +2,8 @@ package de.findesk.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,9 +16,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -25,7 +39,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.AccountGroupItem
@@ -35,8 +51,11 @@ import de.findesk.ui.theme.balanceColor
 import de.findesk.util.AccountGroupView
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
+import de.findesk.util.dropTarget
+import de.findesk.util.groupIdFor
 import de.findesk.viewmodel.AccountSelection
 import java.math.BigDecimal
+import kotlin.math.roundToInt
 
 /**
  * Banking4-style account list on the left of the Transactions screen: "All accounts" with a grand total, one
@@ -70,6 +89,24 @@ fun AccountPanel(
     var deleting by remember { mutableStateOf<AccountGroupItem?>(null) }
     var moving by remember { mutableStateOf<AccountItem?>(null) }
 
+    // Mouse drag of an account row onto a group header. Header bounds and the pointer live in the same (root)
+    // coordinate space, so a drop target can be hit-tested as a pure function (see dropTarget).
+    var drag by remember { mutableStateOf<AccountDrag?>(null) }
+    val headers = remember { mutableStateMapOf<GroupKey, Rect>() }
+    var panelTopLeft by remember { mutableStateOf(Offset.Zero) }
+    val dragFocus = remember { FocusRequester() }
+    val target = drag?.let { dropTarget(it.pointer, headers, it.account, it.currentKey) }
+
+    fun drop() {
+        val current = drag
+        if (current != null) {
+            dropTarget(current.pointer, headers, current.account, current.currentKey)?.let { key ->
+                onMoveAccount(current.account.id, groupIdFor(key))
+            }
+        }
+        drag = null
+    }
+
     val query = filterText.trim()
     fun matches(account: AccountItem): Boolean = query.isEmpty() ||
         s.accountName(account).contains(query, ignoreCase = true) ||
@@ -80,76 +117,126 @@ fun AccountPanel(
     val totalNew = accounts.sumOf { it.newCount }
 
     FinDeskCard(modifier = modifier) {
-        Column(Modifier.fillMaxSize()) {
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                RowContextMenu(
-                    if (totalNew > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.All) } else null,
-                ) {
-                    SelectableRow(selected = selection == AccountSelection.All, onClick = { onSelect(AccountSelection.All) }) {
-                        Text(s[StringKey.AllAccounts], style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        NewCountBadge(totalNew, selected = selection == AccountSelection.All)
-                        Spacer(Modifier.width(8.dp))
-                        Column(horizontalAlignment = Alignment.End) {
-                            grandTotal.forEach { (currency, amount) ->
-                                Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(amount, selection == AccountSelection.All))
+        Box(Modifier.fillMaxSize().onGloballyPositioned { panelTopLeft = it.positionInRoot() }) {
+            Column(Modifier.fillMaxSize()) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                    RowContextMenu(
+                        if (totalNew > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.All) } else null,
+                    ) {
+                        SelectableRow(selected = selection == AccountSelection.All, onClick = { onSelect(AccountSelection.All) }) {
+                            Text(s[StringKey.AllAccounts], style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            NewCountBadge(totalNew, selected = selection == AccountSelection.All)
+                            Spacer(Modifier.width(8.dp))
+                            Column(horizontalAlignment = Alignment.End) {
+                                grandTotal.forEach { (currency, amount) ->
+                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(amount, selection == AccountSelection.All))
+                                }
+                            }
+                        }
+                    }
+
+                    groups.forEach { view ->
+                        val visible = view.accounts.filter { matches(it) }
+                        // A group with no matching account is hidden while a filter is set.
+                        if (query.isNotEmpty() && visible.isEmpty()) return@forEach
+                        val custom = (view.key as? GroupKey.Custom)?.let { key -> customGroups.firstOrNull { it.id == key.groupId } }
+                        // A deleted group must not stay a drop target
+                        DisposableEffect(view.key) { onDispose { headers.remove(view.key) } }
+                        RowContextMenu(
+                            if (view.newCount > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.Group(view.key)) } else null,
+                            custom?.let { menuItem(s[StringKey.RenameGroup]) { renaming = it } },
+                            custom?.let { menuItem(s[StringKey.MoveUp]) { onMoveGroup(it.id, true) } },
+                            custom?.let { menuItem(s[StringKey.MoveDown]) { onMoveGroup(it.id, false) } },
+                            custom?.let { menuItem(s[StringKey.Delete]) { deleting = it } },
+                        ) {
+                            GroupHeaderRow(
+                                view = view,
+                                collapsed = view.key.id in collapsed,
+                                selected = selection is AccountSelection.Group && selection.key.id == view.key.id,
+                                highlighted = target == view.key,
+                                primaryCurrency = primaryCurrency,
+                                onSelect = { onSelect(AccountSelection.Group(view.key)) },
+                                onToggle = { onToggleCollapsed(view.key) },
+                                onBounds = { headers[view.key] = it },
+                            )
+                        }
+                        if (view.key.id !in collapsed) {
+                            visible.forEach { account ->
+                                RowContextMenu(
+                                    if (account.newCount > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.Account(account.id)) } else null,
+                                    menuItem(s[StringKey.MoveToGroup]) { moving = account },
+                                ) {
+                                    AccountRow(
+                                        account = account,
+                                        selected = selection is AccountSelection.Account && selection.id == account.id,
+                                        dragging = drag?.account?.id == account.id,
+                                        onSelect = { onSelect(AccountSelection.Account(account.id)) },
+                                        onDragStart = { drag = AccountDrag(account, view.key, it) },
+                                        onDragBy = { delta -> drag = drag?.let { current -> current.copy(pointer = current.pointer + delta) } },
+                                        onDragEnd = { drop() },
+                                        onDragCancel = { drag = null },
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                groups.forEach { view ->
-                    val visible = view.accounts.filter { matches(it) }
-                    // A group with no matching account is hidden while a filter is set.
-                    if (query.isNotEmpty() && visible.isEmpty()) return@forEach
-                    val custom = (view.key as? GroupKey.Custom)?.let { key -> customGroups.firstOrNull { it.id == key.groupId } }
-                    RowContextMenu(
-                        if (view.newCount > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.Group(view.key)) } else null,
-                        custom?.let { menuItem(s[StringKey.RenameGroup]) { renaming = it } },
-                        custom?.let { menuItem(s[StringKey.MoveUp]) { onMoveGroup(it.id, true) } },
-                        custom?.let { menuItem(s[StringKey.MoveDown]) { onMoveGroup(it.id, false) } },
-                        custom?.let { menuItem(s[StringKey.Delete]) { deleting = it } },
-                    ) {
-                        GroupHeaderRow(
-                            view = view,
-                            collapsed = view.key.id in collapsed,
-                            selected = selection is AccountSelection.Group && selection.key.id == view.key.id,
-                            primaryCurrency = primaryCurrency,
-                            onSelect = { onSelect(AccountSelection.Group(view.key)) },
-                            onToggle = { onToggleCollapsed(view.key) },
-                        )
+                HorizontalDivider()
+                Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { creating = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(s[StringKey.NewGroup])
                     }
-                    if (view.key.id !in collapsed) {
-                        visible.forEach { account ->
-                            RowContextMenu(
-                                if (account.newCount > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.Account(account.id)) } else null,
-                                menuItem(s[StringKey.MoveToGroup]) { moving = account },
-                            ) {
-                                AccountRow(
-                                    account = account,
-                                    selected = selection is AccountSelection.Account && selection.id == account.id,
-                                    onSelect = { onSelect(AccountSelection.Account(account.id)) },
-                                )
-                            }
-                        }
-                    }
+                    OutlinedTextField(
+                        value = filterText,
+                        onValueChange = onFilterText,
+                        label = { Text(s[StringKey.FilterAccounts]) },
+                        singleLine = true,
+                        supportingText = { Text(s.format(StringKey.AccountsShown, shown, accounts.size)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
 
-            HorizontalDivider()
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { creating = true }) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(s[StringKey.NewGroup])
+            // The floating label follows the pointer inside the panel while a row is dragged
+            drag?.let { d ->
+                val position = d.pointer - panelTopLeft
+                Surface(
+                    tonalElevation = 6.dp,
+                    shadowElevation = 6.dp,
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .offset { IntOffset(position.x.roundToInt() + 12, position.y.roundToInt() + 12) }
+                        .zIndex(1f)
+                        .semantics { contentDescription = s[StringKey.DragToGroupHint] },
+                ) {
+                    Text(
+                        s.accountName(d.account),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
                 }
-                OutlinedTextField(
-                    value = filterText,
-                    onValueChange = onFilterText,
-                    label = { Text(s[StringKey.FilterAccounts]) },
-                    singleLine = true,
-                    supportingText = { Text(s.format(StringKey.AccountsShown, shown, accounts.size)) },
-                    modifier = Modifier.fillMaxWidth(),
+            }
+
+            // Esc cancels the drag (a mouse drag has no other key to drop out); focus is only taken while dragging
+            if (drag != null) {
+                Box(
+                    Modifier
+                        .size(0.dp)
+                        .focusRequester(dragFocus)
+                        .focusable()
+                        .onPreviewKeyEvent { event ->
+                            if (event.type == KeyEventType.KeyDown && event.key == Key.Escape) {
+                                drag = null
+                                true
+                            } else {
+                                false
+                            }
+                        },
                 )
+                LaunchedEffect(Unit) { runCatching { dragFocus.requestFocus() } }
             }
         }
     }
@@ -204,6 +291,9 @@ fun AccountPanel(
 @Composable
 private fun panelAmountColor(value: java.math.BigDecimal, selected: Boolean): Color = if (selected) LocalContentColor.current else balanceColor(value)
 
+/** One account being dragged: its row, the group it is listed under and the pointer in root coordinates. */
+private data class AccountDrag(val account: AccountItem, val currentKey: GroupKey, val pointer: Offset)
+
 /**
  * The unread-booking count for an account, a group or "All accounts": a small pill shown only when it is above zero.
  * On the selection highlight a filled pill would be unreadable in dark mode, so there it turns into an outline in the
@@ -229,15 +319,23 @@ private fun NewCountBadge(count: Int, selected: Boolean) {
     }
 }
 
-/** One clickable entry that is highlighted (and announced) while selected. */
+/** One clickable entry that is highlighted (and announced) while selected, and outlined while a dragged account may be dropped on it. */
 @Composable
 private fun SelectableRow(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    alpha: Float = 1f,
+    highlighted: Boolean = false,
     content: @Composable RowScope.() -> Unit,
 ) {
-    Surface(color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+    // A plain 1f row keeps its exact previous rendering: no extra graphics layer
+    val surfaceModifier = if (alpha < 1f) Modifier.fillMaxWidth().alpha(alpha) else Modifier.fillMaxWidth()
+    Surface(
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+        border = if (highlighted) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        modifier = surfaceModifier,
+    ) {
         Row(
             modifier = modifier
                 .clickable(onClick = onClick, role = Role.Button)
@@ -254,13 +352,20 @@ private fun GroupHeaderRow(
     view: AccountGroupView,
     collapsed: Boolean,
     selected: Boolean,
+    highlighted: Boolean,
     primaryCurrency: String,
     onSelect: () -> Unit,
     onToggle: () -> Unit,
+    onBounds: (Rect) -> Unit,
 ) {
     val s = strings()
     val label = view.name ?: (view.key as? GroupKey.Type)?.type?.let { s.accountType(it) }.orEmpty()
-    SelectableRow(selected = selected, onClick = onSelect) {
+    SelectableRow(
+        selected = selected,
+        onClick = onSelect,
+        modifier = Modifier.onGloballyPositioned { onBounds(it.boundsInRoot()) },
+        highlighted = highlighted,
+    ) {
         IconButton(onClick = onToggle, modifier = Modifier.size(28.dp)) {
             Icon(
                 if (collapsed) Icons.Default.KeyboardArrowRight else Icons.Default.KeyboardArrowDown,
@@ -286,10 +391,49 @@ private fun GroupHeaderRow(
     }
 }
 
+/**
+ * One account. It is both clickable (a press without movement still selects it) and draggable: the drag detector only
+ * starts after the touch slop, so a click never becomes a drag, and after the slop it consumes the pointer so the
+ * click is cancelled. The row position is read in root coordinates so the pointer can be hit-tested against the
+ * group headers (see [dropTarget]).
+ */
 @Composable
-private fun AccountRow(account: AccountItem, selected: Boolean, onSelect: () -> Unit) {
+private fun AccountRow(
+    account: AccountItem,
+    selected: Boolean,
+    dragging: Boolean,
+    onSelect: () -> Unit,
+    onDragStart: (Offset) -> Unit,
+    onDragBy: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onDragCancel: () -> Unit,
+) {
     val s = strings()
-    SelectableRow(selected = selected, onClick = onSelect, modifier = Modifier.padding(start = 12.dp)) {
+    var topLeft by remember { mutableStateOf(Offset.Zero) }
+    val latestTopLeft by rememberUpdatedState(topLeft)
+    val dragStart by rememberUpdatedState(onDragStart)
+    val dragBy by rememberUpdatedState(onDragBy)
+    val dragEnd by rememberUpdatedState(onDragEnd)
+    val dragCancel by rememberUpdatedState(onDragCancel)
+    SelectableRow(
+        selected = selected,
+        onClick = onSelect,
+        alpha = if (dragging) 0.4f else 1f,
+        modifier = Modifier
+            .padding(start = 12.dp)
+            .onGloballyPositioned { topLeft = it.positionInRoot() }
+            .pointerInput(account.id) {
+                detectDragGestures(
+                    onDragStart = { offset -> dragStart(latestTopLeft + offset) },
+                    onDrag = { change, amount ->
+                        change.consume()
+                        dragBy(amount)
+                    },
+                    onDragEnd = { dragEnd() },
+                    onDragCancel = { dragCancel() },
+                )
+            },
+    ) {
         Column(Modifier.weight(1f)) {
             Text(
                 s.accountName(account),

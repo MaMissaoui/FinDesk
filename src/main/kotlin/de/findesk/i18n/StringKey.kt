@@ -355,6 +355,7 @@ enum class StringKey {
     NewBookingsCount,
     NewBooking,
     MarkAsRead,
+    DragToGroupHint,
 
     // Payments
     SepaTransfer,
