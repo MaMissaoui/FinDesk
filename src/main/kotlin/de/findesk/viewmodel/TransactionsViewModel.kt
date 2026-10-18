@@ -169,6 +169,8 @@ class TransactionsViewModel(
 
     private var chartCollapsedLoaded = false
 
+    private val groupActions = AccountGroupActions(accountGroupRepository, accountRepository, transactionRepository, auditLogRepository, settingsRepository)
+
     /** The selection the last [refresh] resolved, so a changed selection can reset [TransactionsState.boldIds]. */
     private var lastRefreshedSelection: AccountSelection? = null
 
@@ -255,7 +257,7 @@ class TransactionsViewModel(
         val customGroups = accountGroupRepository.findAllItems()
         val primary = Currencies.primary(settingsRepository)
         var groups = group(accounts, customGroups, primary)
-        val selection = resolveSelection(restoreSelectionOrCurrent(groups, accounts), groups, accounts)
+        val selection = AccountPanelSettings.resolve(restoreSelectionOrCurrent(groups, accounts), groups, accounts)
         restoreSelection = false
         lastRefreshedSelection = selection
         _state.update {
@@ -265,7 +267,7 @@ class TransactionsViewModel(
                 groups = groups,
                 grandTotal = grandTotal(accounts, primary),
                 // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
-                collapsed = if (collapsedLoaded) it.collapsed else loadCollapsed().also { collapsedLoaded = true },
+                collapsed = if (collapsedLoaded) it.collapsed else AccountPanelSettings.loadCollapsed(settingsRepository).also { collapsedLoaded = true },
                 chartCollapsed = if (chartCollapsedLoaded) it.chartCollapsed else loadChartCollapsed().also { chartCollapsedLoaded = true },
                 selection = selection,
                 accountId = (selection as? AccountSelection.Account)?.id,
@@ -321,49 +323,7 @@ class TransactionsViewModel(
     }
 
     /** Reads the stored selection once (when [start] asked for it), otherwise keeps the current one. */
-    private fun restoreSelectionOrCurrent(groups: List<AccountGroupView>, accounts: List<AccountItem>): AccountSelection = if (restoreSelection) parseStoredSelection(groups, accounts) else _state.value.selection
-
-    private fun parseStoredSelection(groups: List<AccountGroupView>, accounts: List<AccountItem>): AccountSelection {
-        val raw = settingsRepository.getValue(KEY_SELECTION) ?: return AccountSelection.All
-        return when {
-            raw.startsWith("group:") -> {
-                val keyId = raw.removePrefix("group:")
-                val key = when {
-                    keyId.startsWith("type:") -> GroupKey.Type(keyId.removePrefix("type:"))
-                    keyId.startsWith("custom:") -> keyId.removePrefix("custom:").toIntOrNull()?.let { GroupKey.Custom(it) }
-                    else -> null
-                }
-                if (key != null && groups.any { it.key.id == key.id }) AccountSelection.Group(key) else AccountSelection.All
-            }
-
-            raw.startsWith("account:") -> {
-                val id = raw.removePrefix("account:").toIntOrNull()
-                if (id != null && accounts.any { it.id == id }) AccountSelection.Account(id) else AccountSelection.All
-            }
-
-            else -> AccountSelection.All
-        }
-    }
-
-    /** Falls back to All when the selected account or group no longer exists (or a type group is now empty). */
-    private fun resolveSelection(selection: AccountSelection, groups: List<AccountGroupView>, accounts: List<AccountItem>): AccountSelection = when (selection) {
-        is AccountSelection.All -> selection
-        is AccountSelection.Account -> if (accounts.any { it.id == selection.id }) selection else AccountSelection.All
-        is AccountSelection.Group -> if (groups.any { it.key.id == selection.key.id }) selection else AccountSelection.All
-    }
-
-    private fun selectionValue(selection: AccountSelection): String = when (selection) {
-        AccountSelection.All -> "all"
-        is AccountSelection.Group -> "group:${selection.key.id}"
-        is AccountSelection.Account -> "account:${selection.id}"
-    }
-
-    private fun loadCollapsed(): Set<String> = settingsRepository.getValue(KEY_COLLAPSED)
-        ?.split(",")
-        ?.map { it.trim() }
-        ?.filter { it.isNotEmpty() }
-        ?.toSet()
-        .orEmpty()
+    private fun restoreSelectionOrCurrent(groups: List<AccountGroupView>, accounts: List<AccountItem>): AccountSelection = if (restoreSelection) AccountPanelSettings.loadSelection(settingsRepository, groups, accounts) else _state.value.selection
 
     private fun loadChartCollapsed(): Boolean = settingsRepository.getValue(KEY_CHART_COLLAPSED)?.toBooleanStrictOrNull() ?: false
 
@@ -416,7 +376,7 @@ class TransactionsViewModel(
         _state.update { it.copy(isLoading = true, error = null) }
         // The write runs in the same job as the reload, off the UI thread, so stored and shown selection can't diverge
         return launchSafely(onError) {
-            settingsRepository.setValue(KEY_SELECTION, selectionValue(selection))
+            AccountPanelSettings.saveSelection(settingsRepository, selection)
             refresh()
         }
     }
@@ -430,12 +390,7 @@ class TransactionsViewModel(
     fun markRead(selection: AccountSelection): Job {
         _state.update { it.copy(isLoading = true, error = null) }
         return launchSafely(onError) {
-            val accountIds: Set<Int>? = when (selection) {
-                AccountSelection.All -> null
-                is AccountSelection.Account -> setOf(selection.id)
-                is AccountSelection.Group -> _state.value.groups.firstOrNull { it.key == selection.key }?.accounts?.map { it.id }?.toSet() ?: emptySet()
-            }
-            transactionRepository.markRead(accountIds)
+            groupActions.markRead(selection, _state.value.groups)
             refresh()
         }
     }
@@ -445,7 +400,7 @@ class TransactionsViewModel(
         val collapsed = _state.value.collapsed
         val next = if (key.id in collapsed) collapsed - key.id else collapsed + key.id
         _state.update { it.copy(collapsed = next) }
-        return launchSafely(onError) { settingsRepository.setValue(KEY_COLLAPSED, next.sorted().joinToString(",")) }
+        return launchSafely(onError) { AccountPanelSettings.saveCollapsed(settingsRepository, next) }
     }
 
     /** Collapses or expands the balance chart; view state only, so it is persisted but not audited. */
@@ -461,44 +416,25 @@ class TransactionsViewModel(
     }
 
     fun createGroup(name: String): Job = launchSafely(onError) {
-        if (name.isBlank()) {
-            _state.update { it.copy(error = AppStrings[StringKey.ErrorNameRequired]) }
-            return@launchSafely
-        }
-        val created = accountGroupRepository.create(name)
-        auditLogRepository.log("CREATE_ACCOUNT_GROUP", "user", "Created account group '${created.name}'")
-        refresh()
+        groupActions.create(name)?.let { msg -> _state.update { it.copy(error = msg) } } ?: refresh()
     }
 
     fun renameGroup(id: Int, name: String): Job = launchSafely(onError) {
-        if (name.isBlank()) {
-            _state.update { it.copy(error = AppStrings[StringKey.ErrorNameRequired]) }
-            return@launchSafely
-        }
-        val renamed = accountGroupRepository.rename(id, name)
-        if (renamed != null) auditLogRepository.log("RENAME_ACCOUNT_GROUP", "user", "Renamed account group $id to '${renamed.name}'")
-        refresh()
+        groupActions.rename(id, name)?.let { msg -> _state.update { it.copy(error = msg) } } ?: refresh()
     }
 
     fun deleteGroup(id: Int): Job = launchSafely(onError) {
-        accountGroupRepository.delete(id)
-        auditLogRepository.log("DELETE_ACCOUNT_GROUP", "user", "Deleted account group $id")
-        if ((_state.value.selection as? AccountSelection.Group)?.key == GroupKey.Custom(id)) {
-            _state.update { it.copy(selection = AccountSelection.All, accountId = null) }
-            settingsRepository.setValue(KEY_SELECTION, selectionValue(AccountSelection.All))
-        }
+        if (groupActions.delete(id, _state.value.selection)) _state.update { it.copy(selection = AccountSelection.All, accountId = null) }
         refresh()
     }
 
     fun moveGroup(id: Int, up: Boolean): Job = launchSafely(onError) {
-        accountGroupRepository.move(id, up)
-        auditLogRepository.log("REORDER_ACCOUNT_GROUP", "user", "Moved account group $id ${if (up) "up" else "down"}")
+        groupActions.move(id, up)
         refresh()
     }
 
     fun moveAccountToGroup(accountId: Int, groupId: Int?): Job = launchSafely(onError) {
-        accountRepository.setGroup(accountId, groupId)
-        auditLogRepository.log("MOVE_ACCOUNT_TO_GROUP", "user", "Moved account $accountId to group ${groupId ?: "default"}")
+        groupActions.moveAccount(accountId, groupId)
         refresh()
     }
 
@@ -693,9 +629,9 @@ class TransactionsViewModel(
     companion object {
         const val SEARCH_DEBOUNCE_MS = 250L
 
-        /** Settings keys holding the account panel's selection and collapsed groups, per profile. */
-        const val KEY_SELECTION = "transactions.selection"
-        const val KEY_COLLAPSED = "accountGroups.collapsed"
+        /** Settings keys holding the account panel's selection and collapsed groups, per profile (shared with Accounts). */
+        const val KEY_SELECTION = AccountPanelSettings.KEY_SELECTION
+        const val KEY_COLLAPSED = AccountPanelSettings.KEY_COLLAPSED
 
         /** Whether the balance chart is folded away, per profile. */
         const val KEY_CHART_COLLAPSED = "transactions.chartCollapsed"

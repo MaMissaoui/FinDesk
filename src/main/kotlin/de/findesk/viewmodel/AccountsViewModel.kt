@@ -5,12 +5,17 @@ import de.findesk.banking.BankingResult
 import de.findesk.banking.BankingService
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
 import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
+import de.findesk.util.AccountGroupView
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
+import de.findesk.util.GroupKey
 import de.findesk.util.Iban
+import de.findesk.util.grandTotal
+import de.findesk.util.group
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -48,6 +53,18 @@ data class AccountsState(
     val canRememberPin: Boolean = false,
     /** Bank access ids whose account rows are collapsed on the Accounts screen. */
     val collapsedBanks: Set<Int> = emptySet(),
+    /** What the account panel filters the bank cards by; shared with Transactions through the stored selection. */
+    val selection: AccountSelection = AccountSelection.All,
+    /** The account panel's groups, in display order. */
+    val groups: List<AccountGroupView> = emptyList(),
+    /** The grand total of every account, per currency, primary first. */
+    val grandTotal: Map<String, BigDecimal> = emptyMap(),
+    /** Ids of the collapsed panel groups (see [GroupKey.id]), shared with Transactions. */
+    val collapsed: Set<String> = emptySet(),
+    /** Free-text filter over the panel's account rows. */
+    val accountFilterText: String = "",
+    /** The custom groups as loaded, for rename, move and delete. */
+    val customGroups: List<AccountGroupItem> = emptyList(),
 ) {
     /** Balances per currency, primary first; different currencies are never added up. */
     val totals: Map<String, BigDecimal> get() = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
@@ -60,6 +77,7 @@ class AccountsViewModel(
     private val bankingService: BankingService = BankingService(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
+    private val accountGroupRepository: AccountGroupRepository = AccountGroupRepositoryImpl(),
     private val today: () -> java.time.LocalDate = { java.time.LocalDate.now() },
     val bankingInteraction: UiBankingInteraction = UiBankingInteraction(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
@@ -69,6 +87,14 @@ class AccountsViewModel(
 
     /** The collapsed bank connections are read once; afterwards the in-memory set is the truth. */
     private var collapsedBanksLoaded = false
+
+    /**
+     * The panel's stored selection and collapsed groups are read on the first refresh; afterwards the in-memory
+     * values are the truth. The screen gets a new view model on every visit, so a change made on Transactions shows.
+     */
+    private var panelLoaded = false
+
+    private val groupActions = AccountGroupActions(accountGroupRepository, accountRepository, transactionRepository, auditLogRepository, settingsRepository)
 
     private val onError: (Exception) -> Unit = { e -> _state.update { it.copy(isLoading = false, error = e.userMessage()) } }
 
@@ -80,12 +106,28 @@ class AccountsViewModel(
     private fun refresh() {
         val accounts = accountRepository.findAllItems()
         val bankAccesses = bankAccessRepository.findAllItems()
+        val customGroups = accountGroupRepository.findAllItems()
+        val primary = Currencies.primary(settingsRepository)
+        val groups = group(accounts, customGroups, primary)
+        val firstLoad = !panelLoaded
+        panelLoaded = true
+        val selection = AccountPanelSettings.resolve(
+            if (firstLoad) AccountPanelSettings.loadSelection(settingsRepository, groups, accounts) else _state.value.selection,
+            groups,
+            accounts,
+        )
+        val collapsed = if (firstLoad) AccountPanelSettings.loadCollapsed(settingsRepository) else null
         _state.update {
             it.copy(
+                customGroups = customGroups,
+                groups = groups,
+                grandTotal = grandTotal(accounts, primary),
+                selection = selection,
+                collapsed = collapsed ?: it.collapsed,
                 accounts = accounts,
                 bankAccesses = bankAccesses,
                 isLoading = false,
-                primaryCurrency = Currencies.primary(settingsRepository),
+                primaryCurrency = primary,
                 canRememberPin = bankingService.canRememberPin,
                 savedPins = bankAccesses.filter { bank -> bankingService.hasSavedPin(bank.id) }.map { bank -> bank.id }.toSet(),
                 // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
@@ -111,6 +153,54 @@ class AccountsViewModel(
         val next = if (bankAccessId in collapsed) collapsed - bankAccessId else collapsed + bankAccessId
         _state.update { it.copy(collapsedBanks = next) }
         return launchSafely(onError) { settingsRepository.setValue(KEY_COLLAPSED_BANKS, next.sorted().joinToString(",")) }
+    }
+
+    /** Selects an account, group or all accounts in the panel and stores it for both screens. Never marks bookings read. */
+    fun selectAccounts(selection: AccountSelection): Job {
+        _state.update { it.copy(selection = selection) }
+        return launchSafely(onError) { AccountPanelSettings.saveSelection(settingsRepository, selection) }
+    }
+
+    /** Collapses or expands a panel group; view state only, so it is persisted but not audited. */
+    fun toggleCollapsed(key: GroupKey): Job {
+        val collapsed = _state.value.collapsed
+        val next = if (key.id in collapsed) collapsed - key.id else collapsed + key.id
+        _state.update { it.copy(collapsed = next) }
+        return launchSafely(onError) { AccountPanelSettings.saveCollapsed(settingsRepository, next) }
+    }
+
+    /** Filters the panel's account rows by name, IBAN or bank; the bank cards follow only the selection. */
+    fun updateAccountFilterText(text: String) {
+        _state.update { it.copy(accountFilterText = text) }
+    }
+
+    fun createGroup(name: String): Job = launchSafely(onError) {
+        groupActions.create(name)?.let { msg -> _state.update { it.copy(error = msg) } } ?: refresh()
+    }
+
+    fun renameGroup(id: Int, name: String): Job = launchSafely(onError) {
+        groupActions.rename(id, name)?.let { msg -> _state.update { it.copy(error = msg) } } ?: refresh()
+    }
+
+    fun deleteGroup(id: Int): Job = launchSafely(onError) {
+        if (groupActions.delete(id, _state.value.selection)) _state.update { it.copy(selection = AccountSelection.All) }
+        refresh()
+    }
+
+    fun moveGroup(id: Int, up: Boolean): Job = launchSafely(onError) {
+        groupActions.move(id, up)
+        refresh()
+    }
+
+    fun moveAccountToGroup(accountId: Int, groupId: Int?): Job = launchSafely(onError) {
+        groupActions.moveAccount(accountId, groupId)
+        refresh()
+    }
+
+    /** "Mark as read" from the panel's context menu; view state only, so no audit entry. */
+    fun markRead(selection: AccountSelection): Job = launchSafely(onError) {
+        groupActions.markRead(selection, _state.value.groups)
+        refresh()
     }
 
     /** Validates input; returns an error message or null. Exposed for the dialog's inline validation. */

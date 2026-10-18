@@ -279,6 +279,87 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `the panel selection is shared between Accounts and Transactions`() = runBlocking {
+        savingsAccountWithBooking()
+        val accounts = AccountsViewModel()
+        accounts.loadAccounts().join()
+        accounts.selectAccounts(AccountSelection.Group(GroupKey.Type("savings"))).join()
+        accounts.close()
+
+        val transactions = TransactionsViewModel(today = { today })
+        transactions.start().join()
+        assertEquals(AccountSelection.Group(GroupKey.Type("savings")), transactions.state.value.selection, "Transactions opens with the group picked on Accounts")
+        transactions.selectAccounts(AccountSelection.Account(account)).join()
+        transactions.close()
+
+        val back = AccountsViewModel()
+        back.loadAccounts().join()
+        assertEquals(AccountSelection.Account(account), back.state.value.selection, "and Accounts with the account picked on Transactions")
+        assertEquals(setOf(account), visibleAccounts(back.state.value.selection, back.state.value.groups))
+        back.close()
+    }
+
+    @Test
+    fun `selecting an account on Accounts keeps its new bookings unread`() = runBlocking {
+        newBooking(account, "-12.00", "Fresh")
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+        vm.selectAccounts(AccountSelection.Account(account)).join()
+        vm.loadAccounts().join()
+
+        assertEquals(mapOf(account to 1), data.transactionRepo.countNew(), "only Transactions shows bookings, so only it marks them read")
+        assertEquals(1, vm.state.value.accounts.first { it.id == account }.newCount)
+        vm.close()
+    }
+
+    @Test
+    fun `group actions on Accounts change the database and write one audit entry each`() = runBlocking {
+        val audit = AuditLogRepositoryImpl()
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+
+        vm.createGroup("Reisen").join()
+        val group = vm.state.value.customGroups.single()
+        vm.createGroup("Haushalt").join()
+        vm.renameGroup(group.id, "Urlaub").join()
+        vm.moveGroup(group.id, up = false).join()
+        vm.moveAccountToGroup(account, group.id).join()
+        assertEquals(listOf("Haushalt", "Urlaub"), vm.state.value.customGroups.map { it.name })
+        assertEquals(group.id, vm.state.value.accounts.first { it.id == account }.groupId)
+        assertEquals(listOf(account), vm.state.value.groups.first { it.key == GroupKey.Custom(group.id) }.accounts.map { it.id })
+
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Custom(group.id))).join()
+        vm.deleteGroup(group.id).join()
+        assertEquals(AccountSelection.All, vm.state.value.selection, "deleting the selected group falls back to All")
+        assertEquals("all", de.findesk.repository.SettingsRepositoryImpl().getValue(AccountPanelSettings.KEY_SELECTION))
+        assertEquals(null, vm.state.value.accounts.first { it.id == account }.groupId, "its account returns to the type group")
+
+        vm.createGroup("  ").join()
+        assertEquals(AppStrings[StringKey.ErrorNameRequired], vm.state.value.error)
+
+        assertEquals(2, audit.findByAction("CREATE_ACCOUNT_GROUP").size)
+        assertEquals(1, audit.findByAction("RENAME_ACCOUNT_GROUP").size)
+        assertEquals(1, audit.findByAction("REORDER_ACCOUNT_GROUP").size)
+        assertEquals(1, audit.findByAction("MOVE_ACCOUNT_TO_GROUP").size)
+        assertEquals(1, audit.findByAction("DELETE_ACCOUNT_GROUP").size)
+        vm.close()
+    }
+
+    @Test
+    fun `visible accounts follow the selection`() {
+        val other = data.account(iban = "DE44500105175407324931", balance = "0")
+        val empty = AccountGroupRepositoryImpl().create("Leer").id
+        val items = data.accountRepo.findAllItems()
+        val groups = de.findesk.util.group(items, AccountGroupRepositoryImpl().findAllItems(), "EUR")
+
+        assertNull(visibleAccounts(AccountSelection.All, groups), "All shows every account")
+        assertEquals(setOf(other), visibleAccounts(AccountSelection.Account(other), groups))
+        assertEquals(setOf(account, other), visibleAccounts(AccountSelection.Group(GroupKey.Type("checking")), groups))
+        assertEquals(emptySet<Int>(), visibleAccounts(AccountSelection.Group(GroupKey.Custom(empty)), groups), "an empty group shows nothing")
+        assertEquals(emptySet<Int>(), visibleAccounts(AccountSelection.Group(GroupKey.Type("depot")), groups), "a vanished group shows nothing, not everything")
+    }
+
+    @Test
     fun `collapsed groups persist and a refresh never undoes a toggle`() = runBlocking {
         savingsAccountWithBooking()
         val vm = TransactionsViewModel(today = { today })

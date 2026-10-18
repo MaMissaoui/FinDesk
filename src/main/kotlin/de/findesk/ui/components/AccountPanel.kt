@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import de.findesk.i18n.StringKey
+import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
@@ -521,4 +522,46 @@ private fun RadioRow(selected: Boolean, label: String, onSelect: () -> Unit) {
         Spacer(Modifier.width(8.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+/** A group's label: its custom name, or the localized account type. */
+private fun groupLabel(view: AccountGroupView, s: Strings): String = view.name ?: (view.key as? GroupKey.Type)?.type?.let { s.accountType(it) }.orEmpty()
+
+/** The compact selector's button text for the current selection. */
+private fun compactSelectionLabel(selection: AccountSelection, groups: List<AccountGroupView>, accounts: List<AccountItem>, s: Strings): String = when (selection) {
+    AccountSelection.All -> s[StringKey.AllAccounts]
+    is AccountSelection.Group -> groups.firstOrNull { it.key == selection.key }?.let { groupLabel(it, s) } ?: s[StringKey.AllAccounts]
+    is AccountSelection.Account -> accounts.firstOrNull { it.id == selection.id }?.let { accountLabel(it) } ?: s[StringKey.AllAccounts]
+}
+
+/** Menu text for the compact selector: groups as they are, accounts indented under them, each with its new count. */
+private fun compactOptionLabel(selection: AccountSelection, groups: List<AccountGroupView>, accounts: List<AccountItem>, s: Strings): String {
+    fun withCount(label: String, count: Int) = if (count > 0) "$label ($count)" else label
+    return when (selection) {
+        AccountSelection.All -> withCount(s[StringKey.AllAccounts], accounts.sumOf { it.newCount })
+        is AccountSelection.Group -> groups.firstOrNull { it.key == selection.key }?.let { withCount(groupLabel(it, s), it.newCount) } ?: s[StringKey.AllAccounts]
+        is AccountSelection.Account -> accounts.firstOrNull { it.id == selection.id }?.let { withCount("  " + accountLabel(it), it.newCount) } ?: s[StringKey.AllAccounts]
+    }
+}
+
+/**
+ * The account picker for windows too narrow for the panel: one dropdown with "All accounts", every group and every
+ * account, standing in for the panel on Transactions and Accounts. Group management (new, rename, move, delete,
+ * move account) stays in the panel.
+ */
+@Composable
+fun CompactAccountSelector(
+    accounts: List<AccountItem>,
+    groups: List<AccountGroupView>,
+    selection: AccountSelection,
+    onSelect: (AccountSelection) -> Unit,
+) {
+    val s = strings()
+    val options = listOf<AccountSelection>(AccountSelection.All) + groups.map { AccountSelection.Group(it.key) } + accounts.map { AccountSelection.Account(it.id) }
+    DropdownSelector(
+        label = compactSelectionLabel(selection, groups, accounts, s),
+        options = options,
+        optionLabel = { compactOptionLabel(it, groups, accounts, s) },
+        onSelect = onSelect,
+    )
 }
