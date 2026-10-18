@@ -106,7 +106,8 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
                         { iban = it.uppercase() },
                         label = { Text(s[StringKey.RecipientIban]) },
                         isError = iban.isNotBlank() && !ibanOk,
-                        supportingText = { if (iban.isNotBlank() && !ibanOk) Text(s[StringKey.IbanNotValid]) },
+                        // Only with an error: an always-present slot reserves an empty line and makes the gaps uneven
+                        supportingText = if (iban.isNotBlank() && !ibanOk) ({ Text(s[StringKey.IbanNotValid]) }) else null,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -123,11 +124,7 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
                         { amount = it },
                         label = { Text(s[StringKey.AmountEuro]) },
                         isError = amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
-                        supportingText = {
-                            if (amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) {
-                                Text(s[StringKey.EnterAmountGreaterThan0])
-                            }
-                        },
+                        supportingText = if (amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) ({ Text(s[StringKey.EnterAmountGreaterThan0]) }) else null,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
