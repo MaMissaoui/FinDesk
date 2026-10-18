@@ -26,10 +26,25 @@ interface BankAccessRepository {
     fun setSyncFrom(id: Int, date: LocalDate?): BankAccessItem?
 
     /**
-     * Stores the FinTS server URL, the chosen TAN method, the login and/or the display name (null leaves a value
-     * unchanged). The name is only a label: renaming changes nothing about the FinTS connection.
+     * Stores the BLZ, BIC, FinTS server URL, the chosen TAN method, the login and/or the display name (null leaves a
+     * value unchanged). The name is only a label: renaming changes nothing about the FinTS connection. A blank BIC
+     * stores "" (an unknown BIC), unlike the other fields.
      */
-    fun updateConnection(id: Int, serverUrl: String? = null, tanMethod: String? = null, userId: String? = null, bankName: String? = null): BankAccessItem?
+    fun updateConnection(
+        id: Int,
+        serverUrl: String? = null,
+        tanMethod: String? = null,
+        userId: String? = null,
+        bankName: String? = null,
+        blz: String? = null,
+        bic: String? = null,
+    ): BankAccessItem?
+
+    /**
+     * Clears the login's capabilities and remembered TAN method after the login changed, so data that belonged
+     * to the old institute can't gate or allow orders.
+     */
+    fun clearLoginState(id: Int): BankAccessItem?
 
     /** Stores the login's supported business transactions (see BankCapabilities). */
     fun updateCapabilities(id: Int, capabilities: String): BankAccessItem?
@@ -94,12 +109,21 @@ class BankAccessRepositoryImpl : BankAccessRepository {
 
     override fun findItem(id: Int): BankAccessItem? = transaction { BankAccess.findById(id)?.toItem() }
 
-    override fun updateConnection(id: Int, serverUrl: String?, tanMethod: String?, userId: String?, bankName: String?): BankAccessItem? = transaction {
+    override fun updateConnection(id: Int, serverUrl: String?, tanMethod: String?, userId: String?, bankName: String?, blz: String?, bic: String?): BankAccessItem? = transaction {
         BankAccess.findById(id)?.apply {
             bankName?.trim()?.takeIf { it.isNotEmpty() }?.let { this.bankName = it.take(MAX_BANK_NAME_LENGTH) }
             userId?.let { this.userId = it.trim() }
             serverUrl?.let { this.serverUrl = it.trim().ifEmpty { null } }
+            blz?.let { this.blz = it.trim() }
+            bic?.let { this.bic = it.trim() }
             tanMethod?.let { this.tanMethod = it }
+        }?.toItem()
+    }
+
+    override fun clearLoginState(id: Int): BankAccessItem? = transaction {
+        BankAccess.findById(id)?.apply {
+            capabilities = null
+            tanMethod = null
         }?.toItem()
     }
 

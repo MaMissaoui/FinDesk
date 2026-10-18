@@ -137,6 +137,14 @@ interface FinTSGateway {
 
     /** The login's supported business transactions, detected during the last dialog, if any. */
     val lastCapabilities: BankCapabilities? get() = null
+
+    /**
+     * Deletes an HBCI4Java passport file so the next dialog re-reads the login instead of reusing the values
+     * stored in the old passport. Fakes keep the default and need no change.
+     */
+    fun resetPassport(passportFile: File) {
+        passportFile.delete()
+    }
 }
 
 /**

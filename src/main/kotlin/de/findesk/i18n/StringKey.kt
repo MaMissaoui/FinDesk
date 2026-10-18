@@ -161,6 +161,24 @@ enum class StringKey {
     RemoveBankTitle,
     RemoveBankText,
 
+    /** Shown under the BLZ field of the add-bank dialog when a branch bank code was mapped to its central one. */
+    CentralBlzNote,
+
+    /** Hint on a bank card whose branch BLZ is not the one its FinTS server accepts; %s is the central BLZ. */
+    CentralBlzHint,
+
+    /** Button that opens the connection dialog with the central BLZ; %s is the central BLZ. */
+    UseBlz,
+
+    /** Connection-dialog BLZ field: the typed BLZ is not in the bundled directory. */
+    BlzNotInDirectory,
+
+    /** Connection-dialog BLZ field: the typed BLZ belongs to another bank; %s is that bank's name. */
+    BlzOtherBank,
+
+    /** Connection-dialog note that changing the login resets FinDesk's registration with the bank. */
+    LoginResetNote,
+
     // Transactions
     Import,
     AutoCategorize,
@@ -537,6 +555,7 @@ enum class StringKey {
     // Validation errors
     BankNameRequired,
     BlzMustBe8Digits,
+    ErrorConnectionBusy,
     IbanRequired,
     IbanChecksumFailed,
     AccountIbanExists,

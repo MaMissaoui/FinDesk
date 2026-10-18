@@ -201,6 +201,17 @@ class ScreenshotTest {
         render("accounts-named-dark", Screen.ACCOUNTS, dark = true)
     }
 
+    /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */
+    @Test
+    fun `render accounts with a central bank code hint`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-central-blz").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("UniCredit Bank - HypoVereinsbank AG", "79020076", "HYVEDEMM455", "demo-user").id.value
+        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+
+        render("accounts-central-blz", Screen.ACCOUNTS, dark = false)
+        render("accounts-central-blz-dark", Screen.ACCOUNTS, dark = true)
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {

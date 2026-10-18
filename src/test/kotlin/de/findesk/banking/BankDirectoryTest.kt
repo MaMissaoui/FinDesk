@@ -89,4 +89,24 @@ class BankDirectoryTest {
         assertEquals(5, BankDirectory.search("Commerzbank", limit = 5).size)
         assertTrue(BankDirectory.search("Commerzbank").size <= 15)
     }
+
+    @Test
+    fun `maps a branch bank to the central FinTS bank code`() {
+        // UniCredit Bank / HypoVereinsbank only accepts the central BLZ for FinTS
+        assertEquals("70020270", BankDirectory.finTsBlz("79020076"))
+        assertEquals("70020270", BankDirectory.finTsBlz("70020270"))
+    }
+
+    @Test
+    fun `leaves other and unknown bank codes unchanged`() {
+        assertEquals("12030000", BankDirectory.finTsBlz("12030000"))
+        assertEquals("99999999", BankDirectory.finTsBlz("99999999"))
+    }
+
+    @Test
+    fun `the branch entry stays in the directory for BIC and IBAN lookup`() {
+        val entry = BankDirectory.lookup("79020076")!!
+        assertEquals("HYVEDEMM455", entry.bic)
+        assertEquals("Würzburg", entry.city)
+    }
 }

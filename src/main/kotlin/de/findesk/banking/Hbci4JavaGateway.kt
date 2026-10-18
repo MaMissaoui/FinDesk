@@ -23,6 +23,7 @@ import org.kapott.hbci.status.HBCIExecStatus
 import org.kapott.hbci.status.HBCIStatus
 import org.kapott.hbci.structures.Konto
 import org.kapott.hbci.structures.Value
+import java.io.File
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Date
@@ -43,6 +44,16 @@ class Hbci4JavaGateway : FinTSGateway {
     @Volatile
     override var lastCapabilities: BankCapabilities? = null
         private set
+
+    /**
+     * Deletes the passport under [LOCK] so a dialog in flight can't save the old passport after the delete
+     * (HBCI4Java writes the passport, including BPD/UPD and system id, when a dialog ends).
+     */
+    override fun resetPassport(passportFile: File) {
+        synchronized(LOCK) {
+            passportFile.delete()
+        }
+    }
 
     override fun fetchAll(
         connection: FinTSConnection,

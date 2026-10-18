@@ -213,20 +213,23 @@ class AccountsViewModel(
     fun searchBanks(query: String): List<BankDirectory.Entry> = BankDirectory.search(query)
 
     /** Saves the connection settings. [name] is the label shown for the connection; blank is rejected. */
-    fun updateConnection(bankAccessId: Int, name: String, userId: String, serverUrl: String): Job = launchSafely(onError) {
-        if (name.isBlank()) {
-            _state.update { it.copy(error = AppStrings[StringKey.BankNameRequired]) }
+    fun updateConnection(bankAccessId: Int, name: String, blz: String, userId: String, serverUrl: String): Job = launchSafely(onError) {
+        validateBankAccess(name, blz)?.let { msg ->
+            _state.update { it.copy(error = msg) }
+            return@launchSafely
+        }
+        if (_state.value.syncingBankId == bankAccessId) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorConnectionBusy]) }
             return@launchSafely
         }
         val previous = bankAccessRepository.findItem(bankAccessId)
         val oldName = previous?.bankName
-        val updated = bankAccessRepository.updateConnection(bankAccessId, serverUrl = serverUrl, userId = userId, bankName = name)
+        val updated = bankingService.updateConnection(bankAccessId, name, blz, userId, serverUrl)
         auditLogRepository.log("UPDATE_BANK_CONNECTION", "user", "Updated connection settings of bank access $bankAccessId")
         if (updated != null && updated.bankName != oldName) {
             auditLogRepository.log("RENAME_BANK_ACCESS", "user", "Renamed bank access $bankAccessId from $oldName to ${updated.bankName}")
         }
-        // A remembered PIN belongs to the login it was saved for: another user id makes it useless (and could lock the login)
-        if (previous != null && previous.userId != userId.trim()) bankingService.forgetPin(bankAccessId)
+        // The service resets the login (and forgets the PIN) when the BLZ, user id or URL changed.
         refresh()
         _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
     }

@@ -100,4 +100,34 @@ class BankAccessRepositoryTest {
         repository.updateCapabilities(created.id.value, "  ")
         assertNull(repository.findItem(created.id.value)!!.capabilities)
     }
+
+    @Test
+    fun `test update connection stores blz and bic`() {
+        val created = repository.create("HVB", "79020076", "HYVEDEMM455", "u4")
+        val updated = repository.updateConnection(created.id.value, blz = "70020270", bic = "HYVEDEMMXXX")
+
+        assertEquals("70020270", updated!!.blz)
+        assertEquals("HYVEDEMMXXX", updated.bic)
+
+        // A blank BIC stores "" (an unknown BIC); a null leaves the stored one alone
+        assertEquals("", repository.updateConnection(created.id.value, bic = "  ")!!.bic)
+        assertEquals("", repository.updateConnection(created.id.value, blz = "12030000")!!.bic)
+        assertEquals("12030000", repository.findItem(created.id.value)!!.blz)
+    }
+
+    @Test
+    fun `test clear login state drops capabilities and tan method`() {
+        val created = repository.create("StaleLoginBank", "44444444", "STALDEFF", "u5")
+        repository.updateCapabilities(created.id.value, "SaldoReq,UebSEPA")
+        repository.updateConnection(created.id.value, tanMethod = "942")
+        assertEquals("SaldoReq,UebSEPA", repository.findItem(created.id.value)!!.capabilities)
+        assertEquals("942", repository.findItem(created.id.value)!!.tanMethod)
+
+        val cleared = repository.clearLoginState(created.id.value)
+
+        assertNull(cleared!!.capabilities)
+        assertNull(cleared.tanMethod)
+        assertNull(repository.findItem(created.id.value)!!.capabilities)
+        assertNull(repository.findItem(created.id.value)!!.tanMethod)
+    }
 }
