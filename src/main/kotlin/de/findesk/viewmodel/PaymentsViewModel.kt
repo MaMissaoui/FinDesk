@@ -120,10 +120,12 @@ class PaymentsViewModel(
             onError(e)
         }) {
             val result = try {
-                when {
-                    review.schedule != null -> bankingService.createStandingOrder(from.id, order, review.schedule, bankingInteraction, confirmed = true)
-                    review.date != null -> bankingService.scheduleTransfer(from.id, order, review.date, bankingInteraction, confirmed = true)
-                    else -> bankingService.initiateTransfer(from.id, order, bankingInteraction, confirmed = true)
+                Busy.track {
+                    when {
+                        review.schedule != null -> bankingService.createStandingOrder(from.id, order, review.schedule, bankingInteraction, confirmed = true)
+                        review.date != null -> bankingService.scheduleTransfer(from.id, order, review.date, bankingInteraction, confirmed = true)
+                        else -> bankingService.initiateTransfer(from.id, order, bankingInteraction, confirmed = true)
+                    }
                 }
             } finally {
                 sending.set(false)

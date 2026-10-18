@@ -615,7 +615,7 @@ class TransactionsViewModel(
         val accountId = preview.accountId ?: return Job().apply { complete() }
         _state.update { it.copy(isImporting = true) }
         return launchSafely({ e -> _state.update { it.copy(isImporting = false, error = e.userMessage()) } }) {
-            val report = importService.import(accountId, preview.statement, updateBalance)
+            val report = Busy.track { importService.import(accountId, preview.statement, updateBalance) }
             // Show everything that was imported, not just this month; select the imported account.
             _state.update { it.copy(importPreview = null, isImporting = false, period = Period.ALL, selection = AccountSelection.Account(accountId), accountId = accountId, message = report.summary()) }
             refresh()

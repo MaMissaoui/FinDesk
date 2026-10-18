@@ -18,6 +18,12 @@ object AppIcons {
 
     val Send: ImageVector = icon("Send", "M2.01,21L23,12 2.01,3 2,10l15,2 -15,2z")
 
+    /** The sidebar toggle while the sidebar is expanded: lines with an arrow pointing to fold it in. */
+    val MenuOpen: ImageVector = icon(
+        "MenuOpen",
+        "M3,18h13v-2H3v2zM3,13h10v-2H3v2zM3,6v2h13V6H3zM21,15.59L17.42,12 21,8.41 19.59,7l-5,5 5,5 1.41,-1.41z",
+    )
+
     val Description: ImageVector = icon(
         "Description",
         "M14,2H6c-1.1,0 -1.99,0.9 -1.99,2L4,20c0,1.1 0.89,2 1.99,2H18c1.1,0 2,-0.9 2,-2V8l-6,-6zM16,18H8v-2h8v2z" +

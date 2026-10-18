@@ -217,7 +217,7 @@ class SettingsViewModel(
     fun createBackup(target: java.io.File): Job {
         _state.update { it.copy(isBusy = true, error = null) }
         return launchSafely({ e -> _state.update { it.copy(isBusy = false, error = e.userMessage()) } }) {
-            val info = backupService.createBackup(target)
+            val info = Busy.track { backupService.createBackup(target) }
             auditLogRepository.log("BACKUP_CREATED", "user", "Backup ${target.name}: ${info.transactions} transactions, ${info.documents} documents")
             refresh()
             _state.update { it.copy(isBusy = false, message = AppStrings.format(StringKey.MessageBackupSaved, target.name, info.transactions, info.documents)) }
@@ -259,7 +259,7 @@ class SettingsViewModel(
                 _state.update { it.copy(isBusy = false, error = e.userMessage()) }
             }
         }) {
-            backupService.stageRestore(file, backupPassphrase)
+            Busy.track { backupService.stageRestore(file, backupPassphrase) }
             _state.update { it.copy(restorePassphraseWrong = false) }
             auditLogRepository.log("RESTORE_STAGED", "user", "Restore from ${file.name} staged")
             refresh()

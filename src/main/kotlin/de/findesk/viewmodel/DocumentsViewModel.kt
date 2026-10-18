@@ -86,7 +86,7 @@ class DocumentsViewModel(
             var withText = 0
             files.forEach { file ->
                 try {
-                    val result = documentService.uploadDocument(file, transactionId)
+                    val result = Busy.track { documentService.uploadDocument(file, transactionId) }
                     if (result.ocr?.text?.isNotBlank() == true) withText++
                 } catch (e: Exception) {
                     failures += "${file.name}: ${e.userMessage()}"
@@ -134,7 +134,7 @@ class DocumentsViewModel(
     }
 
     fun reprocessOcr(documentId: Int): Job = launchSafely(onError) {
-        val result = documentService.reprocessOcr(documentId)
+        val result = Busy.track { documentService.reprocessOcr(documentId) }
         refresh()
         _state.value.selectedDocument?.takeIf { it.id == documentId }?.let { selectDocument(it) }
         _state.update {
