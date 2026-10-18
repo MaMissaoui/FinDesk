@@ -97,7 +97,7 @@ fun DocumentsScreen() {
             FinDeskCard(modifier = Modifier.weight(3f).fillMaxHeight()) {
                 if (!state.isLoading && state.documents.isEmpty()) {
                     EmptyState(
-                        Icons.Default.Email,
+                        AppIcons.Description,
                         if (state.searchQuery.isBlank()) s[StringKey.NoDocuments] else s[StringKey.NoMatches],
                         if (state.searchQuery.isBlank()) s[StringKey.UploadHint] else s[StringKey.TryAnotherSearch],
                     )
@@ -150,7 +150,7 @@ private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Uni
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            if (doc.isPdf) Icons.Default.Email else Icons.Default.Face,
+            if (doc.isPdf) AppIcons.Description else AppIcons.Image,
             contentDescription = doc.mimeType,
             tint = if (doc.isPdf) Color(0xFFE53935) else Color(0xFF43A047),
             modifier = Modifier.size(20.dp),
