@@ -12,4 +12,7 @@ object AccountsTable : IntIdTable("accounts") {
     val accountType = varchar("account_type", 20).default("checking")
     val name = varchar("name", 255).nullable()
     val lastUpdate = datetime("last_update").nullable()
+
+    /** Custom group the account belongs to; null keeps it in its account-type group. Plain int (no FK). */
+    val groupId = integer("group_id").nullable().index()
 }

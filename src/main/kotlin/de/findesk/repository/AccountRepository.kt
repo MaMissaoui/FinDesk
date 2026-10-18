@@ -40,6 +40,12 @@ interface AccountRepository {
      * an unknown id.
      */
     fun rename(id: Int, name: String?): AccountItem?
+
+    /**
+     * Puts the account into the custom group [groupId], or back into its account-type group when null. Returns the
+     * updated item, or null for an unknown id.
+     */
+    fun setGroup(accountId: Int, groupId: Int?): AccountItem?
     fun delete(id: Int): Boolean
 
     /** Sum of the balances of accounts in [currency]; balances in different currencies can't be added. */
@@ -105,6 +111,10 @@ class AccountRepositoryImpl : AccountRepository {
         val account = Account.findById(id) ?: return@transaction null
         account.name = name?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_ACCOUNT_NAME_LENGTH)
         account.toItem()
+    }
+
+    override fun setGroup(accountId: Int, groupId: Int?): AccountItem? = transaction {
+        Account.findById(accountId)?.apply { this.groupId = groupId }?.toItem()
     }
 
     override fun delete(id: Int): Boolean = transaction {

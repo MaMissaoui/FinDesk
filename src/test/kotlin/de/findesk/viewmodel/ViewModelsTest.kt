@@ -14,11 +14,13 @@ import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
 import de.findesk.model.Direction
+import de.findesk.repository.AccountGroupRepositoryImpl
 import de.findesk.repository.AccountRepositoryImpl
 import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.MAX_BANK_NAME_LENGTH
 import de.findesk.ui.components.accountLabel
 import de.findesk.util.Formats
+import de.findesk.util.GroupKey
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -207,6 +209,156 @@ class ViewModelsTest {
         val depot = data.accountRepo.create(depotBank, "DE02120300000000202051", balance = BigDecimal("5000.00"), accountType = "depot").id.value
         vm.start(accountId = depot).join()
         assertNull(vm.state.value.balances, "a depot's balance is a market value, not the sum of its bookings")
+        vm.close()
+    }
+
+    /** A second account with its own booking, in a type group the main account isn't in. */
+    private fun savingsAccountWithBooking(): Int {
+        val savings = data.accountRepo.create(
+            data.bankAccessRepo.create("Savings Bank", "12345678", "", "savings-user").id.value,
+            "DE44500105175407324931",
+            accountType = "savings",
+        ).id.value
+        data.txn(savings, LocalDate.of(2026, 3, 3), "-11.00", partner = "Savings booking")
+        return savings
+    }
+
+    @Test
+    fun `selecting a group filters to its accounts and an empty custom group shows none`() = runBlocking {
+        savingsAccountWithBooking()
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.updatePeriod(Period.ALL).join()
+
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Type("savings"))).join()
+        assertEquals(listOf("Savings booking"), vm.state.value.transactions.map { it.partnerName })
+
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Type("checking"))).join()
+        assertEquals(setOf("REWE", "Kiosk", "Employer", "UNICEF"), vm.state.value.transactions.map { it.partnerName }.toSet())
+
+        val empty = AccountGroupRepositoryImpl().create("Empty")
+        vm.loadTransactions().join()
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Custom(empty.id))).join()
+        assertTrue(vm.state.value.transactions.isEmpty(), "an empty custom group shows no bookings")
+        vm.close()
+    }
+
+    @Test
+    fun `the account selection persists and a new view model restores it`() = runBlocking {
+        savingsAccountWithBooking()
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Type("savings"))).join()
+        vm.close()
+
+        val restored = TransactionsViewModel(today = { today })
+        restored.start().join()
+        assertEquals(AccountSelection.Group(GroupKey.Type("savings")), restored.state.value.selection)
+        assertEquals(listOf("Savings booking"), restored.state.value.transactions.map { it.partnerName })
+        restored.close()
+    }
+
+    @Test
+    fun `collapsed groups persist and a refresh never undoes a toggle`() = runBlocking {
+        savingsAccountWithBooking()
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.toggleCollapsed(GroupKey.Type("savings")).join()
+        vm.loadTransactions().join()
+        assertEquals(setOf("type:savings"), vm.state.value.collapsed, "a refresh keeps the toggled state")
+        vm.close()
+
+        val restored = TransactionsViewModel(today = { today })
+        restored.start().join()
+        assertEquals(setOf("type:savings"), restored.state.value.collapsed)
+        restored.toggleCollapsed(GroupKey.Type("savings")).join()
+        assertTrue(restored.state.value.collapsed.isEmpty())
+        restored.close()
+    }
+
+    @Test
+    fun `a stored account selection whose account was deleted falls back to all`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.selectAccounts(AccountSelection.Account(account)).join()
+        data.accountRepo.deleteWithTransactions(account)
+
+        val restored = TransactionsViewModel(today = { today })
+        restored.start().join()
+        assertEquals(AccountSelection.All, restored.state.value.selection)
+        restored.close()
+    }
+
+    @Test
+    fun `start with an account overrides the stored selection`() = runBlocking {
+        savingsAccountWithBooking()
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Type("savings"))).join()
+        vm.close()
+
+        val restored = TransactionsViewModel(today = { today })
+        restored.start(accountId = account).join()
+        assertEquals(AccountSelection.Account(account), restored.state.value.selection)
+        assertEquals(account, restored.state.value.accountId)
+        restored.close()
+    }
+
+    @Test
+    fun `the balance column shows for an account selection and hides for a group`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.selectAccounts(AccountSelection.Account(account)).join()
+        assertNotNull(vm.state.value.balances, "a single account shows the column")
+
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Type("checking"))).join()
+        assertNull(vm.state.value.balances, "a group hides it")
+        assertNull(vm.state.value.accountId)
+        vm.close()
+    }
+
+    @Test
+    fun `deleting the selected group falls back to all`() = runBlocking {
+        val group = AccountGroupRepositoryImpl().create("Reisen")
+        data.accountRepo.setGroup(account, group.id)
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+        vm.selectAccounts(AccountSelection.Group(GroupKey.Custom(group.id))).join()
+        assertEquals(AccountSelection.Group(GroupKey.Custom(group.id)), vm.state.value.selection)
+
+        vm.deleteGroup(group.id).join()
+        assertEquals(AccountSelection.All, vm.state.value.selection)
+        vm.close()
+    }
+
+    @Test
+    fun `group actions are audited and a blank name changes nothing`() = runBlocking {
+        val audit = AuditLogRepositoryImpl()
+        val vm = TransactionsViewModel(today = { today })
+        vm.start().join()
+
+        vm.createGroup("Reisen").join()
+        assertEquals(1, audit.findByAction("CREATE_ACCOUNT_GROUP").size)
+        val group = vm.state.value.customGroups.single()
+
+        vm.renameGroup(group.id, "Trips").join()
+        assertEquals(1, audit.findByAction("RENAME_ACCOUNT_GROUP").size)
+        assertEquals("Trips", vm.state.value.customGroups.single().name)
+
+        vm.moveGroup(group.id, up = true).join()
+        assertTrue(audit.findByAction("REORDER_ACCOUNT_GROUP").isNotEmpty())
+
+        vm.moveAccountToGroup(account, group.id).join()
+        assertEquals(1, audit.findByAction("MOVE_ACCOUNT_TO_GROUP").size)
+        assertEquals(group.id, vm.state.value.accounts.first { it.id == account }.groupId)
+
+        vm.createGroup("   ").join()
+        assertEquals(AppStrings[StringKey.ErrorNameRequired], vm.state.value.error)
+        assertEquals(1, vm.state.value.customGroups.size, "a blank name adds nothing")
+        assertEquals(1, audit.findByAction("CREATE_ACCOUNT_GROUP").size, "and writes no audit entry")
+
+        vm.deleteGroup(group.id).join()
+        assertEquals(1, audit.findByAction("DELETE_ACCOUNT_GROUP").size)
         vm.close()
     }
 

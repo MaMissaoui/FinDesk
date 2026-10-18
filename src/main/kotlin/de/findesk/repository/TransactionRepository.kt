@@ -155,6 +155,10 @@ class TransactionRepositoryImpl : TransactionRepository {
                 filter.startDate?.let { add(TransactionsTable.date greaterEq it) }
                 filter.endDate?.let { add(TransactionsTable.date lessEq it) }
                 filter.accountId?.let { add(TransactionsTable.accountId eq it) }
+                filter.accountIds?.let { ids ->
+                    // An empty set must match nothing (an empty group shows no bookings), not everything.
+                    if (ids.isEmpty()) add(Op.FALSE) else add(TransactionsTable.accountId inList ids)
+                }
                 filter.categoryId?.let { add(TransactionsTable.categoryId eq it) }
                 filter.currency?.let { add(TransactionsTable.currency eq it) }
                 if (filter.uncategorizedOnly) add(TransactionsTable.categoryId.isNull())

@@ -2,6 +2,7 @@ package de.findesk.repository
 
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.data.table.*
+import de.findesk.model.TransactionFilter
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -77,5 +78,26 @@ class TransactionRepositoryTest {
         val found = transactionRepo.findByHash("unique_hash_789")
 
         assertNotNull(found)
+    }
+
+    @Test
+    fun `accountIds null returns all, a set returns exactly those, an empty set returns none`() {
+        val bank = bankAccessRepo.create("Second Bank", "87654321", "SECONDEF", "user2")
+        val second = accountRepo.create(bank.id.value, "DE44500105175407324931").id.value
+        transactionRepo.create(second, LocalDate.now(), BigDecimal("-5.00"), hash = "second-account-hash")
+
+        val all = transactionRepo.findItems()
+        assertEquals(all.size, transactionRepo.findItems(TransactionFilter(accountIds = null)).size, "null means no restriction")
+
+        val onlySecond = transactionRepo.findItems(TransactionFilter(accountIds = setOf(second)))
+        assertTrue(onlySecond.isNotEmpty())
+        assertTrue(onlySecond.all { it.accountId == second })
+
+        val both = transactionRepo.findItems(TransactionFilter(accountIds = setOf(testAccountId, second)))
+        assertEquals(all.size, both.size)
+        assertTrue(both.any { it.accountId == testAccountId })
+        assertTrue(both.any { it.accountId == second })
+
+        assertTrue(transactionRepo.findItems(TransactionFilter(accountIds = emptySet())).isEmpty(), "an empty set matches nothing")
     }
 }

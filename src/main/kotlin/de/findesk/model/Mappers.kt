@@ -1,6 +1,7 @@
 package de.findesk.model
 
 import de.findesk.data.entity.Account
+import de.findesk.data.entity.AccountGroup
 import de.findesk.data.entity.BankAccess
 import de.findesk.data.entity.Category
 import de.findesk.data.entity.Document
@@ -35,6 +36,13 @@ fun Account.toItem() = AccountItem(
     accountType = accountType,
     lastUpdate = lastUpdate,
     name = name,
+    groupId = groupId,
+)
+
+fun AccountGroup.toItem() = AccountGroupItem(
+    id = id.value,
+    name = name,
+    sortOrder = sortOrder,
 )
 
 fun Category.toItem() = CategoryItem(

@@ -74,133 +74,149 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
     }
     var confirmDelete by remember { mutableStateOf<TransactionItem?>(null) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // The top bar names the screen; this row holds its summary and actions
-            Text(
-                s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)) +
-                    (state.currentBalance?.let { s.format(StringKey.TransactionsBalance, Formats.money(it, state.balanceCurrency ?: "EUR")) } ?: ""),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Row(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        if (state.accounts.isNotEmpty()) {
+            AccountPanel(
+                accounts = state.accounts,
+                groups = state.groups,
+                customGroups = state.customGroups,
+                grandTotal = state.grandTotal,
+                primaryCurrency = state.grandTotal.keys.firstOrNull() ?: Currencies.DEFAULT,
+                selection = state.selection,
+                collapsed = state.collapsed,
+                filterText = state.accountFilterText,
+                onSelect = { vm.selectAccounts(it) },
+                onToggleCollapsed = { vm.toggleCollapsed(it) },
+                onFilterText = { vm.updateAccountFilterText(it) },
+                onCreateGroup = { vm.createGroup(it) },
+                onRenameGroup = { id, name -> vm.renameGroup(id, name) },
+                onDeleteGroup = { vm.deleteGroup(it) },
+                onMoveGroup = { id, up -> vm.moveGroup(id, up) },
+                onMoveAccount = { id, groupId -> vm.moveAccountToGroup(id, groupId) },
+                modifier = Modifier.width(260.dp).fillMaxHeight(),
             )
-            Spacer(Modifier.weight(1f))
-            DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
-                OutlinedButton(
-                    enabled = state.accounts.isNotEmpty(),
-                    onClick = { openImport() },
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(s[StringKey.Import])
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { vm.autoCategorizeTransactions() }) {
-                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(s[StringKey.AutoCategorize])
-            }
-            Spacer(Modifier.width(8.dp))
-            DisabledReason(s[StringKey.HintNothingToExport].takeIf { state.transactions.isEmpty() }) {
-                OutlinedButton(
-                    onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
-                    enabled = state.transactions.isNotEmpty(),
-                ) {
-                    Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(s[StringKey.ExportCsv])
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
-                Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text(s[StringKey.Add])
-                }
-            }
+            Spacer(Modifier.width(16.dp))
         }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // The top bar names the screen; this row holds its summary and actions
+                Text(
+                    s.format(StringKey.TransactionsSummary, state.transactions.size, Currencies.format(state.totalIncome, Currencies.DEFAULT), Currencies.format(state.totalExpenses, Currencies.DEFAULT)) +
+                        (state.currentBalance?.let { s.format(StringKey.TransactionsBalance, Formats.money(it, state.balanceCurrency ?: "EUR")) } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.weight(1f))
+                DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
+                    OutlinedButton(
+                        enabled = state.accounts.isNotEmpty(),
+                        onClick = { openImport() },
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(s[StringKey.Import])
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = { vm.autoCategorizeTransactions() }) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(s[StringKey.AutoCategorize])
+                }
+                Spacer(Modifier.width(8.dp))
+                DisabledReason(s[StringKey.HintNothingToExport].takeIf { state.transactions.isEmpty() }) {
+                    OutlinedButton(
+                        onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
+                        enabled = state.transactions.isNotEmpty(),
+                    ) {
+                        Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(s[StringKey.ExportCsv])
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+                DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
+                    Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text(s[StringKey.Add])
+                    }
+                }
+            }
 
-        Spacer(Modifier.height(16.dp))
-        MessageBanner(state.message, state.error, vm::clearMessages)
+            Spacer(Modifier.height(16.dp))
+            MessageBanner(state.message, state.error, vm::clearMessages)
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { vm.updateSearchQuery(it) },
-                placeholder = { Text(s[StringKey.SearchPartnerPurpose]) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-            )
-            DropdownSelector(s.period(state.period), Period.entries, { s.period(it) }, { vm.updatePeriod(it) }, leadingIcon = Icons.Default.DateRange)
-            DropdownSelector(
-                label = categoryFilterLabel(state.categoryFilter, state.categories, s),
-                options = listOf<CategoryFilter>(CategoryFilter.Any, CategoryFilter.None) + state.categories.map { CategoryFilter.Only(it.id) },
-                optionLabel = { categoryFilterLabel(it, state.categories, s) },
-                onSelect = { vm.updateCategoryFilter(it) },
-            )
-            if (state.accounts.size > 1 || state.accountId != null) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = { vm.updateSearchQuery(it) },
+                    placeholder = { Text(s[StringKey.SearchPartnerPurpose]) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                DropdownSelector(s.period(state.period), Period.entries, { s.period(it) }, { vm.updatePeriod(it) }, leadingIcon = Icons.Default.DateRange)
                 DropdownSelector(
-                    label = state.accounts.firstOrNull { it.id == state.accountId }?.let { it.name ?: "…${it.iban.takeLast(4)}" } ?: s[StringKey.AllAccounts],
-                    options = listOf<AccountItem?>(null) + state.accounts,
-                    optionLabel = { it?.let { a -> accountLabel(a) } ?: s[StringKey.AllAccounts] },
-                    onSelect = { vm.updateAccountFilter(it?.id) },
+                    label = categoryFilterLabel(state.categoryFilter, state.categories, s),
+                    options = listOf<CategoryFilter>(CategoryFilter.Any, CategoryFilter.None) + state.categories.map { CategoryFilter.Only(it.id) },
+                    optionLabel = { categoryFilterLabel(it, state.categories, s) },
+                    onSelect = { vm.updateCategoryFilter(it) },
                 )
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Direction.entries.forEach { d ->
-                FilterChip(
-                    selected = state.direction == d,
-                    onClick = { vm.updateDirection(d) },
-                    label = { Text(s.direction(d)) },
-                )
-            }
-            Spacer(Modifier.width(8.dp))
-            AmountRangeInputs(state.minAmount, state.maxAmount, s) { min, max -> vm.updateAmountRange(min, max) }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        FinDeskCard(modifier = Modifier.fillMaxWidth()) {
-            Column {
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    HeaderCell(s[StringKey.ColDate], 1f)
-                    HeaderCell(s[StringKey.ColDescription], 3f)
-                    HeaderCell(s[StringKey.ColCategory], 1.4f)
-                    HeaderCell(s[StringKey.ColAmount], 1.2f, TextAlign.End)
-                    if (state.balances != null) HeaderCell(s[StringKey.ColBalance], 1.2f, TextAlign.End)
-                    Spacer(Modifier.width(40.dp))
-                }
-                HorizontalDivider()
-                if (!state.isLoading && state.transactions.isEmpty()) {
-                    EmptyState(
-                        Icons.Default.List,
-                        s[StringKey.NoTransactions],
-                        if (state.accounts.isEmpty()) s[StringKey.AddAccountFirstThen] else s[StringKey.NothingMatches],
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Direction.entries.forEach { d ->
+                    FilterChip(
+                        selected = state.direction == d,
+                        onClick = { vm.updateDirection(d) },
+                        label = { Text(s.direction(d)) },
                     )
                 }
-                LazyColumn {
-                    items(state.transactions, key = { it.id }) { txn ->
-                        RowContextMenu(
-                            menuItem(s[StringKey.OpenDetails]) { vm.selectTransaction(txn) },
-                            menuItem(s[StringKey.AttachReceipt]) { attachReceipt(txn.id) },
-                            txn.partnerName?.let { partner -> menuItem(s.format(StringKey.ShowAllFromPartner, partner)) { vm.showPartner(partner) } },
-                            menuItem(s[StringKey.Delete]) { confirmDelete = txn },
-                        ) {
-                            TransactionRow(
-                                txn = txn,
-                                categories = state.categories,
-                                balance = state.balances?.get(txn.id),
-                                balanceCurrency = state.balanceCurrency,
-                                onCategory = { vm.updateTransactionCategory(txn.id, it) },
-                                onDelete = { confirmDelete = txn },
-                                onOpen = { vm.selectTransaction(txn) },
-                            )
+                Spacer(Modifier.width(8.dp))
+                AmountRangeInputs(state.minAmount, state.maxAmount, s) { min, max -> vm.updateAmountRange(min, max) }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            FinDeskCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        HeaderCell(s[StringKey.ColDate], 1f)
+                        HeaderCell(s[StringKey.ColDescription], 3f)
+                        HeaderCell(s[StringKey.ColCategory], 1.4f)
+                        HeaderCell(s[StringKey.ColAmount], 1.2f, TextAlign.End)
+                        if (state.balances != null) HeaderCell(s[StringKey.ColBalance], 1.2f, TextAlign.End)
+                        Spacer(Modifier.width(40.dp))
+                    }
+                    HorizontalDivider()
+                    if (!state.isLoading && state.transactions.isEmpty()) {
+                        EmptyState(
+                            Icons.Default.List,
+                            s[StringKey.NoTransactions],
+                            if (state.accounts.isEmpty()) s[StringKey.AddAccountFirstThen] else s[StringKey.NothingMatches],
+                        )
+                    }
+                    LazyColumn {
+                        items(state.transactions, key = { it.id }) { txn ->
+                            RowContextMenu(
+                                menuItem(s[StringKey.OpenDetails]) { vm.selectTransaction(txn) },
+                                menuItem(s[StringKey.AttachReceipt]) { attachReceipt(txn.id) },
+                                txn.partnerName?.let { partner -> menuItem(s.format(StringKey.ShowAllFromPartner, partner)) { vm.showPartner(partner) } },
+                                menuItem(s[StringKey.Delete]) { confirmDelete = txn },
+                            ) {
+                                TransactionRow(
+                                    txn = txn,
+                                    categories = state.categories,
+                                    balance = state.balances?.get(txn.id),
+                                    balanceCurrency = state.balanceCurrency,
+                                    onCategory = { vm.updateTransactionCategory(txn.id, it) },
+                                    onDelete = { confirmDelete = txn },
+                                    onOpen = { vm.selectTransaction(txn) },
+                                )
+                            }
+                            HorizontalDivider()
                         }
-                        HorizontalDivider()
                     }
                 }
             }

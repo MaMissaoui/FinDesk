@@ -41,6 +41,14 @@ data class AccountItem(
     val lastUpdate: LocalDateTime?,
     /** The user's own label for the account; null shows the account type instead. */
     val name: String? = null,
+    /** Custom group the account belongs to; null keeps it in its account-type group. */
+    val groupId: Int? = null,
+)
+
+data class AccountGroupItem(
+    val id: Int,
+    val name: String,
+    val sortOrder: Int,
 )
 
 data class CategoryItem(
@@ -140,6 +148,11 @@ data class TransactionFilter(
     val startDate: LocalDate? = null,
     val endDate: LocalDate? = null,
     val accountId: Int? = null,
+    /**
+     * Restricts to these accounts; null means no restriction and an empty set matches nothing (an empty group must
+     * show no bookings, not all of them). Kept next to [accountId] for callers that filter by a single account.
+     */
+    val accountIds: Set<Int>? = null,
     val categoryId: Int? = null,
     val uncategorizedOnly: Boolean = false,
     val taxRelevantOnly: Boolean = false,

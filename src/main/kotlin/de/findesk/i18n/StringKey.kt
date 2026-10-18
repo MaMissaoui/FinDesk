@@ -336,6 +336,22 @@ enum class StringKey {
     CreateRule,
     TabDelimiter,
 
+    // Account panel (Transactions)
+    NewGroup,
+    GroupName,
+    RenameGroup,
+    DeleteGroup,
+    DeleteGroupText,
+    MoveUp,
+    MoveDown,
+    MoveToGroup,
+    DefaultGroup,
+    FilterAccounts,
+    AccountsShown,
+    LastFetched,
+    Collapse,
+    Expand,
+
     // Payments
     SepaTransfer,
     NoAccounts,
