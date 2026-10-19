@@ -292,6 +292,10 @@ fun AccountPanel(
 @Composable
 private fun panelAmountColor(value: java.math.BigDecimal, selected: Boolean): Color = if (selected) LocalContentColor.current else balanceColor(value)
 
+/** The grey of secondary lines, except on the selection highlight: the dark theme's grey on its teal is unreadable. */
+@Composable
+private fun panelSecondaryColor(selected: Boolean): Color = if (selected) LocalContentColor.current else MaterialTheme.colorScheme.onSurfaceVariant
+
 /** One account being dragged: its row, the group it is listed under and the pointer in root coordinates. */
 private data class AccountDrag(val account: AccountItem, val currentKey: GroupKey, val pointer: Offset)
 
@@ -443,12 +447,12 @@ private fun AccountRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text("…${account.iban.takeLast(4)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("…${account.iban.takeLast(4)}", style = MaterialTheme.typography.bodySmall, color = panelSecondaryColor(selected))
             account.lastUpdate?.let {
                 Text(
                     s.format(StringKey.LastFetched, Formats.date(it.toLocalDate())),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = panelSecondaryColor(selected),
                 )
             }
         }
