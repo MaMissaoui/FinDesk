@@ -294,6 +294,21 @@ class ScreenshotTest {
         render("sidebar-collapsed-de", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, language = AppLanguage.DE, transactions = ::panel, sidebarCollapsed = true) }
     }
 
+    /** Two connections, one excluded: the header's "Sync all" and the grey hint on the excluded card. */
+    @Test
+    fun `render accounts with Sync all and an excluded connection`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-sync-all").toFile().absolutePath)
+        val banks = BankAccessRepositoryImpl()
+        val dkb = banks.create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        val hvb = banks.create("UniCredit Bank - HypoVereinsbank AG", "70020270", "HYVEDEMMXXX", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        accounts.create(dkb, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        accounts.create(hvb, "DE02120300000000202051", balance = BigDecimal("-45.10"))
+        banks.setIncludeInSyncAll(hvb, false)
+
+        render("accounts-sync-all", 1440, 900) { Frame(Screen.ACCOUNTS, dark = false) }
+    }
+
     /** The unread-booking counter: panel badges, a bold account name and bold rows for a sync's fresh bookings. */
     @Test
     fun `render transactions with new bookings`() {

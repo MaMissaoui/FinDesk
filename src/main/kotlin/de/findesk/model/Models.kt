@@ -27,6 +27,8 @@ data class BankAccessItem(
     val capabilities: String? = null,
     /** Chosen start date for the next sync (fetch older history); null uses the normal delta sync. */
     val syncFrom: LocalDate? = null,
+    /** Whether "Sync all" syncs this connection. */
+    val includeInSyncAll: Boolean = true,
 )
 
 data class AccountItem(

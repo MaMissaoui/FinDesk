@@ -16,16 +16,19 @@ import de.findesk.util.GroupKey
 import de.findesk.util.Iban
 import de.findesk.util.grandTotal
 import de.findesk.util.group
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.math.BigDecimal
 import java.time.LocalDate
+import kotlin.coroutines.coroutineContext
 
 data class AccountDetail(
     val account: AccountItem,
@@ -36,12 +39,16 @@ data class AccountDetail(
     val expensesInPeriod: BigDecimal,
 )
 
+data class SyncAllProgress(val index: Int, val total: Int, val bankName: String)
+
 data class AccountsState(
     val accounts: List<AccountItem> = emptyList(),
     val bankAccesses: List<BankAccessItem> = emptyList(),
     val isLoading: Boolean = false,
     /** Bank access currently syncing, if any. */
     val syncingBankId: Int? = null,
+    /** Progress of a "Sync all" run, if one is active. */
+    val syncAll: SyncAllProgress? = null,
     val detail: AccountDetail? = null,
     val syncStep: String? = null,
     val error: String? = null,
@@ -68,6 +75,16 @@ data class AccountsState(
 ) {
     /** Balances per currency, primary first; different currencies are never added up. */
     val totals: Map<String, BigDecimal> get() = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
+
+    /** Whether a single sync or a "Sync all" run is active; no other sync may start meanwhile. */
+    val isSyncing: Boolean get() = syncingBankId != null || syncAll != null
+}
+
+/** How one connection's sync ended, so a "Sync all" run can combine the results and keep going on a failure. */
+private sealed interface SyncOutcome {
+    data class Success(val summary: String, val warning: String?) : SyncOutcome
+    data class Failed(val message: String) : SyncOutcome
+    data object Cancelled : SyncOutcome
 }
 
 class AccountsViewModel(
@@ -358,10 +375,25 @@ class AccountsViewModel(
 
     /** Stores [date] as the start of the next sync's history window, then starts that sync for [bankAccessId]. */
     fun fetchHistoryFrom(bankAccessId: Int, date: LocalDate): Job = launchSafely(onError) {
+        if (_state.value.syncAll != null) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorConnectionBusy]) }
+            return@launchSafely
+        }
         bankAccessRepository.setSyncFrom(bankAccessId, date)
         auditLogRepository.log("SET_SYNC_FROM", "user", "Bank access $bankAccessId: history from $date")
         refresh()
         syncBankAccess(bankAccessId).join()
+    }
+
+    /** Stores whether "Sync all" syncs [bankAccessId]; refused while any sync runs, since it is read when a run starts. */
+    fun setIncludeInSyncAll(bankAccessId: Int, include: Boolean): Job = launchSafely(onError) {
+        if (_state.value.isSyncing) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorConnectionBusy]) }
+            return@launchSafely
+        }
+        bankAccessRepository.setIncludeInSyncAll(bankAccessId, include)
+        auditLogRepository.log("SET_SYNC_ALL_INCLUDED", "user", "Bank access $bankAccessId: included in Sync all = $include")
+        refresh()
     }
 
     /** Drops a stored history start so the next sync uses the normal delta window again. */
@@ -373,28 +405,105 @@ class AccountsViewModel(
 
     /** Online sync via FinTS. Prompts for PIN/TAN through [bankingInteraction]. */
     fun syncBankAccess(bankAccessId: Int): Job {
+        // "Sync all" holds the connection until its run is over; starting a single sync then would interleave dialogs
+        if (_state.value.syncAll != null) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorConnectionBusy]) }
+            return Job().apply { complete() }
+        }
         _state.update { it.copy(syncingBankId = bankAccessId, syncStep = AppStrings[StringKey.SyncConnecting], error = null, message = null) }
+        return launchSafely({ e -> _state.update { it.copy(syncingBankId = null, error = e.userMessage()) } }) {
+            when (val outcome = syncOne(bankAccessId)) {
+                is SyncOutcome.Success -> _state.update { it.copy(message = outcome.summary, error = outcome.warning) }
+                is SyncOutcome.Failed -> _state.update { it.copy(error = outcome.message) }
+                SyncOutcome.Cancelled -> _state.update { it.copy(error = null) }
+            }
+        }
+    }
+
+    /**
+     * "Sync all": syncs every connection with [BankAccessItem.includeInSyncAll], one FinTS dialog after another in
+     * the order of the bank cards. The guard runs before launching, so a double click can never start two runs.
+     */
+    fun syncAll(): Job {
+        // The placeholder claims the screen on the calling thread, exactly like syncBankAccess sets syncingBankId
+        while (true) {
+            val current = _state.value
+            if (current.isSyncing) return Job().apply { complete() }
+            val claimed = current.copy(syncAll = SyncAllProgress(0, 0, ""), error = null, message = null)
+            if (_state.compareAndSet(current, claimed)) break
+        }
+        return launchSafely({ e -> _state.update { it.copy(syncAll = null, error = e.userMessage()) } }) {
+            try {
+                val included = bankAccessRepository.findAllItems().filter { it.includeInSyncAll }
+                if (included.isEmpty()) {
+                    _state.update { it.copy(error = AppStrings[StringKey.SyncAllNothingIncluded]) }
+                    return@launchSafely
+                }
+                auditLogRepository.log("SYNC_ALL", "user", "Sync all: bank access ids ${included.map { it.id }}")
+                // One busy section for the whole run: switching the language or screen between connections would cancel it
+                Busy.track {
+                    val messages = mutableListOf<String>()
+                    val errors = mutableListOf<String>()
+                    var stoppedAt: String? = null
+                    for ((position, bank) in included.withIndex()) {
+                        coroutineContext.ensureActive()
+                        _state.update { it.copy(syncAll = SyncAllProgress(position + 1, included.size, bank.bankName)) }
+                        when (val outcome = syncOne(bank.id)) {
+                            is SyncOutcome.Success -> {
+                                messages += "${bank.bankName}: ${outcome.summary}"
+                                outcome.warning?.let { errors += "${bank.bankName}: $it" }
+                            }
+
+                            is SyncOutcome.Failed -> errors += "${bank.bankName}: ${outcome.message}"
+
+                            SyncOutcome.Cancelled -> {
+                                stoppedAt = bank.bankName
+                                break
+                            }
+                        }
+                    }
+                    stoppedAt?.let { messages += AppStrings.format(StringKey.SyncAllStopped, it) }
+                    _state.update {
+                        it.copy(
+                            message = messages.takeIf { list -> list.isNotEmpty() }?.joinToString("\n"),
+                            error = errors.takeIf { list -> list.isNotEmpty() }?.joinToString("\n"),
+                        )
+                    }
+                }
+            } finally {
+                _state.update { it.copy(syncAll = null) }
+            }
+        }
+    }
+
+    /**
+     * Syncs one connection and reports how it ended; [syncBankAccess] and [syncAll] turn that into screen messages.
+     * Cancellation is rethrown so a closed view model never syncs the next connection.
+     */
+    private suspend fun syncOne(bankAccessId: Int): SyncOutcome {
+        _state.update { it.copy(syncingBankId = bankAccessId, syncStep = AppStrings[StringKey.SyncConnecting]) }
         val progressJob = launchSafely({}) {
             bankingService.syncProgress.collect { p -> _state.update { it.copy(syncStep = p?.currentStep ?: it.syncStep) } }
         }
-        return launchSafely({ e -> _state.update { it.copy(syncingBankId = null, error = e.userMessage()) } }) {
-            try {
-                // fetchHistoryFrom runs through here too, so one busy section covers both
-                when (val r = Busy.track { bankingService.syncBankConnection(bankAccessId, bankingInteraction) }) {
-                    is BankingResult.Success -> {
-                        refresh()
-                        val warn = r.data.warnings.takeIf { it.isNotEmpty() }?.joinToString("\n")
-                        // A PIN the user asked to remember that the keychain refused: a short, non-secret note
-                        val pinNote = AppStrings[StringKey.PinNotSaved].takeIf { bankingService.pinNotSaved }
-                        _state.update { it.copy(message = listOfNotNull(r.data.summary(), pinNote).joinToString("\n"), error = warn) }
-                    }
-
-                    is BankingResult.Error -> _state.update { it.copy(error = if (r.code == "CANCELLED") null else r.message) }
+        return try {
+            when (val r = Busy.track { bankingService.syncBankConnection(bankAccessId, bankingInteraction) }) {
+                is BankingResult.Success -> {
+                    refresh()
+                    val warn = r.data.warnings.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                    // A PIN the user asked to remember that the keychain refused: a short, non-secret note
+                    val pinNote = AppStrings[StringKey.PinNotSaved].takeIf { bankingService.pinNotSaved }
+                    SyncOutcome.Success(listOfNotNull(r.data.summary(), pinNote).joinToString("\n"), warn)
                 }
-            } finally {
-                progressJob.cancel()
-                _state.update { it.copy(syncingBankId = null, syncStep = null) }
+
+                is BankingResult.Error -> if (r.code == "CANCELLED") SyncOutcome.Cancelled else SyncOutcome.Failed(r.message)
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            SyncOutcome.Failed(e.userMessage())
+        } finally {
+            progressJob.cancel()
+            _state.update { it.copy(syncingBankId = null, syncStep = null) }
         }
     }
 

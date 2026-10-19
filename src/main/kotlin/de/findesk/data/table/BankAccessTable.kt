@@ -19,4 +19,7 @@ object BankAccessTable : IntIdTable("bank_access") {
 
     /** Comma-separated BPD/UPD job names the login supports (see BankCapabilities); null until the first sync. */
     val capabilities = text("capabilities").nullable()
+
+    /** Whether "Sync all" syncs this connection; the default keeps existing connections included. */
+    val includeInSyncAll = bool("include_in_sync_all").default(true)
 }

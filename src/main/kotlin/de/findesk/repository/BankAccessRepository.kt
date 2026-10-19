@@ -25,6 +25,9 @@ interface BankAccessRepository {
     /** Stores (or clears, with null) the start date the next sync fetches history from for every account. */
     fun setSyncFrom(id: Int, date: LocalDate?): BankAccessItem?
 
+    /** Stores whether "Sync all" syncs this connection. */
+    fun setIncludeInSyncAll(id: Int, include: Boolean): BankAccessItem?
+
     /**
      * Stores the BLZ, BIC, FinTS server URL, the chosen TAN method, the login and/or the display name (null leaves a
      * value unchanged). The name is only a label: renaming changes nothing about the FinTS connection. A blank BIC
@@ -99,6 +102,10 @@ class BankAccessRepositoryImpl : BankAccessRepository {
 
     override fun setSyncFrom(id: Int, date: LocalDate?): BankAccessItem? = transaction {
         BankAccess.findById(id)?.apply { syncFrom = date }?.toItem()
+    }
+
+    override fun setIncludeInSyncAll(id: Int, include: Boolean): BankAccessItem? = transaction {
+        BankAccess.findById(id)?.apply { includeInSyncAll = include }?.toItem()
     }
 
     override fun findAllItems(): List<BankAccessItem> = transaction {
