@@ -458,7 +458,7 @@ class ScreenshotTest {
         Screen.TRANSACTIONS -> "Transactions"
         Screen.PAYMENTS -> "Payments"
         Screen.DOCUMENTS -> "Documents"
-        Screen.REPORTS -> "Reports/Tax"
+        Screen.REPORTS -> "Reports"
         Screen.SETTINGS -> "Settings"
     }
 }
