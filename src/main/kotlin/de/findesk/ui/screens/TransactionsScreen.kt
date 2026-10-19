@@ -3,6 +3,7 @@ package de.findesk.ui.screens
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -17,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -113,13 +116,13 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                 Spacer(Modifier.width(16.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
-                // The summary and the actions wrap onto new lines rather than squeezing a button's label into a column
+                // The summary shares one line with the actions; it ellipsizes rather than wrapping below them
                 val headerBalance = state.currentBalance
                 val headerBalanceColor = if (headerBalance != null) balanceColor(headerBalance) else MaterialTheme.colorScheme.onSurfaceVariant
-                FlowRow(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // The top bar names the screen; this row holds its summary and actions
                     Text(
@@ -141,32 +144,30 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
-                        OutlinedButton(
-                            enabled = state.accounts.isNotEmpty(),
-                            onClick = { openImport() },
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(s[StringKey.Import], maxLines = 1, softWrap = false)
-                        }
-                    }
-                    OutlinedButton(onClick = { vm.autoCategorizeTransactions() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(s[StringKey.AutoCategorize], maxLines = 1, softWrap = false)
-                    }
-                    DisabledReason(s[StringKey.HintNothingToExport].takeIf { state.transactions.isEmpty() }) {
-                        OutlinedButton(
-                            onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
-                            enabled = state.transactions.isNotEmpty(),
-                        ) {
-                            Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(s[StringKey.ExportCsv], maxLines = 1, softWrap = false)
-                        }
-                    }
+                    OverflowMenu(
+                        items = listOf(
+                            OverflowItem(
+                                label = s[StringKey.Import],
+                                icon = Icons.Default.Add,
+                                disabledReason = s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() },
+                                onClick = { openImport() },
+                            ),
+                            OverflowItem(
+                                label = s[StringKey.AutoCategorize],
+                                icon = Icons.Default.Refresh,
+                                onClick = { vm.autoCategorizeTransactions() },
+                            ),
+                            OverflowItem(
+                                label = s[StringKey.ExportCsv],
+                                icon = AppIcons.FileDownload,
+                                disabledReason = s[StringKey.HintNothingToExport].takeIf { state.transactions.isEmpty() },
+                                onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
+                            ),
+                        ),
+                    )
                     DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
                         Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
                             Icon(Icons.Default.Add, contentDescription = null)
@@ -179,19 +180,18 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                 Spacer(Modifier.height(16.dp))
                 MessageBanner(state.message, state.error, vm::clearMessages)
 
-                // Wraps instead of crushing the search field; the field keeps a usable minimum width
+                // One row of 40 dp controls; it wraps instead of crushing the search field, which keeps a usable minimum
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedTextField(
+                    CompactSearchField(
                         value = state.searchQuery,
                         onValueChange = { vm.updateSearchQuery(it) },
-                        placeholder = { Text(s[StringKey.SearchPartnerPurpose]) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        modifier = Modifier.weight(1f).widthIn(min = 240.dp),
-                        singleLine = true,
+                        placeholder = s[StringKey.SearchPartnerPurpose],
+                        // The pills keep a 48 dp touch area around their 40 dp outline, so centre the field on them
+                        modifier = Modifier.weight(1f).widthIn(min = 240.dp).align(Alignment.CenterVertically),
                     )
                     DropdownSelector(s.period(state.period), Period.entries, { s.period(it) }, { vm.updatePeriod(it) }, leadingIcon = Icons.Default.DateRange)
                     DropdownSelector(
@@ -209,17 +209,16 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                             onSelect = { vm.selectAccounts(it) },
                         )
                     }
-                }
-                Spacer(Modifier.height(12.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Direction.entries.forEach { d ->
-                        FilterChip(
-                            selected = state.direction == d,
-                            onClick = { vm.updateDirection(d) },
-                            label = { Text(s.direction(d)) },
-                        )
+                    SingleChoiceRow(
+                        options = Direction.entries,
+                        selected = state.direction,
+                        label = { s.direction(it) },
+                        onSelect = { vm.updateDirection(it) },
+                    )
+                    // Labelled in the primary currency, which the grand total lists first
+                    AmountFilter(state.minAmount, state.maxAmount, state.grandTotal.keys.firstOrNull() ?: Currencies.DEFAULT) { min, max ->
+                        vm.updateAmountRange(min, max)
                     }
-                    AmountRangeInputs(state.minAmount, state.maxAmount, s) { min, max -> vm.updateAmountRange(min, max) }
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -578,10 +577,12 @@ private fun AddTransactionDialog(
                     optionLabel = { accountLabel(it) },
                     onSelect = { account = it },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = isExpense, onClick = { isExpense = true }, label = { Text(s[StringKey.Expense]) })
-                    FilterChip(selected = !isExpense, onClick = { isExpense = false }, label = { Text(s[StringKey.Income]) })
-                }
+                SingleChoiceRow(
+                    options = listOf(true, false),
+                    selected = isExpense,
+                    label = { if (it) s[StringKey.Expense] else s[StringKey.Income] },
+                    onSelect = { isExpense = it },
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         dateText,
@@ -754,35 +755,96 @@ private fun ImportDialog(
     )
 }
 
+/**
+ * The amount bound as one pill: "Any amount" until a bound is set, then "≥ €10.00", "≤ €50.00" or "€10.00–€50.00".
+ * Its menu keeps the old live parsing: blank or parseable input applies (absolute values), anything else waits.
+ */
 @Composable
-private fun AmountRangeInputs(min: BigDecimal?, max: BigDecimal?, s: Strings, onChange: (BigDecimal?, BigDecimal?) -> Unit) {
+internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String = Currencies.DEFAULT, onChange: (BigDecimal?, BigDecimal?) -> Unit) {
+    val s = strings()
+    var expanded by remember { mutableStateOf(false) }
     var minText by remember { mutableStateOf(min?.toPlainString().orEmpty()) }
     var maxText by remember { mutableStateOf(max?.toPlainString().orEmpty()) }
     fun apply() = onChange(Formats.parseAmount(minText)?.abs(), Formats.parseAmount(maxText)?.abs())
-    // One unit, so a wrapping FlowRow never leaves the dash or the max field behind on its own
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
-            minText,
-            {
-                minText = it
-                if (it.isBlank() || Formats.parseAmount(it) != null) apply()
-            },
-            placeholder = { Text(s[StringKey.MinEuro]) },
-            singleLine = true,
-            modifier = Modifier.width(100.dp),
-        )
-        Text("–")
-        OutlinedTextField(
-            maxText,
-            {
-                maxText = it
-                if (it.isBlank() || Formats.parseAmount(it) != null) apply()
-            },
-            placeholder = { Text(s[StringKey.MaxEuro]) },
-            singleLine = true,
-            modifier = Modifier.width(100.dp),
-        )
+
+    val labelText = when {
+        min != null && max != null -> "${Formats.money(min, currency)}–${Formats.money(max, currency)}"
+        min != null -> "≥ ${Formats.money(min, currency)}"
+        max != null -> "≤ ${Formats.money(max, currency)}"
+        else -> s[StringKey.AmountFilterAny]
     }
+    Box {
+        OutlinedButton(onClick = { expanded = true }, shape = RoundedCornerShape(50)) {
+            Text(labelText, maxLines = 1)
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            Column(Modifier.width(240.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CompactAmountField(
+                        value = minText,
+                        onValueChange = {
+                            minText = it
+                            if (it.isBlank() || Formats.parseAmount(it) != null) apply()
+                        },
+                        placeholder = s[StringKey.MinEuro],
+                        modifier = Modifier.weight(1f),
+                    )
+                    CompactAmountField(
+                        value = maxText,
+                        onValueChange = {
+                            maxText = it
+                            if (it.isBlank() || Formats.parseAmount(it) != null) apply()
+                        },
+                        placeholder = s[StringKey.MaxEuro],
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = {
+                        minText = ""
+                        maxText = ""
+                        onChange(null, null)
+                        expanded = false
+                    }) { Text(s[StringKey.Reset]) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactAmountField(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        modifier = modifier.height(40.dp),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) {
+                        Text(
+                            placeholder,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        },
+    )
 }
 
 @Composable

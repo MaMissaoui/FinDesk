@@ -9,6 +9,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
@@ -206,6 +208,13 @@ class ScreenshotTest {
         render("transactions-chart-collapsed", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
     }
 
+    /** The toolbar's overflow menu open over the (empty) transaction list. */
+    @Test
+    fun `render the open transactions overflow menu`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-more-menu").toFile().absolutePath)
+        render("transactions-more-menu", 1440, 900, clickAt = Offset(1283f, 108f)) { Frame(Screen.TRANSACTIONS, dark = false) }
+    }
+
     @Test
     fun `render accounts with a custom account name`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-names").toFile().absolutePath)
@@ -356,7 +365,7 @@ class ScreenshotTest {
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
-    private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {
+    private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, content: @Composable () -> Unit) {
         val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
             content()
         }
@@ -367,13 +376,24 @@ class ScreenshotTest {
             var frame = 0L
 
             fun next() = scene.render(frame++ * 16_000_000L).encodeToData(EncodedImageFormat.PNG)?.bytes ?: error("encode failed")
-            var png = next()
-            var stable = 0
-            while (frame < 150 && (frame < 10 || stable < 10)) {
-                Thread.sleep(100)
-                val current = next()
-                stable = if (current.contentEquals(png)) stable + 1 else 0
-                png = current
+            fun settle(png: ByteArray, limit: Long = 150, minimumFrames: Long = 10): ByteArray {
+                var currentPng = png
+                var stable = 0
+                while (frame < limit && (frame < minimumFrames || stable < 10)) {
+                    Thread.sleep(100)
+                    val current = next()
+                    stable = if (current.contentEquals(currentPng)) stable + 1 else 0
+                    currentPng = current
+                }
+                return currentPng
+            }
+            var png = settle(next())
+            if (clickAt != null) {
+                // Overlay menus are separate popup layers in the scene, so click the button and let the menu open
+                scene.sendPointerEvent(PointerEventType.Press, clickAt)
+                scene.sendPointerEvent(PointerEventType.Release, clickAt)
+                val clickedAt = frame
+                png = settle(png, limit = 260, minimumFrames = clickedAt + 10)
             }
             File(outDir, "$name.png").writeBytes(png)
         } finally {

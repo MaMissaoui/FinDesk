@@ -978,10 +978,12 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                             color = balanceColor(a.balance),
                         )
                     }
-                    listOf(30, 90, 365).forEach { d ->
-                        FilterChip(selected = detail.days == d, onClick = { onDays(d) }, label = { Text(if (d == 365) s[StringKey.OneYear] else s.format(StringKey.DaysCount, d)) })
-                        Spacer(Modifier.width(6.dp))
-                    }
+                    SingleChoiceRow(
+                        options = listOf(30, 90, 365),
+                        selected = detail.days,
+                        label = { d -> if (d == 365) s[StringKey.OneYear] else s.format(StringKey.DaysCount, d) },
+                        onSelect = onDays,
+                    )
                 }
                 Text(
                     s.format(StringKey.LastDaysSummary, detail.days, Formats.money(detail.incomeInPeriod, a.currency), Formats.money(detail.expensesInPeriod, a.currency)),

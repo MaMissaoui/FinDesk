@@ -128,16 +128,19 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(s[StringKey.Execution], style = MaterialTheme.typography.labelLarge)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Execution.entries.forEach { e ->
-                            val supported = when (e) {
+                    SingleChoiceRow(
+                        options = Execution.entries,
+                        selected = execution,
+                        label = { s[it.label] },
+                        onSelect = { execution = it },
+                        enabled = { e ->
+                            when (e) {
                                 Execution.ON_DATE -> scheduledOk
                                 Execution.STANDING -> standingOk
                                 Execution.NOW -> true
                             }
-                            FilterChip(selected = execution == e, enabled = supported, onClick = { execution = e }, label = { Text(s[e.label]) })
-                        }
-                    }
+                        },
+                    )
                     if (!scheduledOk || !standingOk) {
                         Text(s[StringKey.NotOfferedByBank], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

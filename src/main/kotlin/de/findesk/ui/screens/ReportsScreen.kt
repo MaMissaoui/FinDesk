@@ -44,6 +44,7 @@ fun ReportsScreen() {
         vm.loadRecurring()
     }
     var selectedTab by remember { mutableStateOf(0) }
+    var exportMenu by remember { mutableStateOf(false) }
     val report = state.taxReport
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
@@ -51,11 +52,15 @@ fun ReportsScreen() {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // The top bar names the screen; this row pairs the period controls with the export actions
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                FilterChip(selected = !customMode, onClick = {
-                    customMode = false
-                    vm.updateYear(state.selectedYear)
-                }, label = { Text(s[StringKey.TaxYear]) })
-                FilterChip(selected = customMode, onClick = { customMode = true }, label = { Text(s[StringKey.CustomRange]) })
+                SingleChoiceRow(
+                    options = listOf(false, true),
+                    selected = customMode,
+                    label = { if (it) s[StringKey.CustomRange] else s[StringKey.TaxYear] },
+                    onSelect = { custom ->
+                        customMode = custom
+                        if (!custom) vm.updateYear(state.selectedYear)
+                    },
+                )
                 if (!customMode) {
                     IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = s[StringKey.PreviousYear]) }
                     Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -73,22 +78,28 @@ fun ReportsScreen() {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))
             }
-            OutlinedButton(
-                enabled = !state.isExporting,
-                onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "findesk-${fileSuffix(state.customRange, state.selectedYear)}.csv")?.let { vm.exportToCsv(it) } },
-            ) {
-                Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(s[StringKey.ExportCsv])
-            }
-            Spacer(Modifier.width(8.dp))
-            Button(
-                enabled = !state.isExporting,
-                onClick = { FileDialogs.saveFile(s[StringKey.ExportReport], "report-${fileSuffix(state.customRange, state.selectedYear)}.pdf")?.let { vm.exportToPdf(it) } },
-            ) {
-                Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(s[StringKey.ExportPdf])
+            Box {
+                Button(enabled = !state.isExporting, onClick = { exportMenu = true }) {
+                    Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(s[StringKey.Export])
+                }
+                DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(s[StringKey.ExportPdf]) },
+                        onClick = {
+                            exportMenu = false
+                            FileDialogs.saveFile(s[StringKey.ExportReport], "report-${fileSuffix(state.customRange, state.selectedYear)}.pdf")?.let { vm.exportToPdf(it) }
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(s[StringKey.ExportCsv]) },
+                        onClick = {
+                            exportMenu = false
+                            FileDialogs.saveFile(s[StringKey.ExportTransactions], "findesk-${fileSuffix(state.customRange, state.selectedYear)}.csv")?.let { vm.exportToCsv(it) }
+                        },
+                    )
+                }
             }
         }
 
