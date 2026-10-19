@@ -1,11 +1,16 @@
 package de.findesk.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -13,8 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -22,6 +29,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -266,6 +274,152 @@ fun <T> DropdownSelector(
                     onClick = {
                         expanded = false
                         onSelect(option)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A 40 dp search field: the same pill and outline as [DropdownSelector], a leading magnifier and a clear button.
+ * Built on [BasicTextField] so the height really stays at 40 dp; focus thickens the outline to 2 dp primary.
+ */
+@Composable
+fun CompactSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    val s = strings()
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val shape = RoundedCornerShape(50)
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        interactionSource = interactionSource,
+        // The placeholder disappears once text is typed, so it also names the field for screen readers
+        modifier = modifier.height(40.dp).semantics { contentDescription = placeholder },
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .border(if (focused) 2.dp else 1.dp, if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, shape)
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) {
+                        Text(
+                            placeholder,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    innerTextField()
+                }
+                if (value.isNotEmpty()) {
+                    IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = s[StringKey.ClearSearch], modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+        },
+    )
+}
+
+/**
+ * Exclusive choices as one segmented row, replacing loose chips and tabs that filter. Segments are 40 dp and use
+ * the theme's selected container; [enabled] disables an individual option without hiding it.
+ */
+@Composable
+fun <T> SingleChoiceRow(
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: (T) -> Boolean = { true },
+) {
+    // The row shares its intrinsic width equally between the segments, so give every label the width of the
+    // widest one; otherwise a longer choice is clipped rather than widening its segment.
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val labels = options.map(label)
+    val widest = with(density) {
+        labels.maxOfOrNull { measurer.measure(it, MaterialTheme.typography.labelLarge).size.width }?.toDp() ?: 0.dp
+    }
+    SingleChoiceSegmentedButtonRow(modifier = modifier) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = option == selected,
+                onClick = { onSelect(option) },
+                enabled = enabled(option),
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                icon = {},
+                label = { Text(labels[index], maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = widest)) },
+            )
+        }
+    }
+}
+
+/** One entry of an [OverflowMenu]; [disabledReason] both disables it and explains why below the label. */
+data class OverflowItem(
+    val label: String,
+    val icon: ImageVector?,
+    val disabledReason: String? = null,
+    val onClick: () -> Unit,
+)
+
+/** A 40 dp outlined More button whose menu holds secondary actions, with a reason line on disabled entries. */
+@Composable
+fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
+    val s = strings()
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(50),
+            contentPadding = PaddingValues(0.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(20.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            items.forEach { item ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(item.label)
+                            if (item.disabledReason != null) {
+                                Text(
+                                    item.disabledReason,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    },
+                    leadingIcon = item.icon?.let { icon -> { Icon(icon, contentDescription = null) } },
+                    enabled = item.disabledReason == null,
+                    onClick = {
+                        expanded = false
+                        item.onClick()
                     },
                 )
             }

@@ -12,6 +12,7 @@ enum class StringKey {
     Back,
     Dismiss,
     More,
+    ClearSearch,
     Uncategorized,
     TaxRelevant,
     Tax,
@@ -216,6 +217,7 @@ enum class StringKey {
     AllCategories,
     MinEuro,
     MaxEuro,
+    AmountFilterAny,
     AddTransaction,
     Expense,
     Income,
@@ -423,6 +425,7 @@ enum class StringKey {
     PreviewOf,
 
     // Reports
+    Export,
     ExportPdf,
     ExportReport,
     TaxYear,

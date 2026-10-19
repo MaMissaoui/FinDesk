@@ -51,13 +51,11 @@ fun DocumentsScreen() {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Search is the toolbar's context, Upload its action; the OCR hint rides under the field
             Column(Modifier.weight(1f)) {
-                OutlinedTextField(
+                CompactSearchField(
                     value = state.searchQuery,
                     onValueChange = { vm.searchDocuments(it) },
-                    placeholder = { Text(s[StringKey.SearchDocuments]) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    placeholder = s[StringKey.SearchDocuments],
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
                 )
                 if (!state.isOcrAvailable) {
                     Spacer(Modifier.height(4.dp))
@@ -90,11 +88,13 @@ fun DocumentsScreen() {
         MessageBanner(state.message, state.error, vm::clearMessages)
 
         Spacer(Modifier.height(12.dp))
-        TabRow(selectedTabIndex = state.tab.ordinal) {
-            DocumentTab.entries.forEach { tab ->
-                Tab(selected = state.tab == tab, onClick = { vm.selectTab(tab) }, text = { Text(s.documentTab(tab)) }, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
+        // These filter the list rather than switch views, so they read as an exclusive choice, left-aligned
+        SingleChoiceRow(
+            options = DocumentTab.entries,
+            selected = state.tab,
+            label = { s.documentTab(it) },
+            onSelect = { vm.selectTab(it) },
+        )
         Spacer(Modifier.height(16.dp))
 
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
