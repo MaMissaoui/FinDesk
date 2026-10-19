@@ -75,6 +75,8 @@ class ScreenshotTest {
             render("${screen.ordinal}-${screen.name.lowercase()}", screen, dark = false)
             render("${screen.ordinal}-${screen.name.lowercase()}-dark", screen, dark = true)
         }
+        // The first-run dashboard: only the three-step getting-started card, no empty stat cards or charts
+        render("dashboard-first-run-dark", Screen.DASHBOARD, dark = true)
         // The narrowest common window: stat-card subtitles wrap here, so the cards must still line up
         render("11-dashboard-narrow", 1024, 900) { Frame(Screen.DASHBOARD, dark = false) }
         render("8-dashboard-full", Screen.DASHBOARD, dark = false, height = 1800)
@@ -243,6 +245,19 @@ class ScreenshotTest {
         accounts.create(bank, "DE02120300000000202052", balance = BigDecimal("-84500.00"), accountType = "loan")
 
         render("accounts-loans", Screen.ACCOUNTS, dark = false)
+    }
+
+    /** With an account the Dashboard leaves the getting-started card for its stat cards and charts. */
+    @Test
+    fun `render the dashboard with an account`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-dashboard").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+
+        render("dashboard-with-account", Screen.DASHBOARD, dark = false)
+        render("dashboard-with-account-dark", Screen.DASHBOARD, dark = true)
+        // The narrowest common window: stat-card subtitles wrap here, so the cards must still line up
+        render("dashboard-with-account-narrow", 1024, 900) { Frame(Screen.DASHBOARD, dark = false) }
     }
 
     /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */

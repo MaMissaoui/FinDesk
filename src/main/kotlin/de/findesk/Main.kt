@@ -123,12 +123,13 @@ fun App(
 
                                     Screen.ACCOUNTS -> AccountsScreen(onNavigate = navigate)
 
-                                    Screen.TRANSACTIONS -> TransactionsScreen(args = navigationState.args)
+                                    Screen.TRANSACTIONS -> TransactionsScreen(args = navigationState.args, onNavigate = navigate)
 
                                     Screen.PAYMENTS -> PaymentsScreen(
                                         onSendingChange = { sending ->
                                             if (sending) navigationState.lock(Screen.PAYMENTS) else navigationState.unlock(Screen.PAYMENTS)
                                         },
+                                        onNavigate = navigate,
                                     )
 
                                     Screen.DOCUMENTS -> DocumentsScreen()

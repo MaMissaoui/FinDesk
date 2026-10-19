@@ -1,8 +1,10 @@
 package de.findesk.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -49,16 +51,13 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
 
         if (!state.isLoading && !state.hasAccounts) {
             item {
-                Card {
-                    EmptyState(
-                        icon = AppIcons.AccountBalance,
-                        title = s[StringKey.WelcomeTitle],
-                        description = s[StringKey.WelcomeDescription],
-                    ) {
-                        Button(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddAccount]) }
-                    }
-                }
+                GettingStartedCard(
+                    onAddBank = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) },
+                    onOpenSettings = { onNavigate(Screen.SETTINGS, NavigationArgs()) },
+                )
             }
+            // First run: the setup card is the whole dashboard, so no empty totals or charts suggest false data
+            return@LazyColumn
         }
 
         item {
@@ -72,25 +71,14 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     Modifier.weight(1f).fillMaxHeight(),
                     subtitle = state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
                 )
-                StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome, state.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f).fillMaxHeight())
-                StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses, state.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f).fillMaxHeight())
-                StatCard(
-                    s[StringKey.PendingTasks],
-                    state.pendingTasks.toString(),
-                    Icons.Default.Warning,
-                    Warning,
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clickable(
-                            enabled = state.uncategorizedCount > 0,
-                            onClick = {
-                                onNavigate(Screen.TRANSACTIONS, NavigationArgs(uncategorizedOnly = true))
-                            },
-                            onClickLabel = s[StringKey.ViewPendingTasks],
-                            role = Role.Button,
-                        ),
-                    subtitle = s.format(StringKey.PendingSubtitle, state.uncategorizedCount, state.unlinkedDocumentCount),
+                StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome, state.currency), AppIcons.ArrowDownward, Success, Modifier.weight(1f).fillMaxHeight())
+                StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses, state.currency), AppIcons.ArrowUpward, Error, Modifier.weight(1f).fillMaxHeight())
+                PendingTasksCard(
+                    pendingTasks = state.pendingTasks,
+                    uncategorizedCount = state.uncategorizedCount,
+                    unlinkedDocumentCount = state.unlinkedDocumentCount,
+                    onOpenTasks = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(uncategorizedOnly = true)) },
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }
         }
@@ -105,7 +93,11 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     }
                 }
                 SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(1f).fillMaxHeight()) {
-                    IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxSize(), currency = state.currency)
+                    if (state.lastMonths.all { it.income.signum() == 0 && it.expenses.signum() == 0 }) {
+                        Text(s[StringKey.NoBookingsSixMonths], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxSize(), currency = state.currency)
+                    }
                 }
             }
         }
@@ -174,6 +166,77 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             }
         }
     }
+}
+
+@Composable
+internal fun GettingStartedCard(onAddBank: () -> Unit, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
+    val s = strings()
+    Card(modifier = modifier.widthIn(max = 640.dp).fillMaxWidth()) {
+        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(s[StringKey.WelcomeTitle], style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                s[StringKey.GettingStartedIntro],
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            GettingStartedStep(1, s[StringKey.StepAddBank], s[StringKey.StepAddBankHint]) {
+                Button(onClick = onAddBank) { Text(s[StringKey.AddBank]) }
+            }
+            GettingStartedStep(2, s[StringKey.StepSync], s[StringKey.StepSyncHint])
+            GettingStartedStep(3, s[StringKey.StepCategorize], s[StringKey.StepCategorizeHint]) {
+                // No inner padding, so the label lines up with the step text above it
+                TextButton(onClick = onOpenSettings, contentPadding = PaddingValues(horizontal = 0.dp)) { Text(s[StringKey.OpenSettings]) }
+            }
+        }
+    }
+}
+
+/** One numbered step; the number is a real sequence, so the circle carries 1, 2, 3 rather than an icon. */
+@Composable
+private fun GettingStartedStep(number: Int, title: String, description: String, action: (@Composable () -> Unit)? = null) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(
+            modifier = Modifier.size(28.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                number.toString(),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (action != null) action()
+        }
+    }
+}
+
+@Composable
+internal fun PendingTasksCard(
+    pendingTasks: Int,
+    uncategorizedCount: Int,
+    unlinkedDocumentCount: Int,
+    onOpenTasks: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val s = strings()
+    val done = pendingTasks == 0
+    StatCard(
+        s[StringKey.PendingTasks],
+        pendingTasks.toString(),
+        if (done) Icons.Default.CheckCircle else Icons.Default.Warning,
+        if (done) amountColor(false) else Warning,
+        modifier.clickable(
+            enabled = uncategorizedCount > 0,
+            onClick = onOpenTasks,
+            onClickLabel = s[StringKey.ViewPendingTasks],
+            role = Role.Button,
+        ),
+        subtitle = if (done) s[StringKey.NothingPending] else s.format(StringKey.PendingSubtitle, uncategorizedCount, unlinkedDocumentCount),
+    )
 }
 
 @Composable
