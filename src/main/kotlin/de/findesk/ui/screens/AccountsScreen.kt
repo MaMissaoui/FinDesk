@@ -38,6 +38,7 @@ import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceColor
+import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.AccountDetail
@@ -45,8 +46,6 @@ import de.findesk.viewmodel.AccountsViewModel
 import de.findesk.viewmodel.visibleAccounts
 import java.math.BigDecimal
 import java.time.LocalDate
-
-private val ACCOUNT_TYPES = listOf("checking", "savings", "credit_card", "depot")
 
 @Composable
 fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
@@ -297,8 +296,10 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
         BalanceDialog(
             account = account,
             onDismiss = { editBalance = null },
-            onConfirm = {
-                vm.updateBalance(account.id, it)
+            onConfirm = { newBalance, newType ->
+                // Saving a balance also stamps the account as updated, so a type-only change must not touch it
+                if (newBalance.compareTo(account.balance) != 0) vm.updateBalance(account.id, newBalance)
+                if (newType != account.accountType) vm.setAccountType(account.id, newType)
                 editBalance = null
             },
         )
@@ -496,6 +497,7 @@ private fun BankCard(
                         menuItem(s[StringKey.ShowTransactions]) { onTransactions(account) },
                         menuItem(s[StringKey.MenuDetails]) { onOpenAccount(account) },
                         menuItem(s[StringKey.RenameAccount]) { onRenameAccount(account) },
+                        menuItem(s[StringKey.ChangeAccountType]) { onEditBalance(account) },
                         menuItem(s[StringKey.EditBalance]) { onEditBalance(account) },
                         menuItem(s[StringKey.DeleteAccount]) { onDeleteAccount(account) },
                     ) {
@@ -741,8 +743,9 @@ private fun AddAccountDialog(
 }
 
 @Composable
-private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm: (BigDecimal) -> Unit) {
+internal fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm: (BigDecimal, String) -> Unit) {
     var text by remember { mutableStateOf(account.balance.toPlainString().replace('.', ',')) }
+    var type by remember { mutableStateOf(account.accountType.takeIf { it in ACCOUNT_TYPES } ?: ACCOUNT_TYPES.first()) }
     val parsed = Formats.parseAmount(text)
     val s = strings()
     AlertDialog(
@@ -751,6 +754,12 @@ private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall)
+                DropdownSelector(
+                    label = "${s[StringKey.AccountTypeLabel]}: ${s.accountType(type)}",
+                    options = ACCOUNT_TYPES,
+                    optionLabel = { s.accountType(it) },
+                    onSelect = { type = it },
+                )
                 OutlinedTextField(
                     text,
                     { text = it },
@@ -759,9 +768,16 @@ private fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfirm
                     isError = parsed == null,
                     supportingText = { if (parsed == null) Text(s[StringKey.EnterValidBalance]) },
                 )
+                if (type == "loan") {
+                    Text(
+                        s[StringKey.LoanBalanceHint],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         },
-        confirmButton = { Button(onClick = { parsed?.let(onConfirm) }, enabled = parsed != null) { Text(s[StringKey.Save]) } },
+        confirmButton = { Button(onClick = { parsed?.let { onConfirm(it, type) } }, enabled = parsed != null) { Text(s[StringKey.Save]) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }

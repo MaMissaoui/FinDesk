@@ -71,6 +71,8 @@ class BankingService(
         val duplicates: Int,
         val categorized: Int,
         val warnings: List<String>,
+        /** Things the user should know but that must not make the sync look failed (e.g. a missing balance). */
+        val notes: List<String> = emptyList(),
         /** Start date the user chose to fetch older history from, if the sync used one. */
         val historyFrom: LocalDate? = null,
     ) {
@@ -81,6 +83,7 @@ class BankingService(
             if (categorized > 0) append(AppStrings.format(StringKey.SyncSummaryCategorized, categorized))
             if (duplicates > 0) append(AppStrings.format(StringKey.SyncSummaryDuplicates, duplicates))
             historyFrom?.let { append(AppStrings.format(StringKey.SyncSummaryHistoryFrom, Formats.date(it))) }
+            notes.forEach { append("\n").append(it) }
         }
     }
 
@@ -191,6 +194,7 @@ class BankingService(
                 var duplicates = 0
                 var categorized = 0
                 val warnings = mutableListOf<String>()
+                val notes = mutableListOf<String>()
                 snapshots.filter { it.account.iban.isNotBlank() }.forEachIndexed { i, snap ->
                     finTSClient.reportProgress(AppStrings.format(StringKey.ProgressSavingAccount, snap.account.iban.takeLast(4)), 0.5f + 0.5f * i / snapshots.size, i, snapshots.size)
                     val iban = Iban.normalize(snap.account.iban)
@@ -203,8 +207,21 @@ class BankingService(
                         currency = snap.account.currency,
                         accountType = snap.account.accountType,
                     ).id.value.also { added++ }
+                    // A sync only corrects the type the bank clearly reports: a depot the bank now calls a loan
+                    if (existing != null && existing.accountType == "depot" && snap.account.accountType == "loan") {
+                        accountRepository.update(existing.id, accountType = "loan")
+                        auditLogRepository.log("CORRECT_ACCOUNT_TYPE", "user", "Account …${iban.takeLast(4)}: depot -> loan")
+                    }
                     snap.balance?.let { accountRepository.updateBalance(accountId, it.balance) }
                     snap.statementError?.let { warnings += "${iban.takeLast(4)}: $it" }
+                    // No balance and nothing entered yet: tell the user, but never gate the sync on it
+                    if (snap.balance == null && (existing == null || existing.balance.compareTo(BigDecimal.ZERO) == 0)) {
+                        notes += if (snap.balanceCode != null) {
+                            AppStrings.format(StringKey.BalanceNotProvided, iban.takeLast(4), snap.balanceCode)
+                        } else {
+                            AppStrings.format(StringKey.BalanceNotProvidedNoCode, iban.takeLast(4))
+                        }
+                    }
 
                     val result = importTransactions(accountId, snap.transactions)
                     imported += result.imported
@@ -217,7 +234,7 @@ class BankingService(
                     // The chosen history start is one-shot: a fully successful sync clears it, a failure keeps it
                     if (historyFrom != null) bankAccessRepository.setSyncFrom(bankAccessId, null)
                 }
-                val report = SyncReport(snapshots.size, added, imported, duplicates, categorized, warnings, historyFrom = historyFrom)
+                val report = SyncReport(snapshots.size, added, imported, duplicates, categorized, warnings, notes, historyFrom = historyFrom)
                 auditLogRepository.log("SYNC_BANK", "user", "${bankAccess.bankName}: ${report.summary()}")
                 BankingResult.Success(report)
             }

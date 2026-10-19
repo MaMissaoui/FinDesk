@@ -33,6 +33,7 @@ class Strings(
         "checking" -> this[StringKey.TypeChecking]
         "savings" -> this[StringKey.TypeSavings]
         "credit_card" -> this[StringKey.TypeCreditCard]
+        "loan" -> this[StringKey.TypeLoan]
         "depot" -> this[StringKey.TypeDepot]
         else -> type
     }
