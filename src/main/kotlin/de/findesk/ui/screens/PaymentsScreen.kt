@@ -25,6 +25,8 @@ import de.findesk.model.AccountItem
 import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.ui.components.*
+import de.findesk.ui.navigation.NavigationArgs
+import de.findesk.ui.navigation.Screen
 import de.findesk.util.Formats
 import de.findesk.util.Iban
 import de.findesk.viewmodel.PaymentsViewModel
@@ -34,7 +36,11 @@ import de.findesk.viewmodel.PaymentsViewModel
  * order is in flight, so the app can keep the user on this screen until the bank has answered.
  */
 @Composable
-fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewModel() }, onSendingChange: (Boolean) -> Unit = {}) {
+fun PaymentsScreen(
+    createViewModel: () -> PaymentsViewModel = { PaymentsViewModel() },
+    onSendingChange: (Boolean) -> Unit = {},
+    onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> },
+) {
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     LaunchedEffect(state.isSending) { onSendingChange(state.isSending) }
@@ -75,13 +81,17 @@ fun PaymentsScreen(createViewModel: () -> PaymentsViewModel = { PaymentsViewMode
     }
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        if (state.accounts.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                EmptyState(Icons.Default.Send, s[StringKey.NoAccounts], s[StringKey.AddAndSyncFirst]) {
+                    Button(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddBank]) }
+                }
+            }
+            return@Row
+        }
+
         Column(Modifier.weight(3f).verticalScroll(rememberScrollState())) {
             MessageBanner(state.message, state.error, vm::clearMessages)
-
-            if (state.accounts.isEmpty()) {
-                EmptyState(Icons.Default.Send, s[StringKey.NoAccounts], s[StringKey.AddAndSyncFirst])
-                return@Column
-            }
 
             SectionCard(s[StringKey.SepaTransfer]) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

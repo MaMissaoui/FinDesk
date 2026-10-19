@@ -46,6 +46,10 @@ fun DocumentsScreen() {
     LaunchedEffect(Unit) { vm.loadDocuments() }
 
     var confirmDelete by remember { mutableStateOf<DocumentItem?>(null) }
+    val upload: () -> Unit = {
+        val files = FileDialogs.openFiles(s[StringKey.UploadDocuments], DocumentService.SUPPORTED_EXTENSIONS)
+        if (files.isNotEmpty()) vm.uploadDocuments(files)
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -73,10 +77,7 @@ fun DocumentsScreen() {
             }
             Button(
                 enabled = !state.isUploading,
-                onClick = {
-                    val files = FileDialogs.openFiles(s[StringKey.UploadDocuments], DocumentService.SUPPORTED_EXTENSIONS)
-                    if (files.isNotEmpty()) vm.uploadDocuments(files)
-                },
+                onClick = upload,
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -104,6 +105,12 @@ fun DocumentsScreen() {
                         AppIcons.Description,
                         if (state.searchQuery.isBlank()) s[StringKey.NoDocuments] else s[StringKey.NoMatches],
                         if (state.searchQuery.isBlank()) s[StringKey.UploadHint] else s[StringKey.TryAnotherSearch],
+                        // Upload only when there is nothing at all; a search or tab with no hits keeps just the hint
+                        action = if (state.searchQuery.isBlank() && state.tab == DocumentTab.ALL) {
+                            { Button(enabled = !state.isUploading, onClick = upload) { Text(s[StringKey.Upload]) } }
+                        } else {
+                            null
+                        },
                     )
                 }
                 LazyColumn {

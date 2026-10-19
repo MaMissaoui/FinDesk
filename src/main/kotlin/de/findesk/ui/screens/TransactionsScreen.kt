@@ -42,6 +42,7 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
+import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceColor
@@ -61,7 +62,11 @@ import java.time.format.DateTimeParseException
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel: () -> TransactionsViewModel = { TransactionsViewModel() }) {
+fun TransactionsScreen(
+    args: NavigationArgs = NavigationArgs(),
+    createViewModel: () -> TransactionsViewModel = { TransactionsViewModel() },
+    onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> },
+) {
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
@@ -241,6 +246,11 @@ fun TransactionsScreen(args: NavigationArgs = NavigationArgs(), createViewModel:
                                 Icons.Default.List,
                                 s[StringKey.NoTransactions],
                                 if (state.accounts.isEmpty()) s[StringKey.AddAccountFirstThen] else s[StringKey.NothingMatches],
+                                action = if (state.accounts.isEmpty()) {
+                                    { Button(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddBank]) } }
+                                } else {
+                                    null
+                                },
                             )
                         }
                         LazyColumn {

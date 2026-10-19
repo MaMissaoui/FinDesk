@@ -92,6 +92,16 @@ enum class StringKey {
     RecentTransactions,
     ViewAll,
     NoTransactionsYet,
+    GettingStartedIntro,
+    StepAddBank,
+    StepAddBankHint,
+    StepSync,
+    StepSyncHint,
+    StepCategorize,
+    StepCategorizeHint,
+    OpenSettings,
+    NothingPending,
+    NoBookingsSixMonths,
 
     // Accounts
     AccountsTotal,
