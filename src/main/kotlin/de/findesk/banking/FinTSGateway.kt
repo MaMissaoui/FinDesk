@@ -80,6 +80,11 @@ data class AccountSnapshot(
     val transactions: List<FinTSTransaction>,
     /** Why statements couldn't be fetched for this account, if they couldn't. */
     val statementError: String? = null,
+    /**
+     * The bank's return code(s) for the balance request when it sent no balance (e.g. "3016"), never the bank's
+     * message text (it contains the full account number).
+     */
+    val balanceCode: String? = null,
 )
 
 /** Port to the bank. [Hbci4JavaGateway] talks FinTS; tests use a fake. */

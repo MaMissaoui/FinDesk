@@ -794,6 +794,58 @@ class BankingSyncTest {
         assertEquals("Haushalt", stored.name, "a sync must not overwrite the user's name")
         assertEquals(BigDecimal("120.00"), stored.balance)
     }
+
+    @Test
+    fun `a loan without a balance is created as a loan and noted without leaking the IBAN`() = runBlocking {
+        val loanIban = "DE89370400440532013040"
+        val loanAccount = account(loanIban).copy(accountType = "loan")
+        gateway.snapshots = listOf(
+            AccountSnapshot(loanAccount, balance = null, transactions = emptyList(), balanceCode = "3016"),
+            snapshot(giro, "1234.56"),
+        )
+
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(2, report.accountsAdded)
+        assertEquals("loan", data.accountRepo.findAllItems().single { it.iban == loanIban }.accountType)
+        assertEquals(1, report.notes.size)
+        val note = report.notes.single()
+        assertTrue(note.contains(loanIban.takeLast(4)), note)
+        assertTrue(note.contains("3016"), note)
+        assertFalse(note.contains(loanIban), "the note names only the last four digits")
+        assertTrue(report.warnings.isEmpty(), "a missing balance is not a warning")
+        assertNotNull(data.bankAccessRepo.findItem(bankId)!!.lastSync, "notes never gate the sync date")
+        assertFalse(AuditLogRepositoryImpl().findByAction("SYNC_BANK").single().details!!.contains(loanIban))
+
+        // What the user enters survives a later sync that still brings no balance, and stays quiet
+        val loanId = data.accountRepo.findAllItems().single { it.iban == loanIban }.id
+        data.accountRepo.updateBalance(loanId, BigDecimal("-12000.00"))
+        val second = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertTrue(second.notes.isEmpty(), "a balance the user entered silences the note")
+        assertEquals(BigDecimal("-12000.00"), data.accountRepo.findAllItems().single { it.iban == loanIban }.balance)
+    }
+
+    @Test
+    fun `a bank-typed loan corrects only a stored depot, never a type the user chose`() = runBlocking {
+        val depotIban = "DE89370400440532013041"
+        val savingsIban = "DE89370400440532013042"
+        data.accountRepo.create(bankId, depotIban, balance = BigDecimal("0.00"), accountType = "depot")
+        data.accountRepo.create(bankId, savingsIban, balance = BigDecimal("0.00"), accountType = "savings")
+        gateway.snapshots = listOf(
+            AccountSnapshot(account(depotIban).copy(accountType = "loan"), FinTSBalance(account(depotIban), BigDecimal("1.00")), emptyList()),
+            AccountSnapshot(account(savingsIban).copy(accountType = "loan"), FinTSBalance(account(savingsIban), BigDecimal("2.00")), emptyList()),
+        )
+
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        val accounts = data.accountRepo.findAllItems()
+        assertEquals("loan", accounts.single { it.iban == depotIban }.accountType)
+        assertEquals("savings", accounts.single { it.iban == savingsIban }.accountType, "a type the user chose is left alone")
+        val corrections = AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_TYPE")
+        assertEquals(1, corrections.size)
+        assertTrue(corrections.single().details!!.contains("depot -> loan"))
+    }
 }
 
 class HbciCallbackTest {
@@ -924,10 +976,25 @@ class HbciCallbackTest {
     @Test
     fun `fints account type codes`() {
         assertEquals("checking", Hbci4JavaGateway.accountTypeFor("1"))
+        assertEquals("checking", Hbci4JavaGateway.accountTypeFor("9"))
         assertEquals("savings", Hbci4JavaGateway.accountTypeFor("10"))
+        assertEquals("savings", Hbci4JavaGateway.accountTypeFor("25"))
         assertEquals("depot", Hbci4JavaGateway.accountTypeFor("30"))
+        assertEquals("loan", Hbci4JavaGateway.accountTypeFor("40"))
+        assertEquals("loan", Hbci4JavaGateway.accountTypeFor("49"))
         assertEquals("credit_card", Hbci4JavaGateway.accountTypeFor("50"))
+        assertEquals("depot", Hbci4JavaGateway.accountTypeFor("60"))
+        assertEquals("savings", Hbci4JavaGateway.accountTypeFor("75"))
+        assertEquals("checking", Hbci4JavaGateway.accountTypeFor("99"))
         assertEquals("checking", Hbci4JavaGateway.accountTypeFor(null))
+    }
+
+    @Test
+    fun `balance codes keep the bank's reasons and drop successes and dialog notes`() {
+        assertEquals("3016", Hbci4JavaGateway.balanceCodes(listOf("0020", "3016")))
+        assertNull(Hbci4JavaGateway.balanceCodes(listOf("3060", "3076")))
+        assertEquals("3016, 9010", Hbci4JavaGateway.balanceCodes(listOf("3016", "3016", "9010")))
+        assertNull(Hbci4JavaGateway.balanceCodes(emptyList()))
     }
 
     /** DKB's account data has no BIC, and HBCI4Java then refuses to queue CAMT statements ("KUmsZeitCamt1"). */

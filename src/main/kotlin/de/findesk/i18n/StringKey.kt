@@ -46,6 +46,7 @@ enum class StringKey {
     TypeChecking,
     TypeSavings,
     TypeCreditCard,
+    TypeLoan,
     TypeDepot,
 
     // Periods
@@ -163,6 +164,9 @@ enum class StringKey {
     DeleteAccountTitle,
     DeleteAccountText,
     RenameAccount,
+    ChangeAccountType,
+    AccountTypeLabel,
+    LoanBalanceHint,
     AccountName,
     AccountNameHint,
     RemoveBankTitle,
@@ -609,6 +613,7 @@ enum class StringKey {
     ErrorCsvExportFailed,
     ErrorSyncFromDateInvalid,
     ErrorSyncFromDateFuture,
+    ErrorAccountTypeInvalid,
 
     // Banking errors & progress
     ErrorBankConnectionNotFound,
@@ -675,6 +680,8 @@ enum class StringKey {
     SyncSummaryCategorized,
     SyncSummaryDuplicates,
     SyncSummaryHistoryFrom,
+    BalanceNotProvided,
+    BalanceNotProvidedNoCode,
 
     // Import
     ImportSummary,

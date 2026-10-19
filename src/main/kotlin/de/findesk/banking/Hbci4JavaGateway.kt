@@ -105,6 +105,15 @@ class Hbci4JavaGateway : FinTSGateway {
             val balance = info?.ready?.value?.let { value ->
                 FinTSBalance(account = account, balance = value.bigDecimalValue, availableBalance = info.available?.bigDecimalValue, currency = value.curr ?: account.currency)
             }
+            // The job's own return codes (never the message text: it names the full account number)
+            val balanceCode = if (balance == null) {
+                val codes = (p.saldo?.jobResult?.jobStatus)?.let { st ->
+                    st.errors.orEmpty().asList() + st.warnings.orEmpty().asList()
+                }.orEmpty().mapNotNull { it.code }
+                balanceCodes(codes)
+            } else {
+                null
+            }
             val ums = p.umsatz?.jobResult as? GVRKUms
             val transactions = if (ums != null && ums.isOK) ums.flatData.orEmpty().map { it.toTransaction(account) } else emptyList()
             val error = when {
@@ -113,7 +122,7 @@ class Hbci4JavaGateway : FinTSGateway {
                 ums == null || !ums.isOK -> ums?.jobStatus?.toString()?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejectedStatements]
                 else -> null
             }
-            AccountSnapshot(account, balance, transactions, error)
+            AccountSnapshot(account, balance, transactions, error, balanceCode)
         }
     }
 
@@ -445,14 +454,32 @@ class Hbci4JavaGateway : FinTSGateway {
                 .firstNotNullOfOrNull { BankDirectory.lookup(it)?.bic?.takeIf(String::isNotBlank) }
             ?: bic
 
-        /** FinTS account type codes: 1-9 checking, 10-19 savings, 30-39 depot, 50-59 credit card. */
+        /**
+         * FinTS account type codes: 1-9 checking, 10-29 savings (savings, fixed-term), 30-39 depot, 40-49 loan,
+         * 50-59 credit card, 60-69 depot (fund depot), 70-79 savings (building savings contract); anything else
+         * (or null) is "checking".
+         */
         internal fun accountTypeFor(code: String?): String = when (code?.toIntOrNull()) {
             in 1..9 -> "checking"
             in 10..29 -> "savings"
-            in 30..49 -> "depot"
+            in 30..39 -> "depot"
+            in 40..49 -> "loan"
             in 50..59 -> "credit_card"
+            in 60..69 -> "depot"
+            in 70..79 -> "savings"
             else -> "checking"
         }
+
+        /**
+         * The bank's return codes when it sent no balance, or null when only success codes and dialog-wide notes
+         * remain. Codes starting with "0" are successes; 3060 and 3076 are notes about the whole dialog, not reasons
+         * for this account.
+         */
+        internal fun balanceCodes(codes: List<String>): String? = codes
+            .filterNot { it.startsWith("0") || it == "3060" || it == "3076" }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
 
         private fun LocalDate.toDate(): Date = Date.from(atStartOfDay(ZoneId.systemDefault()).toInstant())
 

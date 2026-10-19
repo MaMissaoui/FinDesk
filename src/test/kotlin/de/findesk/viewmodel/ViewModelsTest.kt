@@ -903,6 +903,24 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `setAccountType stores and audits a valid type and refuses an unknown one`() = runBlocking {
+        val vm = AccountsViewModel()
+        vm.loadAccounts().join()
+        val audit = AuditLogRepositoryImpl()
+
+        vm.setAccountType(account, "loan").join()
+        assertEquals("loan", data.accountRepo.findAllItems().first { it.id == account }.accountType)
+        val entry = audit.findByAction("CHANGE_ACCOUNT_TYPE").single()
+        assertTrue(entry.details!!.contains("Account $account: checking -> loan"), entry.details)
+
+        vm.setAccountType(account, "zebra").join()
+        assertEquals("loan", data.accountRepo.findAllItems().first { it.id == account }.accountType, "an unknown type changes nothing")
+        assertEquals(1, audit.findByAction("CHANGE_ACCOUNT_TYPE").size, "and writes no audit entry")
+        assertEquals(AppStrings[StringKey.ErrorAccountTypeInvalid], vm.state.value.error)
+        vm.close()
+    }
+
+    @Test
     fun `account name and label fall back to the localized type`() {
         val s = Translations.of(AppLanguage.EN)
         val plain = data.accountRepo.findAllItems().first { it.id == account }

@@ -33,8 +33,11 @@ data class AccountGroupView(
     val newCount: Int = 0,
 )
 
+/** The account types FinDesk offers, in the order their groups are shown. */
+val ACCOUNT_TYPES = listOf("checking", "savings", "credit_card", "loan", "depot")
+
 /** Type groups are ordered by these first; any other type follows, alphabetically. */
-private val FIXED_TYPE_ORDER = listOf("checking", "savings", "credit_card", "depot")
+private val FIXED_TYPE_ORDER = ACCOUNT_TYPES
 
 /**
  * Puts every account into its custom group when [AccountItem.groupId] names an existing group, and into its

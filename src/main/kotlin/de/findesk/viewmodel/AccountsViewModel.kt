@@ -9,6 +9,7 @@ import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
 import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
+import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AccountGroupView
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
@@ -275,6 +276,27 @@ class AccountsViewModel(
     fun updateBalance(accountId: Int, balance: BigDecimal): Job = launchSafely(onError) {
         accountRepository.updateBalance(accountId, balance)
         auditLogRepository.log("UPDATE_BALANCE", "user", "Updated balance of account $accountId")
+        refresh()
+    }
+
+    /**
+     * Changes an account's type by hand. Only one of [ACCOUNT_TYPES] is accepted; anything else is refused and
+     * nothing is stored. A change to the stored type is audit-logged.
+     */
+    fun setAccountType(accountId: Int, type: String): Job = launchSafely(onError) {
+        if (type !in ACCOUNT_TYPES) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorAccountTypeInvalid]) }
+            return@launchSafely
+        }
+        val previous = accountRepository.findAllItems().firstOrNull { it.id == accountId }
+        if (previous == null) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorAccountNotFound]) }
+            return@launchSafely
+        }
+        accountRepository.update(accountId, accountType = type)
+        if (previous.accountType != type) {
+            auditLogRepository.log("CHANGE_ACCOUNT_TYPE", "user", "Account $accountId: ${previous.accountType} -> $type")
+        }
         refresh()
     }
 

@@ -9,12 +9,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Density
 import de.findesk.banking.TransferOrder
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.LocalStrings
+import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
+import de.findesk.model.AccountItem
 import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.plaintextDatabase
@@ -217,6 +222,70 @@ class ScreenshotTest {
         SettingsRepositoryImpl().setValue(AccountsViewModel.KEY_COLLAPSED_BANKS, bank.toString())
         render("accounts-collapsed", Screen.ACCOUNTS, dark = false)
     }
+
+    /** A bank whose loan accounts have no bank balance and therefore carry the negative amounts the user entered. */
+    @Test
+    fun `render accounts with loan accounts`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-loans").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("UniCredit Bank - HypoVereinsbank AG", "70020270", "HYVEDEMMXXX", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        accounts.create(bank, "DE44500105175407324001", balance = BigDecimal("-12000.00"), accountType = "loan")
+        accounts.create(bank, "DE02120300000000202052", balance = BigDecimal("-84500.00"), accountType = "loan")
+
+        render("accounts-loans", Screen.ACCOUNTS, dark = false)
+    }
+
+    /** The balance dialog's loan hint; the screenshot scene cannot open an AlertDialog window, so this runs as a UI test. */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `the balance dialog asks a loan for a negative amount`() = runComposeUiTest {
+        val strings = Translations.of(AppLanguage.EN)
+        setContent {
+            CompositionLocalProvider(LocalStrings provides strings) {
+                FinDeskTheme {
+                    BalanceDialog(
+                        account = dialogAccount("loan"),
+                        onDismiss = {},
+                        onConfirm = { _, _ -> },
+                    )
+                }
+            }
+        }
+
+        onNodeWithText(strings[StringKey.LoanBalanceHint]).assertExists()
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `the balance dialog shows no loan hint for a checking account`() = runComposeUiTest {
+        val strings = Translations.of(AppLanguage.EN)
+        setContent {
+            CompositionLocalProvider(LocalStrings provides strings) {
+                FinDeskTheme {
+                    BalanceDialog(
+                        account = dialogAccount("checking"),
+                        onDismiss = {},
+                        onConfirm = { _, _ -> },
+                    )
+                }
+            }
+        }
+
+        onNodeWithText(strings[StringKey.LoanBalanceHint]).assertDoesNotExist()
+    }
+
+    private fun dialogAccount(type: String) = AccountItem(
+        id = 1,
+        bankAccessId = 1,
+        bankName = "Bank",
+        iban = "DE89370400440532013000",
+        accountNumber = null,
+        balance = BigDecimal.ZERO,
+        currency = "EUR",
+        accountType = type,
+        lastUpdate = null,
+    )
 
     /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */
     @Test

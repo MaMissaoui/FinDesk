@@ -40,6 +40,14 @@ class AccountGroupingTest {
     }
 
     @Test
+    fun `a loan group sorts after credit card and before depot`() {
+        val accounts = listOf(account(1, "depot"), account(2, "loan"), account(3, "credit_card"), account(4, "checking"), account(5, "savings"))
+        val views = group(accounts, emptyList(), "EUR")
+        assertEquals(listOf("checking", "savings", "credit_card", "loan", "depot"), views.map { (it.key as GroupKey.Type).type })
+        assertEquals(listOf(2), views.first { it.key == GroupKey.Type("loan") }.accounts.map { it.id })
+    }
+
+    @Test
     fun `an unknown type follows the fixed ones alphabetically`() {
         val accounts = listOf(account(1, "checking"), account(2, "zebra"), account(3, "apple"))
         val views = group(accounts, emptyList(), "EUR")
