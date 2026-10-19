@@ -267,6 +267,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Keyboard shortcuts (Ctrl/Cmd+1..7, Ctrl/Cmd+,)
 - [x] Accessibility improvements (screen-reader roles/labels/headings, chart summaries, live status messages, text for field errors, WCAG contrast test; not yet checked with a real screen reader)
 - [x] UI phase 1: one blue selection style, a neutral sidebar, and green/red only for money flows (WCAG contrast kept; 2026-10-19, v1.7.0)
+- [x] UI phase 7: small fixes from the UI audit (account-panel filter on top, account-row ⋮ menu, transfer review amount header and warning callout, Reports navigation label, unlock alignment and profile chip, Settings disabled reason and profile badge)
 
 ---
 

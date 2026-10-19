@@ -122,6 +122,22 @@ fun AccountPanel(
     FinDeskCard(modifier = modifier) {
         Box(Modifier.fillMaxSize().onGloballyPositioned { panelTopLeft = it.positionInRoot() }) {
             Column(Modifier.fillMaxSize()) {
+                Column(Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp)) {
+                    CompactSearchField(
+                        value = filterText,
+                        onValueChange = onFilterText,
+                        placeholder = s[StringKey.FilterAccounts],
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (filterText.isNotEmpty()) {
+                        Text(
+                            s.format(StringKey.AccountsShown, shown, accounts.size),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 12.dp, top = 4.dp),
+                        )
+                    }
+                }
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
                     RowContextMenu(
                         if (totalNew > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.All) } else null,
@@ -192,14 +208,6 @@ fun AccountPanel(
                         Spacer(Modifier.width(4.dp))
                         Text(s[StringKey.NewGroup])
                     }
-                    OutlinedTextField(
-                        value = filterText,
-                        onValueChange = onFilterText,
-                        label = { Text(s[StringKey.FilterAccounts]) },
-                        singleLine = true,
-                        supportingText = { Text(s.format(StringKey.AccountsShown, shown, accounts.size)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
             }
 

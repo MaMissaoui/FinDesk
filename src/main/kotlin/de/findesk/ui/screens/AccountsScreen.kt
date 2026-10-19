@@ -527,11 +527,85 @@ private fun BankCard(
                             Spacer(Modifier.width(8.dp))
                             IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
                             IconButton(onClick = { onEditBalance(account) }) { Icon(Icons.Default.Edit, contentDescription = s[StringKey.EditBalance]) }
-                            IconButton(onClick = { onDeleteAccount(account) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.DeleteAccount]) }
+                            AccountRowMenu(
+                                onTransactions = { onTransactions(account) },
+                                onDetails = { onOpenAccount(account) },
+                                onRename = { onRenameAccount(account) },
+                                onChangeType = { onEditBalance(account) },
+                                onEditBalance = { onEditBalance(account) },
+                                onDelete = { onDeleteAccount(account) },
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun AccountRowMenu(
+    onTransactions: () -> Unit,
+    onDetails: () -> Unit,
+    onRename: () -> Unit,
+    onChangeType: () -> Unit,
+    onEditBalance: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val s = strings()
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier) {
+        IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(s[StringKey.ShowTransactions]) },
+                leadingIcon = { Icon(Icons.Default.List, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onTransactions()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(s[StringKey.MenuDetails]) },
+                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onDetails()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(s[StringKey.RenameAccount]) },
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onRename()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(s[StringKey.ChangeAccountType]) },
+                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onChangeType()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(s[StringKey.EditBalance]) },
+                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onEditBalance()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(s[StringKey.DeleteAccount], color = MaterialTheme.colorScheme.error) },
+                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                onClick = {
+                    expanded = false
+                    onDelete()
+                },
+            )
         }
     }
 }

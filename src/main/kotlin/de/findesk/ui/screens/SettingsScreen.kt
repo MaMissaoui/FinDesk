@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -133,7 +134,17 @@ fun SettingsScreen(
                         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
                             if (p.slug == state.openProfile) {
-                                Text(s[StringKey.ProfileOpen], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Surface(
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    shape = RoundedCornerShape(12.dp),
+                                ) {
+                                    Text(
+                                        s[StringKey.ProfileOpen],
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
                                 Spacer(Modifier.width(8.dp))
                             }
                             if (p.slug == state.nextProfile && p.slug != state.openProfile) {

@@ -4,7 +4,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +22,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -98,7 +102,7 @@ fun UnlockScreen(
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.semantics { heading() },
                 )
-                profileName?.let { Text(s.format(StringKey.UnlockProfile, it), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) }
+                profileName?.let { UnlockProfileLabel(it) }
                 Text(
                     when (mode) {
                         UnlockMode.UNLOCK -> s[StringKey.UnlockText]
@@ -190,15 +194,51 @@ fun UnlockScreen(
                     }
                 }
                 when (mode) {
-                    UnlockMode.UNLOCK -> TextButton(onClick = { vm.showChange(true) }, enabled = !state.isBusy) { Text(s[StringKey.ChangePassphrase]) }
-                    UnlockMode.CHANGE -> TextButton(onClick = { vm.showChange(false) }, enabled = !state.isBusy) { Text(s[StringKey.Back]) }
+                    UnlockMode.UNLOCK -> TextButton(
+                        onClick = { vm.showChange(true) },
+                        enabled = !state.isBusy,
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                    ) { Text(s[StringKey.ChangePassphrase]) }
+
+                    UnlockMode.CHANGE -> TextButton(
+                        onClick = { vm.showChange(false) },
+                        enabled = !state.isBusy,
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                    ) { Text(s[StringKey.Back]) }
+
                     else -> {}
                 }
                 // That profile is locked again, so going back means unlocking it again
                 back?.let { (name, onBack) ->
-                    TextButton(onClick = onBack, enabled = !state.isBusy) { Text(s.format(StringKey.BackToProfile, name)) }
+                    TextButton(
+                        onClick = onBack,
+                        enabled = !state.isBusy,
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                    ) { Text(s.format(StringKey.BackToProfile, name)) }
                 }
             }
+        }
+    }
+}
+
+/** The open profile, a non-clickable chip; its semantics keep the old "Profile: X" wording for screen readers. */
+@Composable
+internal fun UnlockProfileLabel(name: String) {
+    val s = strings()
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.semantics { contentDescription = s.format(StringKey.UnlockProfile, name) },
+    ) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(name, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
         }
     }
 }

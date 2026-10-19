@@ -2,6 +2,7 @@ package de.findesk.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -307,25 +308,24 @@ fun PaymentsScreen(
             title = { Text(s[if (review.schedule != null) StringKey.ConfirmStandingOrder else StringKey.ConfirmTransfer]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
-                    val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.AmountEuro], s[StringKey.Purpose], s[StringKey.Execution])
+                    ReviewHeader(
+                        amount = Formats.money(order.amount),
+                        recipient = order.recipientName,
+                        warning = review.unconfirmed?.let { earlier ->
+                            s.format(StringKey.WarningUnconfirmedOrder, earlier.recipientName.orEmpty(), Formats.money(order.amount), Formats.date(earlier.createdAt.toLocalDate()))
+                        },
+                    )
+                    val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.Purpose], s[StringKey.Execution])
                     ReviewRow(s[StringKey.From], accountLabel(account), labels)
                     ReviewRow(s[StringKey.To], order.recipientName, labels)
                     ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)), labels)
                     order.recipientBic?.let { ReviewRow("BIC", it, labels) }
-                    ReviewRow(s[StringKey.AmountEuro], Formats.money(order.amount), labels)
                     ReviewRow(s[StringKey.Purpose], order.purpose.ifBlank { "—" }, labels)
                     ReviewRow(
                         s[StringKey.Execution],
                         review.schedule?.let { scheduleText(it, s) } ?: review.date?.let { s.format(StringKey.OnDate, Formats.date(it)) } ?: s[StringKey.ExecuteNow],
                         labels,
                     )
-                    review.unconfirmed?.let { earlier ->
-                        Text(
-                            s.format(StringKey.WarningUnconfirmedOrder, earlier.recipientName.orEmpty(), Formats.money(order.amount), Formats.date(earlier.createdAt.toLocalDate())),
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
@@ -354,10 +354,14 @@ fun PaymentsScreen(
             title = { Text(s[StringKey.DeleteStandingOrder]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
-                    val labels = labelColumnWidth(s[StringKey.To], s[StringKey.Iban], s[StringKey.AmountEuro], s[StringKey.Execution])
+                    ReviewHeader(
+                        amount = Formats.money(o.order.amount),
+                        recipient = o.order.recipientName,
+                        warning = null,
+                    )
+                    val labels = labelColumnWidth(s[StringKey.To], s[StringKey.Iban], s[StringKey.Execution])
                     ReviewRow(s[StringKey.To], o.order.recipientName, labels)
                     ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(o.order.recipientIban)), labels)
-                    ReviewRow(s[StringKey.AmountEuro], Formats.money(o.order.amount), labels)
                     ReviewRow(s[StringKey.Execution], scheduleText(o.schedule, s), labels)
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -409,6 +413,43 @@ private fun labelColumnWidth(vararg labels: String): Dp {
     val style = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium)
     val widest = labels.maxOf { measurer.measure(it, style).size.width }
     return with(LocalDensity.current) { widest.toDp() } + 12.dp
+}
+
+/**
+ * The figure the user is about to approve: amount first, then the recipient, with the unconfirmed-order warning
+ * directly underneath as a callout so it cannot be read as just another row.
+ */
+@Composable
+internal fun ReviewHeader(amount: String, recipient: String, warning: String?) {
+    val s = strings()
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // The dialog's text slot is onSurfaceVariant; the figure being approved takes the full text colour
+        Text(
+            amount,
+            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(s.format(StringKey.ReviewTo, recipient), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        if (warning != null) {
+            Spacer(Modifier.height(6.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(warning, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
+                }
+            }
+        }
+    }
 }
 
 @Composable

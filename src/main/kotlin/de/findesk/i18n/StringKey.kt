@@ -400,6 +400,7 @@ enum class StringKey {
     RecentTransfersLabel,
     NoneYet,
     ConfirmTransfer,
+    ReviewTo,
     To,
     TransferAcknowledgement,
     WarningUnconfirmedOrder,
