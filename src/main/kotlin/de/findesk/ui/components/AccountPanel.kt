@@ -17,10 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -286,13 +288,13 @@ fun AccountPanel(
 }
 
 /**
- * Green/red by sign, except on the selection highlight: there green or red on the container colour is unreadable,
- * so a selected row keeps the container's own content colour.
+ * Red when negative (see [balanceColor]), except on the selection highlight: red on the container colour falls below
+ * 4.5:1, so a selected row keeps the container's own content colour (see ContrastTest).
  */
 @Composable
 private fun panelAmountColor(value: java.math.BigDecimal, selected: Boolean): Color = if (selected) LocalContentColor.current else balanceColor(value)
 
-/** The grey of secondary lines, except on the selection highlight: the dark theme's grey on its teal is unreadable. */
+/** The grey of secondary lines, except on the selection highlight, where the row keeps the container's content colour. */
 @Composable
 private fun panelSecondaryColor(selected: Boolean): Color = if (selected) LocalContentColor.current else MaterialTheme.colorScheme.onSurfaceVariant
 
@@ -336,13 +338,20 @@ private fun SelectableRow(
 ) {
     // A plain 1f row keeps its exact previous rendering: no extra graphics layer
     val surfaceModifier = if (alpha < 1f) Modifier.fillMaxWidth().alpha(alpha) else Modifier.fillMaxWidth()
+    val barColor = MaterialTheme.colorScheme.primary
+    val selectionBar = if (selected) {
+        Modifier.drawBehind { drawRect(color = barColor, size = Size(3.dp.toPx(), size.height)) }
+    } else {
+        Modifier
+    }
     Surface(
         color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
         border = if (highlighted) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = surfaceModifier,
     ) {
         Row(
-            modifier = modifier
+            modifier = selectionBar
+                .then(modifier)
                 .clickable(onClick = onClick, role = Role.Button)
                 .semantics { this.selected = selected }
                 .padding(horizontal = 12.dp, vertical = 8.dp),

@@ -8,8 +8,8 @@ import de.findesk.ui.theme.DarkColorScheme
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.ErrorDark
 import de.findesk.ui.theme.LightColorScheme
-import de.findesk.ui.theme.PrimaryBlue
-import de.findesk.ui.theme.SidebarNavy
+import de.findesk.ui.theme.SidebarDark
+import de.findesk.ui.theme.SidebarLight
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.SuccessDark
 import de.findesk.ui.theme.readableOn
@@ -85,18 +85,30 @@ class ContrastTest {
 
     @Test
     fun `sidebar text contrasts are sufficient`() {
-        val white = Color.White
-        assertContrast(white, PrimaryBlue, "white sidebar text on PrimaryBlue")
+        listOf("light" to LightColorScheme, "dark" to DarkColorScheme).forEach { (name, scheme) ->
+            val sidebar = if (name == "light") SidebarLight else SidebarDark
+            assertContrast(scheme.onSurface, sidebar, "onSurface on sidebar ($name)")
+            assertContrast(scheme.onSurfaceVariant, sidebar, "onSurfaceVariant on sidebar ($name)")
 
-        // The selected tab draws a translucent highlight behind the label; Compose blends in sRGB.
-        assertContrast(white, Color.Black.copy(alpha = 0.2f).compositeOver(PrimaryBlue), "white label on selected sidebar tab (light)")
-        assertContrast(white, SidebarNavy, "white sidebar text on SidebarNavy (dark theme)")
-        assertContrast(white, Color.White.copy(alpha = 0.12f).compositeOver(SidebarNavy), "white label on selected sidebar tab (dark)")
+            // The selected item uses the same selection container as a selected filter chip
+            assertContrast(scheme.onSecondaryContainer, scheme.secondaryContainer, "selected sidebar item label ($name)")
+
+            // The 3 dp indicator bar is a graphical object, so 3:1 (WCAG 1.4.11) suffices
+            assertContrastAtLeast(scheme.primary, sidebar, 3f, "selection bar on sidebar ($name)")
+            assertContrastAtLeast(scheme.primary, scheme.secondaryContainer, 3f, "selection bar on selected row ($name)")
+
+            // A secondary line could be drawn on a selected row without the helper's content colour
+            assertContrast(scheme.onSurfaceVariant, scheme.secondaryContainer, "onSurfaceVariant on selected row ($name)")
+        }
     }
 
     private fun assertContrast(foreground: Color, background: Color, label: String) {
+        assertContrastAtLeast(foreground, background, 4.5f, label)
+    }
+
+    private fun assertContrastAtLeast(foreground: Color, background: Color, minimum: Float, label: String) {
         val ratio = contrastRatio(foreground, background)
-        assertTrue(ratio >= 4.5f, "$label contrast was ${"%.2f".format(ratio)}:1")
+        assertTrue(ratio >= minimum, "$label contrast was ${"%.2f".format(ratio)}:1")
     }
 
     private fun contrastRatio(foreground: Color, background: Color): Float {

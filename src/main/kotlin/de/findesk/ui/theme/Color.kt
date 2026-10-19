@@ -11,13 +11,23 @@ import java.math.BigDecimal
 val PrimaryBlue = Color(0xFF2D6CDF)
 val PrimaryBlueLight = Color(0xFF5B8DEF)
 
-/** Deep navy for the dark-theme sidebar, quieter next to dark surfaces than the brand blue. */
-val SidebarNavy = Color(0xFF1E2D52)
+/** Light-theme selection background: a quiet blue tint of [PrimaryBlue] for selected rows, tabs and chips. */
+val SelectionLight = Color(0xFFE3EAF9)
 
-// Secondary/Accent Colors
-val Teal = Color(0xFF3BC7B0)
-val TealLight = Color(0xFF66D9C8)
-val TealDark = Color(0xFF2A9A87)
+/** Text and icons on [SelectionLight], dark enough for 4.5:1 contrast. */
+val OnSelectionLight = Color(0xFF1B3A78)
+
+/** Dark-theme selection background: the same blue idea, muted so it does not glare next to dark surfaces. */
+val SelectionDark = Color(0xFF26324D)
+
+/** Text and icons on [SelectionDark], light enough for 4.5:1 contrast. */
+val OnSelectionDark = Color(0xFFDCE5FB)
+
+/** Light-theme sidebar: neutral, so the logo is the only saturated blue in the panel. */
+val SidebarLight = Color(0xFFECEFF4)
+
+/** Dark-theme sidebar: a neutral charcoal a step away from the content surface. */
+val SidebarDark = Color(0xFF232429)
 
 // Neutral Colors
 val DarkGray = Color(0xFF2F2F2F)
@@ -43,13 +53,11 @@ fun amountColor(isExpense: Boolean): Color = if (MaterialTheme.colorScheme.surfa
 }
 
 /**
- * The colour for an amount or balance: green above zero, red below, and the theme's text colour at exactly
- * zero. Amounts and balances use the same green/red as [amountColor], so the light/dark contrast already
- * covered by `ContrastTest` applies here too.
+ * The colour for a balance: red below zero and the theme's text colour at zero or above. Balances are stocks,
+ * so only a negative one is coloured; money flows keep using [amountColor] for income and expenses.
  */
 @Composable
 fun balanceColor(value: BigDecimal): Color = when (value.signum()) {
-    1 -> amountColor(false)
     -1 -> amountColor(true)
     else -> MaterialTheme.colorScheme.onSurface
 }
