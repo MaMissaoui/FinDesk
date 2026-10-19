@@ -236,12 +236,18 @@ class ScreenshotTest {
         val household = accounts.create(dkb, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
         accounts.rename(household, "Haushalt")
         accounts.create(dkb, "DE44500105175407324931", balance = BigDecimal("15000.00"), accountType = "savings")
-        accounts.create(hvb, "DE02120300000000202051", balance = BigDecimal("-45.10"))
+        val hvbGiro = accounts.create(hvb, "DE02120300000000202051", balance = BigDecimal("-45.10")).id.value
         SettingsRepositoryImpl().setValue(AccountPanelSettings.KEY_SELECTION, "group:type:savings")
 
         render("accounts-panel", 1440, 900) { Frame(Screen.ACCOUNTS, dark = false) }
         render("accounts-panel-dark", 1440, 900) { Frame(Screen.ACCOUNTS, dark = true) }
         render("accounts-panel-narrow", 1024, 800) { Frame(Screen.ACCOUNTS, dark = false) }
+
+        // A selected account row with its "last fetched" line: the grey lines must stay readable on the highlight
+        accounts.updateBalance(hvbGiro, BigDecimal("-45.10"))
+        SettingsRepositoryImpl().setValue(AccountPanelSettings.KEY_SELECTION, "account:$hvbGiro")
+        render("accounts-panel-account", 1440, 900) { Frame(Screen.ACCOUNTS, dark = false) }
+        render("accounts-panel-account-dark", 1440, 900) { Frame(Screen.ACCOUNTS, dark = true) }
     }
 
     /** The account panel on Transactions: type groups, a custom group, mixed currencies and a selection. */
