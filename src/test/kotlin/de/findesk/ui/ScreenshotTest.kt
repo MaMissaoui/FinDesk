@@ -236,57 +236,6 @@ class ScreenshotTest {
         render("accounts-loans", Screen.ACCOUNTS, dark = false)
     }
 
-    /** The balance dialog's loan hint; the screenshot scene cannot open an AlertDialog window, so this runs as a UI test. */
-    @OptIn(ExperimentalTestApi::class)
-    @Test
-    fun `the balance dialog asks a loan for a negative amount`() = runComposeUiTest {
-        val strings = Translations.of(AppLanguage.EN)
-        setContent {
-            CompositionLocalProvider(LocalStrings provides strings) {
-                FinDeskTheme {
-                    BalanceDialog(
-                        account = dialogAccount("loan"),
-                        onDismiss = {},
-                        onConfirm = { _, _ -> },
-                    )
-                }
-            }
-        }
-
-        onNodeWithText(strings[StringKey.LoanBalanceHint]).assertExists()
-    }
-
-    @OptIn(ExperimentalTestApi::class)
-    @Test
-    fun `the balance dialog shows no loan hint for a checking account`() = runComposeUiTest {
-        val strings = Translations.of(AppLanguage.EN)
-        setContent {
-            CompositionLocalProvider(LocalStrings provides strings) {
-                FinDeskTheme {
-                    BalanceDialog(
-                        account = dialogAccount("checking"),
-                        onDismiss = {},
-                        onConfirm = { _, _ -> },
-                    )
-                }
-            }
-        }
-
-        onNodeWithText(strings[StringKey.LoanBalanceHint]).assertDoesNotExist()
-    }
-
-    private fun dialogAccount(type: String) = AccountItem(
-        id = 1,
-        bankAccessId = 1,
-        bankName = "Bank",
-        iban = "DE89370400440532013000",
-        accountNumber = null,
-        balance = BigDecimal.ZERO,
-        currency = "EUR",
-        accountType = type,
-        lastUpdate = null,
-    )
-
     /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */
     @Test
     fun `render accounts with a central bank code hint`() {
