@@ -21,6 +21,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -120,12 +122,33 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                             selection = state.selection,
                             onSelect = { vm.selectAccounts(it) },
                         )
-                        Spacer(Modifier.weight(1f))
                     }
-                    Button(onClick = { showAddBank = true }) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(s[StringKey.AddBank])
+                    Spacer(Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (state.bankAccesses.isNotEmpty()) {
+                            val progress = state.syncAll
+                            if (progress != null) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Text(
+                                    s.format(StringKey.SyncAllProgress, progress.index, progress.total, progress.bankName),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            } else {
+                                val anyIncluded = state.bankAccesses.any { it.includeInSyncAll }
+                                DisabledReason(s[StringKey.SyncAllNothingIncluded].takeIf { !anyIncluded }) {
+                                    OutlinedButton(onClick = { vm.syncAll() }, enabled = !state.isSyncing && anyIncluded) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(s[StringKey.SyncAll])
+                                    }
+                                }
+                            }
+                        }
+                        Button(onClick = { showAddBank = true }) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(s[StringKey.AddBank])
+                        }
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -159,9 +182,10 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                             primaryCurrency = state.primaryCurrency,
                             syncing = state.syncingBankId == bank.id,
                             syncStep = state.syncStep,
-                            syncEnabled = state.syncingBankId == null,
+                            syncEnabled = !state.isSyncing,
                             onToggleCollapse = { vm.toggleBankCollapsed(bank.id) },
                             onSync = { vm.syncBankAccess(bank.id) },
+                            onToggleIncludeInSyncAll = { vm.setIncludeInSyncAll(bank.id, !bank.includeInSyncAll) },
                             onEditConnection = {
                                 focusName = false
                                 editConnectionBlz = null
@@ -308,6 +332,7 @@ private fun BankCard(
     syncEnabled: Boolean,
     onToggleCollapse: () -> Unit,
     onSync: () -> Unit,
+    onToggleIncludeInSyncAll: () -> Unit,
     onEditConnection: () -> Unit,
     onRename: () -> Unit,
     onUseCentralBlz: (String) -> Unit,
@@ -362,7 +387,8 @@ private fun BankCard(
                         Text(
                             s.format(StringKey.BlzPrefix, bank.blz) + (bank.bic.takeIf { it.isNotBlank() }?.let { " · ${s.format(StringKey.BicPrefix, it)}" } ?: "") +
                                 (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: "") +
-                                (bank.syncFrom?.let { " · ${s.format(StringKey.NextSyncFrom, Formats.date(it))}" } ?: ""),
+                                (bank.syncFrom?.let { " · ${s.format(StringKey.NextSyncFrom, Formats.date(it))}" } ?: "") +
+                                (if (bank.includeInSyncAll) "" else " · ${s[StringKey.NotInSyncAll]}"),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -409,6 +435,23 @@ private fun BankCard(
                                     bankMenu = false
                                     onFetchHistory()
                                 },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(s[StringKey.IncludeInSyncAll]) },
+                                leadingIcon = {
+                                    if (bank.includeInSyncAll) {
+                                        Icon(Icons.Default.Check, contentDescription = null)
+                                    } else {
+                                        Spacer(Modifier.size(24.dp))
+                                    }
+                                },
+                                enabled = syncEnabled,
+                                onClick = {
+                                    bankMenu = false
+                                    onToggleIncludeInSyncAll()
+                                },
+                                // The check mark alone says nothing to a screen reader
+                                modifier = Modifier.semantics { toggleableState = ToggleableState(bank.includeInSyncAll) },
                             )
                             DropdownMenuItem(
                                 text = { Text(s[StringKey.RenameConnection]) },

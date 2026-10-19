@@ -23,6 +23,7 @@ fun BankAccess.toItem() = BankAccessItem(
     lastSync = lastSync,
     capabilities = capabilities,
     syncFrom = syncFrom,
+    includeInSyncAll = includeInSyncAll,
 )
 
 fun Account.toItem(newCount: Int = 0) = AccountItem(

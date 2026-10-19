@@ -175,4 +175,31 @@ class DatabaseFactoryTest {
         assertEquals(listOf(1 to false), rows, "the old row is kept and reads false, never new")
         assertTrue(TransactionRepositoryImpl().countNew().isEmpty(), "an upgraded database has no unread bookings")
     }
+
+    @Test
+    fun `a database without include_in_sync_all gets the column and existing rows read true`() {
+        val dir = File(tempDir, "old-include-in-sync-all").apply { mkdirs() }
+        val db = Database.connect("jdbc:sqlite:${File(dir, "findesk.db").absolutePath}", driver = "org.sqlite.JDBC")
+        transaction(db) {
+            exec(
+                "CREATE TABLE bank_access (id INTEGER PRIMARY KEY AUTOINCREMENT, bank_name VARCHAR(255) NOT NULL, blz VARCHAR(20) NOT NULL, " +
+                    "bic VARCHAR(20) NOT NULL, user_id VARCHAR(100) NOT NULL, hbci_version VARCHAR(10) DEFAULT '300' NOT NULL, " +
+                    "tan_method VARCHAR(50) NULL, server_url VARCHAR(255) NULL, last_sync TEXT NULL, sync_from TEXT NULL, " +
+                    "capabilities TEXT NULL)",
+            )
+            exec("INSERT INTO bank_access (bank_name, blz, bic, user_id) VALUES ('Old Bank', '37050198', '', 'u')")
+        }
+        TransactionManager.closeAndUnregister(db)
+
+        DatabaseFactory.init(dir.absolutePath)
+
+        transaction {
+            assertTrue(BankAccessTable.columns.map { it.name }.contains("include_in_sync_all"), "the new column is added")
+            // The same statement updateSchema runs for a missing column: SQLite needs a default for a NOT NULL column
+            val ddl = BankAccessTable.includeInSyncAll.createStatement().joinToString(" ")
+            assertTrue(ddl.contains("DEFAULT 1"), "the column is added with DEFAULT 1")
+        }
+        val rows = transaction { de.findesk.data.entity.BankAccess.all().map { it.id.value to it.includeInSyncAll } }
+        assertEquals(listOf(1 to true), rows, "the old row is kept and stays included in Sync all")
+    }
 }
