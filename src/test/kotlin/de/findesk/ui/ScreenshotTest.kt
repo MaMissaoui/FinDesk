@@ -204,6 +204,7 @@ class ScreenshotTest {
 
         fun showing(): TransactionsViewModel = TransactionsViewModel()
         render("transactions-balance", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+        render("transactions-balance-hover", 1440, 900, hoverAt = Offset(980f, 760f)) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
         render("transactions-balance-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
         // The chart folded away: only its header row remains, restored from the stored setting
         SettingsRepositoryImpl().setValue(TransactionsViewModel.KEY_CHART_COLLAPSED, "true")
@@ -380,7 +381,7 @@ class ScreenshotTest {
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
-    private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, content: @Composable () -> Unit) {
+    private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, content: @Composable () -> Unit) {
         val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
             content()
         }
@@ -409,6 +410,13 @@ class ScreenshotTest {
                 scene.sendPointerEvent(PointerEventType.Release, clickAt)
                 val clickedAt = frame
                 png = settle(png, limit = 260, minimumFrames = clickedAt + 10)
+            }
+            if (hoverAt != null) {
+                // Enter and Move must land on different points: the scene drops a Move that repeats the hover position
+                scene.sendPointerEvent(PointerEventType.Enter, hoverAt - Offset(12f, 0f))
+                scene.sendPointerEvent(PointerEventType.Move, hoverAt)
+                val hoveredAt = frame
+                png = settle(png, limit = hoveredAt + 30, minimumFrames = hoveredAt + 3)
             }
             File(outDir, "$name.png").writeBytes(png)
         } finally {

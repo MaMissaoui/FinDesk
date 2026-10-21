@@ -267,6 +267,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Keyboard shortcuts (Ctrl/Cmd+1..7, Ctrl/Cmd+,)
 - [x] Accessibility improvements (screen-reader roles/labels/headings, chart summaries, live status messages, text for field errors, WCAG contrast test; not yet checked with a real screen reader)
 - [x] UI phase 1: one blue selection style, a neutral sidebar, and green/red only for money flows (WCAG contrast kept; 2026-10-19, v1.7.0)
+- [x] UI phase 5: charts that can be read (2026-10-19): the balance chart gained a round y axis (`niceTicks`, 1/2/2.5/5 × 10ⁿ steps) with gridlines, an area fill under the line, a marked current balance and first/middle/last date labels, replacing the floating max/min texts. The income/expense bars keep their axis but round only their top corners. On pointer hover, the line chart shows a vertical guide, a point dot and a date/amount label, and the bars shade the hovered month and show its month/year with signed income and expenses. Hover is an extra only: every value remains in the charts' accessibility descriptions, so nothing is reachable by hover alone. Covered by extended `ChartAxisTest`, the new `ChartsTest` and the `transactions-balance-hover` render.
 - [x] UI phase 7: small fixes from the UI audit (account-panel filter on top, account-row ⋮ menu, transfer review amount header and warning callout, Reports navigation label, unlock alignment and profile chip, Settings disabled reason and profile badge)
 
 ---
