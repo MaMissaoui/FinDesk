@@ -38,6 +38,7 @@ import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.NavigationState
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.ScreenRequest
+import de.findesk.ui.navigation.SettingsSection
 import de.findesk.ui.navigation.shortcutScreen
 import de.findesk.ui.platform.AppMenuBar
 import de.findesk.ui.platform.MacAppMenuHandlers
@@ -108,7 +109,7 @@ fun App(
                                     current = currentProfile,
                                     load = { store.list().map { it.slug to it.name } },
                                     onSwitch = { onSwitchProfile?.invoke(it) },
-                                    onManage = { navigationState.navigateTo(Screen.SETTINGS) },
+                                    onManage = { navigationState.navigateTo(Screen.SETTINGS, NavigationArgs(settingsSection = SettingsSection.PROFILES)) },
                                 )
                             },
                         )
@@ -143,6 +144,7 @@ fun App(
                                         onLanguageChange = onLanguageChange,
                                         onSwitchProfile = onSwitchProfile,
                                         profileSwitchEnabled = !busy && navigationState.lockedOn == null,
+                                        args = navigationState.args,
                                     )
                                 }
                             }

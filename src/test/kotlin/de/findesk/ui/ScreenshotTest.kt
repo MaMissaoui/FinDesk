@@ -37,6 +37,7 @@ import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
+import de.findesk.ui.navigation.SettingsSection
 import de.findesk.ui.screens.*
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.util.GroupKey
@@ -81,8 +82,20 @@ class ScreenshotTest {
         render("11-dashboard-narrow", 1024, 900) { Frame(Screen.DASHBOARD, dark = false) }
         render("8-dashboard-full", Screen.DASHBOARD, dark = false, height = 1800)
         render("8-dashboard-full-dark", Screen.DASHBOARD, dark = true, height = 1800)
-        render("7-settings-full", Screen.SETTINGS, dark = false, height = 2400)
-        render("7-settings-full-dark", Screen.SETTINGS, dark = true, height = 2400)
+        // One pane per Settings section; the two that carry the most content also render dark
+        SettingsSection.entries.forEach { section ->
+            render("settings-${section.name.lowercase()}", 1440, 900) {
+                Frame(Screen.SETTINGS, dark = false, settingsArgs = NavigationArgs(settingsSection = section))
+            }
+        }
+        render("settings-profiles-dark", 1440, 900) {
+            Frame(Screen.SETTINGS, dark = true, settingsArgs = NavigationArgs(settingsSection = SettingsSection.PROFILES))
+        }
+        render("settings-backup-dark", 1440, 900) {
+            Frame(Screen.SETTINGS, dark = true, settingsArgs = NavigationArgs(settingsSection = SettingsSection.BACKUP))
+        }
+        // Below 840 dp the section list becomes a dropdown
+        render("settings-narrow", 800, 900) { Frame(Screen.SETTINGS, dark = false) }
     }
 
     @Test
@@ -425,7 +438,7 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null, sidebarCollapsed: Boolean = false, profiles: List<Pair<String?, String>>? = null) {
+    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null, sidebarCollapsed: Boolean = false, profiles: List<Pair<String?, String>>? = null, settingsArgs: NavigationArgs = NavigationArgs()) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
@@ -450,7 +463,7 @@ class ScreenshotTest {
                                     Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
                                     Screen.DOCUMENTS -> DocumentsScreen()
                                     Screen.REPORTS -> ReportsScreen()
-                                    Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {}, language = AppLanguage.EN, onLanguageChange = {})
+                                    Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {}, language = AppLanguage.EN, onLanguageChange = {}, args = settingsArgs)
                                 }
                             }
                         }

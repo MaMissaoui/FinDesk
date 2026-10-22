@@ -3,20 +3,27 @@ package de.findesk.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.document.TesseractOcrEngine
 import de.findesk.i18n.AppLanguage
@@ -25,16 +32,16 @@ import de.findesk.i18n.strings
 import de.findesk.model.CategoryItem
 import de.findesk.model.RuleItem
 import de.findesk.ui.components.*
+import de.findesk.ui.navigation.NavigationArgs
+import de.findesk.ui.navigation.SettingsSection
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsViewModel
-import kotlinx.coroutines.launch
 import java.math.BigDecimal
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean,
@@ -44,6 +51,8 @@ fun SettingsScreen(
     /** Opens another profile now, through its unlock screen; null keeps the "open at next start" behaviour. */
     onSwitchProfile: ((String?) -> Unit)? = null,
     profileSwitchEnabled: Boolean = true,
+    /** Section to open on arrival; null starts on Appearance. */
+    args: NavigationArgs = NavigationArgs(),
 ) {
     val vm = rememberViewModel { SettingsViewModel(isOcrAvailable = TesseractOcrEngine.createOrNull() != null) }
     val state by vm.state.collectAsState()
@@ -59,320 +68,324 @@ fun SettingsScreen(
     var renameProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
     var confirmDeleteProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
 
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    // In page order; the chips below jump to them
-    val sections = listOf(
-        StringKey.Appearance,
-        StringKey.Profiles,
-        StringKey.Categories,
-        StringKey.AutoCategorizationRules,
-        StringKey.DataAndOcr,
-        StringKey.BackupAndRestore,
-        StringKey.ProtocolTraceTitle,
-        StringKey.AuditLogShort,
-    )
-    val hasBanner = state.message != null || state.error != null
+    var section by remember { mutableStateOf(args.settingsSection ?: SettingsSection.APPEARANCE) }
+    val sectionContent: @Composable () -> Unit = {
+        when (section) {
+            SettingsSection.APPEARANCE -> SettingsSectionHeader(s[StringKey.Appearance]) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s[StringKey.DarkTheme], modifier = Modifier.weight(1f))
+                    Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s[StringKey.Language], modifier = Modifier.weight(1f))
+                    DropdownSelector(
+                        label = language.nativeName,
+                        options = AppLanguage.entries,
+                        optionLabel = { option -> option.nativeName },
+                        onSelect = { onLanguageChange(it) },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(s[StringKey.PrimaryCurrency])
+                        Text(
+                            s[StringKey.PrimaryCurrencyHint],
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.widthIn(max = 640.dp),
+                        )
+                    }
+                    DropdownSelector(
+                        label = state.primaryCurrency,
+                        options = state.currencyOptions,
+                        optionLabel = { it },
+                        onSelect = { vm.setPrimaryCurrency(it) },
+                    )
+                }
+            }
 
-    Column(Modifier.fillMaxSize().padding(24.dp)) {
-        // The page is long: shortcuts to its sections stay above the list while it scrolls. They wrap rather than
-        // scroll sideways, so every one stays visible in a narrow window.
-        FlowRow(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            sections.forEachIndexed { i, key ->
-                // The banner, if shown, comes before the sections
-                val index = (if (hasBanner) 1 else 0) + i
-                AssistChip(onClick = { scope.launch { listState.animateScrollToItem(index) } }, label = { Text(s[key]) })
+            SettingsSection.PROFILES -> SettingsSectionHeader(
+                s[StringKey.Profiles],
+                actions = { TextButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
+            ) {
+                Text(
+                    s[StringKey.ProfilesHint],
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 640.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                state.profiles.forEach { p ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
+                        if (p.slug == state.openProfile) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                shape = RoundedCornerShape(12.dp),
+                            ) {
+                                Text(
+                                    s[StringKey.ProfileOpen],
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        if (p.slug == state.nextProfile && p.slug != state.openProfile) {
+                            Text(s[StringKey.ProfileNextStart], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        if (onSwitchProfile != null) {
+                            // The same live switch as the top bar's profile menu
+                            TextButton(enabled = p.slug != state.openProfile && profileSwitchEnabled, onClick = { onSwitchProfile(p.slug) }) { Text(s[StringKey.OpenProfile]) }
+                        } else {
+                            TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
+                        }
+                        IconButton(onClick = { renameProfile = p }) { Icon(Icons.Default.Edit, contentDescription = s.format(StringKey.RenameProfile, p.name)) }
+                        IconButton(enabled = !p.isDefault && p.slug != state.openProfile, onClick = { confirmDeleteProfile = p }) {
+                            Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteProfile, p.name))
+                        }
+                    }
+                }
+                if (state.nextProfile != state.openProfile) {
+                    val next = state.profiles.firstOrNull { it.slug == state.nextProfile }?.name.orEmpty()
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(s.format(StringKey.RestartToOpenProfile, next))
+                    }
+                }
+            }
+
+            SettingsSection.CATEGORIES -> SettingsSectionHeader(
+                s[StringKey.Categories],
+                actions = { TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) } },
+            ) {
+                if (state.categories.isEmpty()) {
+                    Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                state.categories.forEach { c ->
+                    RowContextMenu(
+                        menuItem(s[StringKey.MenuEdit]) { editCategory = c },
+                        menuItem(s[StringKey.Delete]) { confirmDeleteCategory = c },
+                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    onClick = { editCategory = c },
+                                    onClickLabel = s.format(StringKey.EditCategoryNamed, c.name),
+                                    role = Role.Button,
+                                )
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
+                            Spacer(Modifier.width(12.dp))
+                            Text(c.name, modifier = Modifier.weight(1f))
+                            if (c.isTaxRelevant) {
+                                CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            c.budgetLimit?.let {
+                                Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                        }
+                    }
+                    HorizontalDivider()
+                }
+            }
+
+            SettingsSection.RULES -> SettingsSectionHeader(
+                s[StringKey.AutoCategorizationRules],
+                actions = {
+                    DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
+                        TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
+                    }
+                },
+            ) {
+                Text(
+                    s[StringKey.RulesHint],
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 640.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                state.rules.forEach { r ->
+                    RowContextMenu(
+                        menuItem(s[StringKey.MenuEdit]) { editRule = r },
+                        menuItem(s[StringKey.Delete]) { vm.deleteRule(r.id) },
+                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    onClick = { editRule = r },
+                                    onClickLabel = s.format(StringKey.EditRuleNamed, r.pattern),
+                                    role = Role.Button,
+                                )
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
+                            Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
+                            IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                        }
+                    }
+                    HorizontalDivider()
+                }
+            }
+
+            SettingsSection.DATA -> SettingsSectionHeader(s[StringKey.DataAndOcr]) {
+                InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db")
+                InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                    Icon(
+                        if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (state.isOcrAvailable) Success else Warning,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (state.isOcrAvailable) {
+                            s[StringKey.TesseractAvailable]
+                        } else {
+                            s[StringKey.TesseractMissing]
+                        },
+                    )
+                }
+            }
+
+            SettingsSection.BACKUP -> SettingsSectionHeader(s[StringKey.BackupAndRestore]) {
+                Text(
+                    s[StringKey.BackupHint],
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 640.dp),
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else Warning,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (state.isEncrypted) s[StringKey.EncryptionStatus] + " " + s[StringKey.BackupNote] else s[StringKey.EncryptionOff],
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.widthIn(max = 640.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(enabled = !state.isBusy, onClick = {
+                        FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
+                    }) { Text(s[StringKey.CreateBackup]) }
+                    OutlinedButton(enabled = !state.isBusy && !state.hasPendingRestore, onClick = {
+                        FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
+                    }) { Text(s[StringKey.RestoreFromBackup]) }
+                    if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                }
+                if (state.hasPendingRestore) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
+                        TextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
+                    }
+                }
+                state.restoredFrom?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(s.format(StringKey.BackupRestoredAt, it), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            SettingsSection.TRACE -> SettingsSectionHeader(s[StringKey.ProtocolTraceTitle]) {
+                Text(
+                    s[StringKey.ProtocolTraceHint],
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 640.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s[StringKey.ProtocolTraceEnable], modifier = Modifier.weight(1f))
+                    Switch(checked = state.protocolTraceEnabled, onCheckedChange = { vm.setProtocolTraceEnabled(it) })
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        enabled = state.hasProtocolTrace,
+                        onClick = {
+                            FileDialogs.saveFile(s[StringKey.ProtocolTraceSave], "findesk-fints-trace-${java.time.LocalDate.now()}.txt")?.let { vm.saveProtocolTrace(it) }
+                        },
+                    ) { Text(s[StringKey.ProtocolTraceSave]) }
+                    Text(
+                        if (state.hasProtocolTrace) s[StringKey.ProtocolTraceAvailable] else s[StringKey.ProtocolTraceNone],
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            SettingsSection.AUDIT -> SettingsSectionHeader(s[StringKey.AuditLogLatest]) {
+                if (state.auditLog.isEmpty()) {
+                    Text(s[StringKey.AuditLogEmpty], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                state.auditLog.forEach { e ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(140.dp))
+                        Text(e.action, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, modifier = Modifier.width(180.dp))
+                        Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // Only when there is something to say: an empty item still takes the list's spacing
-            if (hasBanner) {
-                item { MessageBanner(state.message, state.error, vm::clearMessages) }
-            }
+    }
 
-            item {
-                SectionCard(s[StringKey.Appearance], Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(s[StringKey.DarkTheme], modifier = Modifier.weight(1f))
-                        Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(s[StringKey.Language], modifier = Modifier.weight(1f))
-                        DropdownSelector(
-                            label = language.nativeName,
-                            options = AppLanguage.entries,
-                            optionLabel = { option -> option.nativeName },
-                            onSelect = { onLanguageChange(it) },
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(s[StringKey.PrimaryCurrency])
-                            Text(s[StringKey.PrimaryCurrencyHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        DropdownSelector(
-                            label = state.primaryCurrency,
-                            options = state.currencyOptions,
-                            optionLabel = { it },
-                            onSelect = { vm.setPrimaryCurrency(it) },
-                        )
-                    }
-                }
-            }
-
-            item {
-                SectionCard(
-                    s[StringKey.Profiles],
-                    Modifier.fillMaxWidth(),
-                    actions = { TextButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
-                ) {
-                    Text(s[StringKey.ProfilesHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    state.profiles.forEach { p ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
-                            if (p.slug == state.openProfile) {
-                                Surface(
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    shape = RoundedCornerShape(12.dp),
-                                ) {
-                                    Text(
-                                        s[StringKey.ProfileOpen],
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                    )
-                                }
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            if (p.slug == state.nextProfile && p.slug != state.openProfile) {
-                                Text(s[StringKey.ProfileNextStart], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            if (onSwitchProfile != null) {
-                                // The same live switch as the top bar's profile menu
-                                TextButton(enabled = p.slug != state.openProfile && profileSwitchEnabled, onClick = { onSwitchProfile(p.slug) }) { Text(s[StringKey.OpenProfile]) }
-                            } else {
-                                TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
-                            }
-                            IconButton(onClick = { renameProfile = p }) { Icon(Icons.Default.Edit, contentDescription = s.format(StringKey.RenameProfile, p.name)) }
-                            IconButton(enabled = !p.isDefault && p.slug != state.openProfile, onClick = { confirmDeleteProfile = p }) {
-                                Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteProfile, p.name))
-                            }
-                        }
-                    }
-                    if (state.nextProfile != state.openProfile) {
-                        val next = state.profiles.firstOrNull { it.slug == state.nextProfile }?.name.orEmpty()
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(s.format(StringKey.RestartToOpenProfile, next))
+    // Each section starts at its top: a shared scroll position would open a short section part-way down
+    val scroll = key(section) { rememberScrollState() }
+    BoxWithConstraints(Modifier.fillMaxSize().padding(24.dp)) {
+        if (maxWidth >= 840.dp) {
+            Row(Modifier.fillMaxSize()) {
+                SettingsSectionList(section, onSelect = { section = it })
+                VerticalDivider(Modifier.fillMaxHeight())
+                Column(Modifier.fillMaxSize().padding(start = 24.dp)) {
+                    // The banner stays above the section, as it did above the page
+                    MessageBanner(state.message, state.error, vm::clearMessages)
+                    Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
+                        Box(Modifier.fillMaxWidth()) {
+                            Column(Modifier.widthIn(max = 760.dp)) { sectionContent() }
                         }
                     }
                 }
             }
-
-            item {
-                SectionCard(
-                    s[StringKey.Categories],
-                    Modifier.fillMaxWidth(),
-                    actions = { TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) } },
-                ) {
-                    if (state.categories.isEmpty()) {
-                        Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    state.categories.forEach { c ->
-                        RowContextMenu(
-                            menuItem(s[StringKey.MenuEdit]) { editCategory = c },
-                            menuItem(s[StringKey.Delete]) { confirmDeleteCategory = c },
-                        ) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable(
-                                        onClick = { editCategory = c },
-                                        onClickLabel = s.format(StringKey.EditCategoryNamed, c.name),
-                                        role = Role.Button,
-                                    )
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
-                                Spacer(Modifier.width(12.dp))
-                                Text(c.name, modifier = Modifier.weight(1f))
-                                if (c.isTaxRelevant) {
-                                    CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                c.budgetLimit?.let {
-                                    Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
-                            }
-                        }
-                        HorizontalDivider()
-                    }
-                }
-            }
-
-            item {
-                SectionCard(
-                    s[StringKey.AutoCategorizationRules],
-                    Modifier.fillMaxWidth(),
-                    actions = {
-                        DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
-                            TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
-                        }
-                    },
-                ) {
-                    Text(
-                        s[StringKey.RulesHint],
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    state.rules.forEach { r ->
-                        RowContextMenu(
-                            menuItem(s[StringKey.MenuEdit]) { editRule = r },
-                            menuItem(s[StringKey.Delete]) { vm.deleteRule(r.id) },
-                        ) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable(
-                                        onClick = { editRule = r },
-                                        onClickLabel = s.format(StringKey.EditRuleNamed, r.pattern),
-                                        role = Role.Button,
-                                    )
-                                    .padding(vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                                Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
-                                Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
-                                IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
-                            }
-                        }
-                        HorizontalDivider()
-                    }
-                }
-            }
-
-            item {
-                SectionCard(s[StringKey.DataAndOcr], Modifier.fillMaxWidth()) {
-                    InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db")
-                    InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory)
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                        Icon(
-                            if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = if (state.isOcrAvailable) Success else Warning,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (state.isOcrAvailable) {
-                                s[StringKey.TesseractAvailable]
-                            } else {
-                                s[StringKey.TesseractMissing]
-                            },
-                        )
-                    }
-                }
-            }
-
-            item {
-                SectionCard(s[StringKey.BackupAndRestore], Modifier.fillMaxWidth()) {
-                    Text(
-                        s[StringKey.BackupHint],
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else Warning,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            if (state.isEncrypted) s[StringKey.EncryptionStatus] + " " + s[StringKey.BackupNote] else s[StringKey.EncryptionOff],
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Button(enabled = !state.isBusy, onClick = {
-                            FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
-                        }) { Text(s[StringKey.CreateBackup]) }
-                        OutlinedButton(enabled = !state.isBusy && !state.hasPendingRestore, onClick = {
-                            FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
-                        }) { Text(s[StringKey.RestoreFromBackup]) }
-                        if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    }
-                    if (state.hasPendingRestore) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
-                            TextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
-                        }
-                    }
-                    state.restoredFrom?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(s.format(StringKey.BackupRestoredAt, it), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-
-            item {
-                SectionCard(s[StringKey.ProtocolTraceTitle], Modifier.fillMaxWidth()) {
-                    Text(
-                        s[StringKey.ProtocolTraceHint],
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(s[StringKey.ProtocolTraceEnable], modifier = Modifier.weight(1f))
-                        Switch(checked = state.protocolTraceEnabled, onCheckedChange = { vm.setProtocolTraceEnabled(it) })
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Button(
-                            enabled = state.hasProtocolTrace,
-                            onClick = {
-                                FileDialogs.saveFile(s[StringKey.ProtocolTraceSave], "findesk-fints-trace-${java.time.LocalDate.now()}.txt")?.let { vm.saveProtocolTrace(it) }
-                            },
-                        ) { Text(s[StringKey.ProtocolTraceSave]) }
-                        Text(
-                            if (state.hasProtocolTrace) s[StringKey.ProtocolTraceAvailable] else s[StringKey.ProtocolTraceNone],
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            item {
-                SectionCard(s[StringKey.AuditLogLatest], Modifier.fillMaxWidth()) {
-                    if (state.auditLog.isEmpty()) {
-                        Text(s[StringKey.AuditLogEmpty], color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    state.auditLog.forEach { e ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(140.dp))
-                            Text(e.action, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, modifier = Modifier.width(180.dp))
-                            Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                MessageBanner(state.message, state.error, vm::clearMessages)
+                DropdownSelector(
+                    label = s[section.title],
+                    options = SettingsSection.entries,
+                    optionLabel = { s[it.title] },
+                    onSelect = { section = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(16.dp))
+                Column(Modifier.fillMaxSize().verticalScroll(scroll)) {
+                    Box(Modifier.fillMaxWidth()) {
+                        Column(Modifier.widthIn(max = 760.dp)) { sectionContent() }
                     }
                 }
             }
@@ -462,6 +475,91 @@ fun SettingsScreen(
             onConfirm = { vm.deleteCategory(c.id) },
             onDismiss = { confirmDeleteCategory = null },
         )
+    }
+}
+
+/** The left pane: 240 dp, no card, one selectable tab per section. */
+@Composable
+private fun SettingsSectionList(selected: SettingsSection, onSelect: (SettingsSection) -> Unit) {
+    val s = strings()
+    Column(Modifier.width(240.dp).fillMaxHeight()) {
+        SettingsSection.entries.forEach { entry ->
+            SettingsSectionRow(
+                section = entry,
+                selected = entry == selected,
+                label = s[entry.title],
+                onClick = { onSelect(entry) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionRow(section: SettingsSection, selected: Boolean, label: String, onClick: () -> Unit) {
+    val background = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
+    val labelColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+    val iconColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    val barColor = MaterialTheme.colorScheme.primary
+    // The sidebar's and account panel's 3 dp start bar, on the same rounded row
+    val selectionBar = if (selected) {
+        Modifier.drawBehind { drawRect(color = barColor, size = Size(3.dp.toPx(), size.height)) }
+    } else {
+        Modifier
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(background)
+            .then(selectionBar)
+            .selectable(selected = selected, onClick = onClick, role = Role.Tab)
+            // Long titles ("Sicherung & Wiederherstellung") wrap to a second line instead of being cut off
+            .heightIn(min = 40.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(section.icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = labelColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** material-icons-core only: Palette, Category, Storage, Backup, BugReport and History are in the extended set. */
+private val SettingsSection.icon: ImageVector
+    get() = when (this) {
+        SettingsSection.APPEARANCE -> Icons.Default.Settings
+        SettingsSection.PROFILES -> Icons.Default.Person
+        SettingsSection.CATEGORIES -> Icons.Default.List
+        SettingsSection.RULES -> Icons.Default.Refresh
+        SettingsSection.DATA -> Icons.Default.Info
+        SettingsSection.BACKUP -> Icons.Default.Share
+        SettingsSection.TRACE -> Icons.Default.Build
+        SettingsSection.AUDIT -> Icons.Default.DateRange
+    }
+
+/** A flush section header: its title and actions, a hairline divider, then the content. */
+@Composable
+private fun SettingsSectionHeader(
+    title: String,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        // As tall as an action button, so a title sits at the same height with or without actions
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
+            actions()
+        }
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(12.dp))
+        content()
     }
 }
 

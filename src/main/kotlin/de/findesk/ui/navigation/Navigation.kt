@@ -34,6 +34,18 @@ enum class Screen(val icon: ImageVector) {
 /** Something a menu asks the target screen to open on arrival, e.g. File → New Transaction. */
 enum class ScreenRequest { NEW_TRANSACTION, IMPORT_STATEMENT }
 
+/** Settings' sections, in the order the pane lists them; the title key is also the section header's title. */
+enum class SettingsSection(val title: StringKey) {
+    APPEARANCE(StringKey.Appearance),
+    PROFILES(StringKey.Profiles),
+    CATEGORIES(StringKey.Categories),
+    RULES(StringKey.AutoCategorizationRules),
+    DATA(StringKey.DataAndOcr),
+    BACKUP(StringKey.BackupAndRestore),
+    TRACE(StringKey.ProtocolTraceTitle),
+    AUDIT(StringKey.AuditLogShort),
+}
+
 /** Optional context passed when navigating, e.g. "show transactions of this account". */
 data class NavigationArgs(
     val accountId: Int? = null,
@@ -43,6 +55,8 @@ data class NavigationArgs(
     val request: ScreenRequest? = null,
     /** Makes a repeated request a new value, so the screen sees it again. */
     val requestId: Long = 0,
+    /** Settings opens on this section; null starts on Appearance. */
+    val settingsSection: SettingsSection? = null,
 )
 
 class NavigationState {
