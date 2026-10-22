@@ -22,6 +22,7 @@ import de.findesk.i18n.strings
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
+import de.findesk.ui.navigation.SettingsSection
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
@@ -53,7 +54,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             item {
                 GettingStartedCard(
                     onAddBank = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) },
-                    onOpenSettings = { onNavigate(Screen.SETTINGS, NavigationArgs()) },
+                    onOpenSettings = { onNavigate(Screen.SETTINGS, NavigationArgs(settingsSection = SettingsSection.CATEGORIES)) },
                 )
             }
             // First run: the setup card is the whole dashboard, so no empty totals or charts suggest false data
