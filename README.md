@@ -137,8 +137,18 @@ endpoint. Prefer to type the BLZ directly? That still works, and the bank name,
 BIC and FinTS server are filled in when it matches. Banks outside the directory
 can be added manually. Enter your online-banking user ID under the bank's
 connection settings and press **Sync**. FinDesk asks for your PIN on every sync
-and never stores it. Transfers are only sent after a review step and explicit
-confirmation.
+unless you tick **Remember PIN for syncs**; that PIN is kept in the operating
+system's credential store, never in `findesk.db` or a file. On Windows, the
+installed MSI is checked in CI by the packaged app's self-check, and you can run
+the same check by hand in PowerShell:
+
+```powershell
+Start-Process "$env:LOCALAPPDATA\FinDesk\FinDesk.exe" -ArgumentList '--credential-self-check', "$env:TEMP\findesk-check.txt" -Wait; Get-Content "$env:TEMP\findesk-check.txt"
+```
+
+It prints `OK:` when the store works. The per-user MSI installs into the
+`FinDesk` folder under `%LOCALAPPDATA%`; adjust the path if you chose another
+folder. Transfers are only sent after a review step and explicit confirmation.
 
 ### Troubleshooting with a protocol trace
 

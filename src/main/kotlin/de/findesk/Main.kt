@@ -21,6 +21,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import de.findesk.banking.CredentialSelfCheck
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.AppStrings
@@ -57,6 +58,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.Dimension
 import java.io.File
+import kotlin.system.exitProcess
 
 @Composable
 @Preview
@@ -157,7 +159,9 @@ fun App(
     }
 }
 
-fun main() {
+fun main(args: Array<String>) {
+    // Diagnostic entry point: no window, no data directory, no pending restore
+    if (args.firstOrNull() == "--credential-self-check") exitProcess(CredentialSelfCheck.run(args.getOrNull(1)))
     Platform.configureProcess()
     // Profile first: it decides which data directory the database, documents and passports come from
     val profiles = ProfileStore()

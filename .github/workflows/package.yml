@@ -80,6 +80,76 @@ jobs:
         shell: bash
         run: ./gradlew --no-daemon verifyInstallerIcon
 
+      # Issue #38: the installed app runs on the trimmed runtime jpackage builds, which has no
+      # java.exe and may lack something JNA needs. CredentialStores.create() catches every load
+      # failure and returns NoCredentialStore, so a broken store would silently hide "Remember PIN".
+      # This runs the self-check from the installed MSI, not from the Gradle test runtime.
+      # windows-latest is Windows Server, so Windows 11 itself is still checked by hand with the same flag.
+      - name: Verify the Windows credential store in the packaged app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Fail([string]$message) {
+            Write-Host "::error::$message"
+            exit 1
+          }
+
+          $msis = @(Get-ChildItem -Path 'build/compose/binaries/main/msi' -Filter '*.msi' -File)
+          if ($msis.Count -ne 1) {
+            Fail "expected one MSI in build/compose/binaries/main/msi, found $($msis.Count)"
+          }
+          $msi = $msis[0]
+          Write-Host "Installing $($msi.FullName)"
+
+          $log = Join-Path $env:RUNNER_TEMP 'msi.log'
+          $install = Start-Process msiexec.exe -ArgumentList '/i', "`"$($msi.FullName)`"", '/qn', '/norestart', '/l*v', "`"$log`"" -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            if (Test-Path $log) {
+              Get-Content $log -Tail 50
+            }
+            Fail "MSI install failed with exit code $($install.ExitCode)"
+          }
+
+          # perUserInstall = true: the MSI installs into the FinDesk folder under LOCALAPPDATA.
+          $installs = @(Get-ChildItem -Path $env:LOCALAPPDATA -Directory -Filter 'FinDesk' -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notlike '*\build\*' })
+          $exe = $installs |
+            ForEach-Object { Get-ChildItem -Path $_.FullName -Filter 'FinDesk.exe' -File -ErrorAction SilentlyContinue } |
+            Select-Object -First 1
+          if (-not $exe) {
+            $installs = @(Get-ChildItem -Path $env:ProgramFiles -Directory -Filter 'FinDesk' -Recurse -ErrorAction SilentlyContinue)
+            $exe = $installs |
+              ForEach-Object { Get-ChildItem -Path $_.FullName -Filter 'FinDesk.exe' -File -ErrorAction SilentlyContinue } |
+              Select-Object -First 1
+          }
+          if (-not $exe) {
+            Fail 'FinDesk.exe was not found after installing the MSI'
+          }
+          Write-Host "Found $($exe.FullName)"
+
+          # The launcher is a GUI program, so stdout is not captured: the result file is the evidence.
+          $result = Join-Path $env:RUNNER_TEMP 'credential-self-check.txt'
+          Remove-Item -Path $result -ErrorAction SilentlyContinue
+          $run = Start-Process $exe.FullName -ArgumentList '--credential-self-check', "`"$result`"" -Wait -PassThru
+
+          $line = $null
+          if (Test-Path $result) {
+            $line = [string](Get-Content -Path $result -TotalCount 1)
+            Write-Host "Self-check: $line"
+          } else {
+            Write-Host 'Self-check: no result file'
+          }
+          if ($run.ExitCode -ne 0) {
+            Fail "credential self-check exited with $($run.ExitCode)"
+          }
+          if (-not (Test-Path $result)) {
+            Fail "credential self-check wrote no result file ($result)"
+          }
+          if (-not $line -or -not $line.StartsWith('OK:')) {
+            Fail "credential self-check did not report OK: '$line'"
+          }
+
       - name: Upload installers
         uses: actions/upload-artifact@v7
         with:
