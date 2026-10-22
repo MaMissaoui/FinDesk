@@ -509,6 +509,7 @@ enum class StringKey {
     AboutTitle,
     AboutVersion,
     AboutText,
+    AboutTypeface,
     Language,
     Categories,
     AddCategory,

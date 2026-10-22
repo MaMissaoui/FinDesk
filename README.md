@@ -194,6 +194,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Please run
 
 This project is licensed under the MIT License – see [LICENSE](LICENSE).
 
+FinDesk bundles the IBM Plex Sans typeface, © IBM Corp., under the SIL Open Font License 1.1 (see [OFL.txt](src/main/resources/fonts/OFL.txt)).
+
 ## Acknowledgments
 
 - [HBCI4Java](https://github.com/hbci4j/hbci4java) – FinTS/HBCI library (LGPL-2.1)
