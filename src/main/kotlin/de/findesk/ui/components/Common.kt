@@ -164,7 +164,8 @@ fun StatCard(title: String, value: String, icon: ImageVector?, color: Color, mod
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Weighted so a long title wraps instead of squeezing the icon
+                Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(end = 8.dp))
                 if (icon != null) Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.height(8.dp))
