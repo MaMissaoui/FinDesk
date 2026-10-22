@@ -268,8 +268,9 @@ private class SecretToolStore : CredentialStore {
  *
  * Entries are generic credentials persisted to the local machine only ([CRED_PERSIST_LOCAL_MACHINE]); the PIN is
  * never put on a command line (`cmdkey`) or written to a file. The JVM round trip is verified on the GitHub
- * Windows runner (`.github/workflows/windows-credentials.yml`); the packaged MSI/EXE on Windows 11 is still
- * unverified. `internal`, not `private`, so a test can build it directly, bypassing `findesk.credentialStore=none`.
+ * Windows runner (`.github/workflows/windows-credentials.yml`), and the packaged MSI by `package.yml`'s
+ * self-check (`FinDesk.exe --credential-self-check <result file>`); Windows 11 itself is checked by hand.
+ * `internal`, not `private`, so a test can build it directly, bypassing `findesk.credentialStore=none`.
  */
 internal class WindowsCredentialStore : CredentialStore {
     override val isAvailable: Boolean = true
