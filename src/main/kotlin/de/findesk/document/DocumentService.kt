@@ -82,6 +82,13 @@ class DocumentService(
         _error.value = null
         try {
             require(sourceFile.isFile) { de.findesk.i18n.AppStrings.format(de.findesk.i18n.StringKey.ErrorFileDoesNotExist, sourceFile.name) }
+            require(sourceFile.length() <= DocumentLimits.MAX_DOCUMENT_BYTES) {
+                de.findesk.i18n.AppStrings.format(
+                    de.findesk.i18n.StringKey.ErrorDocumentTooLarge,
+                    sourceFile.name,
+                    DocumentLimits.MAX_DOCUMENT_BYTES / (1024 * 1024),
+                )
+            }
             val mimeType = detectMimeType(sourceFile)
             require(mimeType != "application/octet-stream") { de.findesk.i18n.AppStrings.format(de.findesk.i18n.StringKey.ErrorUnsupportedFileType, sourceFile.extension) }
 
