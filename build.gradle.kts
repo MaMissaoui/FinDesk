@@ -135,8 +135,9 @@ compose.desktop {
         jvmArgs += listOf(
             "-Xmx1024m",
             "-Dfile.encoding=UTF-8",
-            "-Xdock:name=FinDesk",
         )
+        // -Xdock: is macOS-only; any other JVM refuses to start with it.
+        if (System.getProperty("os.name").lowercase().contains("mac")) jvmArgs += "-Xdock:name=FinDesk"
     }
 }
 
