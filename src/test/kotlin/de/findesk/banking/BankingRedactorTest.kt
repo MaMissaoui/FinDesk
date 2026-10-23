@@ -45,4 +45,23 @@ class BankingRedactorTest {
         assertEquals("a?+b?:c?'d??e?@f", BankingRedactor.fintsEscaped("a+b:c'd?e@f"))
         assertEquals("plain", BankingRedactor.fintsEscaped("plain"))
     }
+
+    @Test
+    fun `maskAccountNumbers masks IBANs keeping the last 4 characters`() {
+        assertEquals("IBAN …3000 ungültig", BankingRedactor.maskAccountNumbers("IBAN DE89370400440532013000 ungültig"))
+        assertEquals("IBAN …3000 ungültig", BankingRedactor.maskAccountNumbers("IBAN DE89 3704 0044 0532 0130 00 ungültig"))
+        assertEquals("…3000", BankingRedactor.maskAccountNumbers("de89370400440532013000"))
+    }
+
+    @Test
+    fun `maskAccountNumbers masks long digit runs keeping the last 4 digits`() {
+        assertEquals("Konto …7890 gesperrt", BankingRedactor.maskAccountNumbers("Konto 1234567890 gesperrt"))
+    }
+
+    @Test
+    fun `maskAccountNumbers leaves return codes dates amounts and short numbers alone`() {
+        assertEquals("9050 Auftrag abgelehnt am 23.10.2026 über 12,34 EUR", BankingRedactor.maskAccountNumbers("9050 Auftrag abgelehnt am 23.10.2026 über 12,34 EUR"))
+        assertEquals("Betrag 10000 EUR", BankingRedactor.maskAccountNumbers("Betrag 10000 EUR"))
+        assertEquals("Jahr 2026", BankingRedactor.maskAccountNumbers("Jahr 2026"))
+    }
 }

@@ -591,6 +591,23 @@ class BankingSyncTest {
     }
 
     @Test
+    fun `an order with an unknown outcome keeps the dialog message out of the audit log`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val dialogMessage = "Read timed out"
+        val vm = de.findesk.viewmodel.PaymentsViewModel(bankingService = serviceWithTransfer("p-unknown-message") { throw IllegalStateException(dialogMessage) })
+        vm.load().join()
+
+        vm.review(vm.state.value.accounts.single(), TransferOrder("Max Mustermann", savings, null, BigDecimal("10.00"), "Test"))
+        vm.confirmAndSend().join()
+
+        val audit = AuditLogRepositoryImpl().findByAction("TRANSFER").single()
+        assertTrue(audit.details!!.contains("outcome unknown"), audit.details)
+        assertFalse(audit.details!!.contains(dialogMessage), audit.details)
+        vm.close()
+    }
+
+    @Test
     fun `a definite rejection is recorded as rejected and keeps the review for a corrected retry`() = runBlocking {
         gateway.snapshots = listOf(snapshot(giro, "500.00"))
         service.syncBankConnection(bankId, ScriptedInteraction())
@@ -603,6 +620,41 @@ class BankingSyncTest {
         assertNotNull(vm.state.value.review)
         assertEquals("9050 Empfänger-IBAN ungültig", vm.state.value.error)
         assertEquals(de.findesk.model.PaymentOrderStatus.REJECTED, vm.state.value.paymentOrders.single().status)
+        vm.close()
+    }
+
+    @Test
+    fun `a definite rejection masks account numbers in stored records but keeps full text in the UI`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "500.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        val vm = de.findesk.viewmodel.PaymentsViewModel(
+            bankingService = serviceWithTransfer("p-rejected-numbers") {
+                throw OrderNotExecutedException("9050 Empfänger-IBAN DE89 3704 0044 0532 0130 00 ungültig, Konto 1234567890")
+            },
+        )
+        vm.load().join()
+
+        vm.review(vm.state.value.accounts.single(), TransferOrder("Max Mustermann", savings, null, BigDecimal("10.00"), "Test"))
+        vm.confirmAndSend().join()
+
+        assertNotNull(vm.state.value.review)
+        assertEquals("9050 Empfänger-IBAN DE89 3704 0044 0532 0130 00 ungültig, Konto 1234567890", vm.state.value.error)
+        assertEquals(de.findesk.model.PaymentOrderStatus.REJECTED, vm.state.value.paymentOrders.single().status)
+
+        val audit = AuditLogRepositoryImpl().findByAction("TRANSFER").single()
+        assertTrue(audit.details!!.contains("failed (NOT_EXECUTED, bank codes 9050)"), audit.details)
+        assertFalse(audit.details!!.contains("ungültig"), audit.details)
+        assertFalse(audit.details!!.contains("3704"), audit.details)
+        assertFalse(audit.details!!.contains("0532"), audit.details)
+        assertFalse(audit.details!!.contains("1234567890"), audit.details)
+
+        val message = vm.state.value.paymentOrders.single().message
+        assertNotNull(message)
+        assertTrue(message!!.contains("9050"), message)
+        assertTrue(message.contains("…3000"), message)
+        assertTrue(message.contains("…7890"), message)
+        assertFalse(message.contains("0532"), message)
+        assertFalse(message.contains("1234567890"), message)
         vm.close()
     }
 

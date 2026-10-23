@@ -62,6 +62,8 @@ class BankingService(
 
         const val MAX_PURPOSE_LENGTH = 140
         const val MAX_NAME_LENGTH = 70
+
+        private val RETURN_CODE = Regex("(?<![\\w…])[39]\\d{3}(?!\\w)")
     }
 
     data class SyncReport(
@@ -426,7 +428,7 @@ class BankingService(
         val normalized = order.copy(recipientIban = Iban.normalize(order.recipientIban), recipientName = order.recipientName.trim())
 
         suspend fun deny(code: String, message: String, accountIban: String? = null): BankingResult<T> {
-            withContext(Dispatchers.IO) { auditOrder(action, normalized, accountIban, describe, "failed: $message") }
+            withContext(Dispatchers.IO) { auditOrder(action, normalized, accountIban, describe, BankingRedactor.maskAccountNumbers("failed: $message")) }
             return BankingResult.Error(code, message)
         }
 
@@ -472,7 +474,10 @@ class BankingService(
         }
     }
 
-    /** Audit-log line for an order attempt; [accountIban] is null while the account isn't known yet. */
+    /**
+     * Audit-log line for an order attempt; [accountIban] is null while the account isn't known yet.
+     * Bank text can carry full account numbers, so the audit keeps FinTS return codes only.
+     */
     private fun auditOrder(action: String, order: TransferOrder, accountIban: String?, describe: String, outcome: String) {
         val from = accountIban?.let { "from …${it.takeLast(4)} " }.orEmpty()
         auditLogRepository.log(
@@ -492,9 +497,23 @@ class BankingService(
         result
     }
 
+    /**
+     * FinTS return codes (3xxx warnings, 9xxx errors) in already masked bank text. A code standing right after the
+     * mask is the kept tail of an account number ("…3000"), not a code.
+     */
+    private fun returnCodes(maskedText: String?): List<String> = maskedText?.let { text -> RETURN_CODE.findAll(text).map { it.value }.distinct().toList() }.orEmpty()
+
     private fun outcome(result: BankingResult<*>): String = when (result) {
         is BankingResult.Success -> "sent"
-        is BankingResult.Error -> if (result.code == OUTCOME_UNKNOWN) "outcome unknown: ${result.message}" else "failed: ${result.message}"
+
+        is BankingResult.Error -> {
+            val codes = returnCodes(BankingRedactor.maskAccountNumbers(result.message))
+            if (result.code == OUTCOME_UNKNOWN) {
+                if (codes.isEmpty()) "outcome unknown" else "outcome unknown (bank codes ${codes.joinToString(", ")})"
+            } else {
+                if (codes.isEmpty()) "failed (${result.code})" else "failed (${result.code}, bank codes ${codes.joinToString(", ")})"
+            }
+        }
     }
 
     /** Recorded status of an attempt, from the bank's answer. */
@@ -519,7 +538,7 @@ class BankingService(
         else -> null
     }
 
-    private fun resultMessage(result: BankingResult<*>): String? = (result as? BankingResult.Error)?.message
+    private fun resultMessage(result: BankingResult<*>): String? = (result as? BankingResult.Error)?.message?.let { BankingRedactor.maskAccountNumbers(it) }
 
     data class ImportResult(
         val imported: Int,
