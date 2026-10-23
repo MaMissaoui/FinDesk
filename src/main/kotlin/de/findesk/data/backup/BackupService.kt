@@ -4,9 +4,12 @@ import de.findesk.data.database.DatabaseCrypto
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.util.FileSecurity
 import java.io.File
-import java.io.FileOutputStream
 import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.sql.Connection
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -18,6 +21,9 @@ import java.util.zip.ZipOutputStream
 /**
  * Backups are ZIP files with a consistent copy of the database (`VACUUM INTO`), the stored documents and
  * the FinTS passport files, plus a manifest.
+ *
+ * Writing starts at a private temp file that is owner-only from the first byte and is only moved into place
+ * once the backup is complete; a failed run leaves no partial or world-readable ZIP behind.
  *
  * Restoring replaces the live database, so it is two-phase: [stageRestore] validates the backup and unpacks
  * it next to the data; [applyPendingRestore] (called at startup before the database opens) moves the current
@@ -60,50 +66,73 @@ class BackupService(
         // Next to the data rather than in the shared temp dir: a plaintext database's copy is readable there,
         // and one left behind by a crash would outlive the data it came from
         val tmpDb = File.createTempFile("findesk-backup", ".db.tmp", dataDir).apply { delete() }
+        val targetDir = target.absoluteFile.parentFile.apply { mkdirs() }
+        val tmpZip = Files.createTempFile(targetDir.toPath(), "findesk-backup", ".zip.tmp")
         try {
+            FileSecurity.secureFile(tmpZip.toFile())
+
             // VACUUM INTO gives a consistent, compacted copy even while the app has the database open.
             // It can't run inside a transaction, so use a plain autocommit connection.
             connect(File(dataDir, DB_NAME)).use { c ->
                 c.createStatement().use { it.execute("VACUUM INTO '${tmpDb.absolutePath.replace("'", "''")}'") }
             }
             // Refused up front rather than written: stageRestore would reject it, leaving a backup that can't be restored
-            val files = listOf(tmpDb) + CONTENT_DIRS.flatMap { File(dataDir, it).listFiles()?.filter(File::isFile).orEmpty() }
+            val files = listOf(tmpDb) + CONTENT_DIRS.flatMap { contentFiles(it) }
             require(files.all { it.length() <= MAX_ENTRY_BYTES } && files.sumOf { it.length() } <= maxRestoreBytes) {
                 "Backup is too large to restore"
             }
             val transactions = countRows(tmpDb, "transactions")
-            val documentFiles = File(dataDir, "documents").listFiles()?.count { it.isFile } ?: 0
+            val documentFiles = contentFiles("documents").size
             val info = BackupInfo(LocalDateTime.now().toString(), appVersion, transactions, documentFiles)
 
-            target.parentFile?.mkdirs()
-            ZipOutputStream(FileOutputStream(target)).use { zip ->
-                zip.putNextEntry(ZipEntry(MANIFEST))
-                Properties().apply {
-                    setProperty("created", info.created)
-                    setProperty("appVersion", info.appVersion)
-                    setProperty("transactions", info.transactions.toString())
-                    setProperty("documents", info.documents.toString())
-                }.store(zip, "FinDesk backup")
-                zip.closeEntry()
+            Files.newOutputStream(tmpZip).use { output ->
+                ZipOutputStream(output).use { zip ->
+                    zip.putNextEntry(ZipEntry(MANIFEST))
+                    Properties().apply {
+                        setProperty("created", info.created)
+                        setProperty("appVersion", info.appVersion)
+                        setProperty("transactions", info.transactions.toString())
+                        setProperty("documents", info.documents.toString())
+                    }.store(zip, "FinDesk backup")
+                    zip.closeEntry()
 
-                zip.putNextEntry(ZipEntry(DB_NAME))
-                tmpDb.inputStream().use { it.copyTo(zip) }
-                zip.closeEntry()
+                    zip.putNextEntry(ZipEntry(DB_NAME))
+                    tmpDb.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
 
-                CONTENT_DIRS.forEach { dirName ->
-                    File(dataDir, dirName).listFiles()?.filter { it.isFile }?.sortedBy { it.name }?.forEach { file ->
-                        zip.putNextEntry(ZipEntry("$dirName/${file.name}"))
-                        file.inputStream().use { it.copyTo(zip) }
-                        zip.closeEntry()
+                    CONTENT_DIRS.forEach { dirName ->
+                        contentFiles(dirName).forEach { file ->
+                            zip.putNextEntry(ZipEntry("$dirName/${file.name}"))
+                            file.inputStream().use { it.copyTo(zip) }
+                            zip.closeEntry()
+                        }
                     }
                 }
             }
+            moveTmpZipIntoPlace(tmpZip, target.toPath())
             // A backup holds the encrypted database plus plaintext documents/passports; keep it owner-only
             FileSecurity.secureFile(target)
             return info
         } finally {
             tmpDb.delete()
+            Files.deleteIfExists(tmpZip)
         }
+    }
+
+    private fun moveTmpZipIntoPlace(tmpZip: Path, target: Path) {
+        try {
+            Files.move(tmpZip, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: AtomicMoveNotSupportedException) {
+            Files.move(tmpZip, target, StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    private fun contentFiles(dirName: String): List<File> {
+        val dir = File(dataDir, dirName)
+        return dir.listFiles()
+            ?.filter { Files.isRegularFile(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
+            ?.sortedBy { it.name }
+            .orEmpty()
     }
 
     /** Reads the manifest of a backup without changing anything. Throws if the file isn't a FinDesk backup. */

@@ -4,13 +4,18 @@ import de.findesk.TestData
 import de.findesk.data.backup.BackupService
 import de.findesk.data.database.DatabaseFactory
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.FileSystems
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermission
 import java.time.LocalDate
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 class BackupServiceTest {
@@ -181,5 +186,70 @@ class BackupServiceTest {
         assertTrue(seen.isNotEmpty())
         assertTrue(seen.all { it == dataDir.canonicalPath }, "copies opened in $seen")
         assertTrue(dataDir.listFiles()!!.none { it.name.endsWith(".db.tmp") }, "temporary copy removed")
+    }
+
+    @Test
+    fun `backup file is owner-only on POSIX`() {
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"))
+
+        val dataDir = File(tmp, "d-owner").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        TestData().account()
+        val target = File(tmp, "owner-existing.zip")
+        target.writeText("old")
+        Files.setPosixFilePermissions(target.toPath(), setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.GROUP_READ, PosixFilePermission.OTHERS_READ))
+
+        BackupService(dataDir).createBackup(target)
+
+        val perms = Files.getPosixFilePermissions(target.toPath())
+        assertEquals(setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE), perms)
+    }
+
+    @Test
+    fun `symlinks in content directories are skipped`() {
+        val dataDir = File(tmp, "d-symlink").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        TestData().account()
+        val documentsDir = File(dataDir, "documents").apply { mkdirs() }
+        val outside = File(tmp, "outside-secret.txt").apply { writeText("secret") }
+        val link = File(documentsDir, "link.txt")
+        try {
+            Files.createSymbolicLink(link.toPath(), outside.toPath())
+        } catch (e: Exception) {
+            assumeTrue(false, "symbolic links not supported")
+        }
+        File(documentsDir, "regular.txt").writeText("regular")
+
+        val target = File(tmp, "symlink.zip")
+        val info = BackupService(dataDir).createBackup(target)
+
+        assertEquals(1, info.documents)
+        val entries = ZipFile(target).use { zip -> zip.entries().toList().map { it.name } }
+        assertTrue(entries.contains("documents/regular.txt"))
+        assertFalse(entries.contains("documents/link.txt"))
+    }
+
+    @Test
+    fun `failed backup leaves no target and no temp zip on POSIX`() {
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"))
+        assumeTrue(System.getProperty("user.name") != "root")
+
+        val dataDir = File(tmp, "d-fail").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        TestData().account()
+        val documentsDir = File(dataDir, "documents").apply { mkdirs() }
+        val bad = File(documentsDir, "unreadable.pdf").apply { writeText("x") }
+        val target = File(tmp, "fail.zip")
+
+        try {
+            Files.setPosixFilePermissions(bad.toPath(), emptySet())
+
+            assertThrows<Exception> { BackupService(dataDir).createBackup(target) }
+
+            assertFalse(target.exists(), "target must not exist on failure")
+            assertTrue(target.parentFile.listFiles()?.none { it.name.endsWith(".zip.tmp") } ?: true, "no temp zip left behind")
+        } finally {
+            Files.setPosixFilePermissions(bad.toPath(), setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE))
+        }
     }
 }
