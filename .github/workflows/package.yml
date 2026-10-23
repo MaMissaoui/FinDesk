@@ -131,7 +131,14 @@ jobs:
           # The launcher is a GUI program, so stdout is not captured: the result file is the evidence.
           $result = Join-Path $env:RUNNER_TEMP 'credential-self-check.txt'
           Remove-Item -Path $result -ErrorAction SilentlyContinue
-          $run = Start-Process $exe.FullName -ArgumentList '--credential-self-check', "`"$result`"" -Wait -PassThru
+          # stdout/stderr are redirected anyway, and JPACKAGE_DEBUG makes the launcher trace its own start, so a
+          # launcher that fails before the JVM runs still says why
+          $stdout = Join-Path $env:RUNNER_TEMP 'self-check-stdout.txt'
+          $stderr = Join-Path $env:RUNNER_TEMP 'self-check-stderr.txt'
+          $env:JPACKAGE_DEBUG = 'true'
+          $run = Start-Process $exe.FullName -ArgumentList '--credential-self-check', "`"$result`"" -Wait -PassThru `
+            -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          Remove-Item Env:JPACKAGE_DEBUG
 
           $line = $null
           if (Test-Path $result) {
@@ -139,6 +146,15 @@ jobs:
             Write-Host "Self-check: $line"
           } else {
             Write-Host 'Self-check: no result file'
+          }
+          if ($run.ExitCode -ne 0 -or -not $line -or -not $line.StartsWith('OK:')) {
+            Write-Host '--- launcher stdout'; Get-Content $stdout -ErrorAction SilentlyContinue
+            Write-Host '--- launcher stderr'; Get-Content $stderr -ErrorAction SilentlyContinue
+            Write-Host '--- install folder'
+            Get-ChildItem -Path $exe.DirectoryName -Depth 1 | ForEach-Object { Write-Host $_.FullName }
+            Get-ChildItem -Path $exe.DirectoryName -Filter '*.cfg' -Recurse | ForEach-Object {
+              Write-Host "--- $($_.FullName)"; Get-Content $_.FullName
+            }
           }
           if ($run.ExitCode -ne 0) {
             Fail "credential self-check exited with $($run.ExitCode)"
