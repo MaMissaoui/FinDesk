@@ -183,6 +183,9 @@ jobs:
           fi
           deb="${debs[0]}"
           echo "Installing $deb"
+          # The package's post-install script registers the menu entry with xdg-desktop-menu, which fails
+          # ("No writable system menu directory found") on a runner without the menu directories a desktop has
+          sudo mkdir -p /usr/share/desktop-directories /usr/share/applications
           sudo apt-get install -y "./$deb"
 
           # The Debian package is named findesk (build.gradle.kts linux { packageName }); its launcher
