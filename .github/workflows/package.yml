@@ -131,14 +131,12 @@ jobs:
           # The launcher is a GUI program, so stdout is not captured: the result file is the evidence.
           $result = Join-Path $env:RUNNER_TEMP 'credential-self-check.txt'
           Remove-Item -Path $result -ErrorAction SilentlyContinue
-          # stdout/stderr are redirected anyway, and JPACKAGE_DEBUG makes the launcher trace its own start, so a
-          # launcher that fails before the JVM runs still says why
+          # On failure the step prints the launcher's stdout/stderr, the install folder and its .cfg. A launcher
+          # that fails before the JVM runs prints nothing itself: the .cfg is what showed the -Xdock option (#72).
           $stdout = Join-Path $env:RUNNER_TEMP 'self-check-stdout.txt'
           $stderr = Join-Path $env:RUNNER_TEMP 'self-check-stderr.txt'
-          $env:JPACKAGE_DEBUG = 'true'
           $run = Start-Process $exe.FullName -ArgumentList '--credential-self-check', "`"$result`"" -Wait -PassThru `
             -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-          Remove-Item Env:JPACKAGE_DEBUG
 
           $line = $null
           if (Test-Path $result) {
