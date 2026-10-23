@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.io.RandomAccessFile
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -108,6 +109,21 @@ class DocumentServiceTest {
         val txt = File(tmp, "notes.txt").apply { writeText("hi") }
         assertThrows<IllegalArgumentException> { runBlocking { service.uploadDocument(txt) } }
         assertThrows<IllegalArgumentException> { runBlocking { service.uploadDocument(File(tmp, "missing.pdf")) } }
+    }
+
+    @Test
+    fun `rejects files larger than the document size limit`() {
+        val file = File(tmp, "big.pdf")
+        RandomAccessFile(file, "rw").use { it.setLength(DocumentLimits.MAX_DOCUMENT_BYTES + 1) }
+        try {
+            val docsBefore = docsDir.listFiles().orEmpty().size
+            val repoBefore = runBlocking { service.listDocuments().size }
+            assertThrows<IllegalArgumentException> { runBlocking { service.uploadDocument(file) } }
+            assertEquals(docsBefore, docsDir.listFiles().orEmpty().size)
+            assertEquals(repoBefore, runBlocking { service.listDocuments().size })
+        } finally {
+            file.delete()
+        }
     }
 
     @Test

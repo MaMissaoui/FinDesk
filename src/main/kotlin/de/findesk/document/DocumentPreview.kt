@@ -18,10 +18,16 @@ object DocumentPreview {
                 if (doc.numberOfPages == 0) return null
                 // Scale so the page is about maxWidth pixels wide (PDF units are 1/72 inch)
                 val pageWidth = doc.getPage(0).mediaBox.width.takeIf { it > 0f } ?: 595f
-                PDFRenderer(doc).renderImage(0, (maxWidth / pageWidth).coerceIn(0.2f, 4f), ImageType.RGB)
+                val scale = (maxWidth / pageWidth).coerceIn(0.2f, 4f)
+                val cropBox = doc.getPage(0).cropBox
+                val cappedScale = DocumentLimits.cappedScale(cropBox.width, cropBox.height, scale)
+                PDFRenderer(doc).renderImage(0, cappedScale, ImageType.RGB)
             }
 
-            else -> ImageIO.read(file) ?: return null
+            else -> {
+                DocumentLimits.checkImage(file)
+                ImageIO.read(file) ?: return null
+            }
         }
         scale(image, maxWidth)
     }.getOrNull()

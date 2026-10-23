@@ -63,7 +63,7 @@ class OcrService(
     }
 
     private fun processPdf(file: File): OcrResult? = Loader.loadPDF(file).use { doc ->
-        val text = PDFTextStripper().getText(doc).trim()
+        val text = PDFTextStripper().apply { endPage = DocumentLimits.MAX_TEXT_PAGES }.getText(doc).trim()
         if (text.length >= MIN_TEXT_LAYER_CHARS) {
             return OcrResult(
                 text = text,
@@ -75,8 +75,12 @@ class OcrService(
         }
         val ocr = engine ?: return null
         val renderer = PDFRenderer(doc)
-        val pages = (0 until minOf(doc.numberOfPages, MAX_OCR_PAGES)).map { page ->
-            ocr.recognize(renderer.renderImageWithDPI(page, RENDER_DPI, ImageType.GRAY))
+        val pages = (0 until minOf(doc.numberOfPages, MAX_OCR_PAGES)).mapNotNull { page ->
+            val cropBox = doc.getPage(page).cropBox
+            val scale = DocumentLimits.cappedScale(cropBox.width, cropBox.height, RENDER_DPI / 72f)
+            // Capped below 72 DPI the page is too coarse for OCR, so it is skipped
+            if (scale < 1f) return@mapNotNull null
+            ocr.recognize(renderer.renderImage(page, scale, ImageType.GRAY))
         }
         val combined = pages.joinToString("\n\n") { it.text.trim() }.trim()
         OcrResult(
@@ -90,6 +94,7 @@ class OcrService(
 
     private fun processImage(file: File): OcrResult? {
         val ocr = engine ?: return null
+        DocumentLimits.checkImage(file)
         val image = ImageIO.read(file) ?: throw IllegalArgumentException(de.findesk.i18n.AppStrings.format(de.findesk.i18n.StringKey.ErrorUnreadableImage, file.name))
         val result = ocr.recognize(image)
         val text = result.text.trim()

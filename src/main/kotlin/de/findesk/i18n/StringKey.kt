@@ -712,6 +712,8 @@ enum class StringKey {
     ErrorFileDoesNotExist,
     ErrorUnsupportedFileType,
     ErrorUnreadableImage,
+    ErrorDocumentTooLarge,
+    ErrorImageTooLarge,
     ReportUnknownCategory,
     ReportTitleTax,
     ReportTitleRange,
