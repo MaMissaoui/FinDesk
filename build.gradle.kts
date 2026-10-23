@@ -32,10 +32,10 @@ dependencies {
     implementation(compose.material3)
 
     // Exposed ORM
-    implementation("org.jetbrains.exposed:exposed-core:0.61.0")
-    implementation("org.jetbrains.exposed:exposed-dao:0.61.0")
-    implementation("org.jetbrains.exposed:exposed-jdbc:0.61.0")
-    implementation("org.jetbrains.exposed:exposed-java-time:0.61.0")
+    implementation("org.jetbrains.exposed:exposed-core:1.6.0")
+    implementation("org.jetbrains.exposed:exposed-dao:1.6.0")
+    implementation("org.jetbrains.exposed:exposed-jdbc:1.6.0")
+    implementation("org.jetbrains.exposed:exposed-java-time:1.6.0")
 
     // SQLite JDBC with encryption (SQLite3MultipleCiphers fork of xerial's driver, same org.sqlite package;
     // never add org.xerial:sqlite-jdbc next to it) and a small pool, since every keyed open runs the KDF
@@ -59,7 +59,7 @@ dependencies {
 
     // Testing
     testImplementation(kotlin("test"))
-    testImplementation("org.jetbrains.exposed:exposed-core:0.61.0")
+    testImplementation("org.jetbrains.exposed:exposed-core:1.6.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation(compose.uiTest)
 }
