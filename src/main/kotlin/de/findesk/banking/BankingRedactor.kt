@@ -19,6 +19,12 @@ object BankingRedactor {
 
     private val FINTS_SYNTAX = Regex("[+:'?@]")
 
+    /** IBANs as banks print them in messages: any case, with or without the usual spaces every 4 characters. */
+    private val SPACED_IBAN = Regex("\\b[A-Z]{2}\\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\\b", RegexOption.IGNORE_CASE)
+
+    /** Account numbers and bank codes: 6 or more digits on their own. */
+    private val LONG_DIGITS = Regex("(?<![\\dA-Za-z])\\d{6,}(?![\\dA-Za-z])")
+
     fun redact(text: String, secrets: Collection<String>): String {
         var result = text
         // Longest first, so a value that contains another is masked in one go instead of leaving fragments
@@ -29,6 +35,15 @@ object BankingRedactor {
             .sortedByDescending { it.length }
             .forEach { result = result.replace(it, MASK) }
         return IBAN.replace(result, MASK)
+    }
+
+    /**
+     * Masks account identifiers in bank text before it is stored, keeping the last 4 characters so the user can
+     * still tell accounts apart; return codes, dates and amounts stay readable.
+     */
+    fun maskAccountNumbers(text: String): String {
+        val result = SPACED_IBAN.replace(text) { "…${it.value.replace(" ", "").takeLast(4)}" }
+        return LONG_DIGITS.replace(result) { "…${it.value.takeLast(4)}" }
     }
 
     /**
