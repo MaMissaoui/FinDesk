@@ -222,8 +222,8 @@ class ReportService(
                         CsvFormat.text(txn.purpose.orEmpty()),
                         CsvFormat.text(txn.categoryName.orEmpty()),
                         txn.amount.toPlainString(),
-                        txn.currency,
-                        txn.accountIban,
+                        CsvFormat.text(txn.currency),
+                        CsvFormat.text(txn.accountIban.orEmpty()),
                     ) + if (balances != null) listOf(balances[txn.id]?.toPlainString().orEmpty()) else emptyList()
                     writer.write(CsvFormat.row(*fields.toTypedArray()))
                 }

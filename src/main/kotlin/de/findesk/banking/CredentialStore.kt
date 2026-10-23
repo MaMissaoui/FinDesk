@@ -93,6 +93,9 @@ private class MacKeychainStore : CredentialStore {
             OK -> try {
                 passwordData.value.getByteArray(0, passwordLength.value).toString(Charsets.UTF_8)
             } finally {
+                // Best-effort: the secret shouldn't outlive the call in native memory. The JVM copy is a String and
+                // can't be wiped, so the framework's buffer is zeroed before it is freed.
+                passwordData.value?.clear(passwordLength.value.toLong())
                 security.SecKeychainItemFreeContent(null, passwordData.value)
                 itemRef.value?.let { coreFoundation.CFRelease(it) }
             }
@@ -105,23 +108,29 @@ private class MacKeychainStore : CredentialStore {
         val service = native(CredentialStores.SERVICE)
         val account = native(key)
         val password = native(secret)
-        val itemRef = PointerByReference()
-        // Updating an existing entry refreshes it; adding one that exists fails with errSecDuplicateItem
-        val status = security.SecKeychainFindGenericPassword(null, byteLength(CredentialStores.SERVICE), service, byteLength(key), account, null, null, itemRef)
-        when (status) {
-            OK -> try {
-                val updated = security.SecKeychainItemModifyAttributesAndData(itemRef.value, null, byteLength(secret), password)
-                if (updated != OK) throw IllegalStateException("Keychain error $updated")
-            } finally {
-                itemRef.value?.let { coreFoundation.CFRelease(it) }
-            }
+        try {
+            val itemRef = PointerByReference()
+            // Updating an existing entry refreshes it; adding one that exists fails with errSecDuplicateItem
+            val status = security.SecKeychainFindGenericPassword(null, byteLength(CredentialStores.SERVICE), service, byteLength(key), account, null, null, itemRef)
+            when (status) {
+                OK -> try {
+                    val updated = security.SecKeychainItemModifyAttributesAndData(itemRef.value, null, byteLength(secret), password)
+                    if (updated != OK) throw IllegalStateException("Keychain error $updated")
+                } finally {
+                    itemRef.value?.let { coreFoundation.CFRelease(it) }
+                }
 
-            ERR_SEC_ITEM_NOT_FOUND -> {
-                val added = security.SecKeychainAddGenericPassword(null, byteLength(CredentialStores.SERVICE), service, byteLength(key), account, byteLength(secret), password, null)
-                if (added != OK) throw IllegalStateException("Keychain error $added")
-            }
+                ERR_SEC_ITEM_NOT_FOUND -> {
+                    val added = security.SecKeychainAddGenericPassword(null, byteLength(CredentialStores.SERVICE), service, byteLength(key), account, byteLength(secret), password, null)
+                    if (added != OK) throw IllegalStateException("Keychain error $added")
+                }
 
-            else -> throw IllegalStateException("Keychain error $status")
+                else -> throw IllegalStateException("Keychain error $status")
+            }
+        } finally {
+            // Best-effort: the secret shouldn't outlive the call in native memory. The JVM copy is a String and
+            // can't be wiped, so the buffer that held the secret is zeroed after the framework call.
+            password.clear()
         }
     }
 
@@ -145,7 +154,7 @@ private class MacKeychainStore : CredentialStore {
     }
 
     /** UTF-8 bytes of [text] in native memory; the framework takes byte lengths, not characters. */
-    private fun native(text: String): Pointer {
+    private fun native(text: String): Memory {
         val bytes = text.toByteArray(Charsets.UTF_8)
         val memory = Memory(maxOf(1, bytes.size).toLong())
         memory.write(0, bytes, 0, bytes.size)

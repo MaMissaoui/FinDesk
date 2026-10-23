@@ -2,6 +2,7 @@ package de.findesk.document
 
 import de.findesk.TestData
 import de.findesk.TestDatabase
+import de.findesk.model.TransactionItem
 import kotlinx.coroutines.runBlocking
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.text.PDFTextStripper
@@ -69,6 +70,31 @@ class ReportsAndExportTest {
         assertTrue(text.contains("\"Monitor, 27\"\"\""), text)
         assertTrue(text.contains(",-250.00,EUR,"), "amounts keep their sign: $text")
         assertEquals(4, text.trim().lines().size, "header + 3 rows")
+    }
+
+    @Test
+    fun `csv export neutralises currency and account iban formulas`() = runBlocking {
+        val file = File(tmp, "out.csv")
+        val txn = TransactionItem(
+            id = 1,
+            accountId = 1,
+            accountIban = "@TACKER-123",
+            date = LocalDate.of(2026, 3, 10),
+            amount = BigDecimal("-10.00"),
+            currency = "=1+1",
+            partnerName = null,
+            purpose = null,
+            categoryId = null,
+            categoryName = null,
+            categoryColor = null,
+            isTaxRelevant = false,
+            documentCount = 0,
+        )
+        assertTrue(service.exportToCsv(listOf(txn), file))
+
+        val text = file.readText(Charsets.UTF_8)
+        assertTrue(text.contains(",'=1+1,"), "currency formula is neutralised: $text")
+        assertTrue(text.contains(",'@TACKER-123"), "account IBAN formula is neutralised: $text")
     }
 
     @Test
