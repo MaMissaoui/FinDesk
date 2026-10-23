@@ -67,7 +67,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y fakeroot rpm
+          sudo apt-get install -y fakeroot rpm xvfb
 
       - name: Build installers
         shell: bash
@@ -163,6 +163,157 @@ jobs:
           if (-not $line -or -not $line.StartsWith('OK:')) {
             Fail "credential self-check did not report OK: '$line'"
           }
+
+      # Launch checks: every installed Windows and Linux build since v1.2.0 failed to start because the
+      # macOS-only -Xdock JVM option (added 2026-10-04) reached their launcher configs, and CI only built
+      # installers, so it never saw the failure. macOS was not affected, but is checked the same way. Off Windows --credential-self-check is handled before any
+      # window or data directory, writes "SKIP: not Windows" and exits with 2; reaching that line proves the
+      # installed launcher started the JVM and ran main().
+      - name: Verify the installed Linux app starts
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          debs=("build/compose/binaries/main/deb/"*.deb)
+          if [ "${#debs[@]}" -ne 1 ] || [ ! -f "${debs[0]}" ]; then
+            echo "::error::expected exactly one .deb in build/compose/binaries/main/deb, found ${#debs[@]}"
+            ls -l build/compose/binaries/main/deb || true
+            exit 1
+          fi
+          deb="${debs[0]}"
+          echo "Installing $deb"
+          sudo apt-get install -y "./$deb"
+
+          # The Debian package is named findesk (build.gradle.kts linux { packageName }); its launcher
+          # is the one executable regular file under a bin/ directory in the package's file list.
+          launcher=""
+          while IFS= read -r candidate; do
+            # Skip the trimmed runtime's own bin entries; the launcher is the app image's bin/<name>
+            case "$candidate" in
+              */lib/runtime/bin/*) continue ;;
+            esac
+            resolved=$(readlink -f "$candidate" 2>/dev/null || true)
+            if [ -n "$resolved" ] && [ -f "$resolved" ] && [ -x "$resolved" ]; then
+              launcher="$resolved"
+              break
+            fi
+          done < <(dpkg -L findesk | grep -E '/bin/[^/]+$' || true)
+          if [ -z "$launcher" ]; then
+            echo "::error::no executable launcher found in the findesk package"
+            dpkg -L findesk || true
+            exit 1
+          fi
+          echo "Launcher: $launcher"
+
+          result="$RUNNER_TEMP/launch-check.txt"
+          stdout="$RUNNER_TEMP/launch-check-stdout.txt"
+          stderr="$RUNNER_TEMP/launch-check-stderr.txt"
+          rm -f "$result"
+
+          set +e
+          "$launcher" --credential-self-check "$result" >"$stdout" 2>"$stderr"
+          status=$?
+          set -e
+
+          # The flag returns before Compose opens a window, so a plain run should work on a headless
+          # runner. If it still fails without a DISPLAY, retry once under Xvfb before judging the launch.
+          if [ "$status" -ne 2 ] && [ -z "${DISPLAY:-}" ]; then
+            echo "Plain run exited $status; retrying under xvfb-run"
+            rm -f "$result"
+            set +e
+            xvfb-run -a "$launcher" --credential-self-check "$result" >"$stdout" 2>"$stderr"
+            status=$?
+            set -e
+          fi
+
+          first_line=""
+          if [ -f "$result" ]; then
+            first_line=$(head -n 1 "$result" || true)
+          fi
+          if [ "$status" -eq 2 ] && [ "$first_line" = "SKIP: not Windows" ]; then
+            echo "Launch check passed: exit 2, '$first_line'"
+            exit 0
+          fi
+
+          echo "::error::the installed launcher did not start main(): exit $status"
+          echo "--- exit code: $status"
+          if [ -f "$result" ]; then
+            echo "--- result file $result"
+            cat "$result"
+          else
+            echo "no result file"
+          fi
+          echo "--- launcher stdout"
+          cat "$stdout" 2>/dev/null || true
+          echo "--- launcher stderr"
+          cat "$stderr" 2>/dev/null || true
+          echo "--- launcher config"
+          app_dir=$(dirname "$(dirname "$launcher")")
+          shopt -s nullglob
+          cfgs=("$app_dir"/lib/app/*.cfg)
+          if [ "${#cfgs[@]}" -eq 0 ]; then
+            echo "no .cfg under $app_dir/lib/app"
+          else
+            cat "${cfgs[@]}"
+          fi
+          exit 1
+
+      - name: Verify the installed macOS app starts
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # The DMG's payload is the app image jpackage built, so mounting the DMG is not needed
+          launcher="build/compose/binaries/main/app/FinDesk.app/Contents/MacOS/FinDesk"
+          if [ ! -x "$launcher" ]; then
+            echo "::error::packaged app image not found: $launcher"
+            ls -l build/compose/binaries/main/app || true
+            exit 1
+          fi
+          echo "Launcher: $launcher"
+
+          result="$RUNNER_TEMP/launch-check.txt"
+          stdout="$RUNNER_TEMP/launch-check-stdout.txt"
+          stderr="$RUNNER_TEMP/launch-check-stderr.txt"
+          rm -f "$result"
+
+          set +e
+          "$launcher" --credential-self-check "$result" >"$stdout" 2>"$stderr"
+          status=$?
+          set -e
+
+          first_line=""
+          if [ -f "$result" ]; then
+            first_line=$(head -n 1 "$result" || true)
+          fi
+          if [ "$status" -eq 2 ] && [ "$first_line" = "SKIP: not Windows" ]; then
+            echo "Launch check passed: exit 2, '$first_line'"
+            exit 0
+          fi
+
+          echo "::error::the packaged app image did not start main(): exit $status"
+          echo "--- exit code: $status"
+          if [ -f "$result" ]; then
+            echo "--- result file $result"
+            cat "$result"
+          else
+            echo "no result file"
+          fi
+          echo "--- launcher stdout"
+          cat "$stdout" 2>/dev/null || true
+          echo "--- launcher stderr"
+          cat "$stderr" 2>/dev/null || true
+          echo "--- launcher config"
+          shopt -s nullglob
+          cfgs=(build/compose/binaries/main/app/FinDesk.app/Contents/app/*.cfg)
+          if [ "${#cfgs[@]}" -eq 0 ]; then
+            echo "no .cfg under FinDesk.app/Contents/app"
+          else
+            cat "${cfgs[@]}"
+          fi
+          exit 1
 
       - name: Upload installers
         uses: actions/upload-artifact@v7
