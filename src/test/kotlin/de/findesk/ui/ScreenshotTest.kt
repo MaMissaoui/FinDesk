@@ -48,6 +48,8 @@ import de.findesk.viewmodel.PaymentsViewModel
 import de.findesk.viewmodel.TransactionsViewModel
 import de.findesk.viewmodel.UnlockMode
 import de.findesk.viewmodel.UnlockViewModel
+import de.findesk.viewmodel.ViewModelWork
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.EncodedImageFormat
 import org.junit.jupiter.api.Test
@@ -55,6 +57,8 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty
 import java.io.File
 import java.math.BigDecimal
 import java.nio.file.Files
+import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.coroutines.CoroutineContext
 
 /**
  * Renders every screen offscreen to PNG. Not part of the normal suite; run with
@@ -395,24 +399,49 @@ class ScreenshotTest {
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, content: @Composable () -> Unit) {
-        val scene = ImageComposeScene(width = width, height = height, density = Density(1f)) {
+        // ImageComposeScene runs effects on Dispatchers.Unconfined by default, so collectAsState resumed on the view model's IO
+        // thread and wrote state from there while this thread rendered; some of those writes never reached the picture.
+        // Effects are queued instead and run here, on the rendering thread, around every frame.
+        val tasks = ConcurrentLinkedQueue<Runnable>()
+        val sceneDispatcher = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                tasks.add(block)
+            }
+        }
+        fun runQueued() {
+            while (true) (tasks.poll() ?: break).run()
+        }
+        val scene = ImageComposeScene(width = width, height = height, density = Density(1f), coroutineContext = sceneDispatcher) {
             content()
         }
         try {
             // Let LaunchedEffects start and IO-dispatched view model loads finish. A fixed frame count raced cold
             // loads (state landing in the last frame, half the screen recomposed), so wait until 10 frames in a
-            // row are identical, at least 1 s, at most 15 s.
+            // row are identical, at least 1 s, at most 15 s. Identical pixels alone are not enough: a loading
+            // screen is as still as a loaded one (the dashboard painted its €0.00 stat cards while
+            // loadDashboard() ran on IO, so the harness saved that state in 1 of 20 renders). A frame therefore
+            // only counts as stable when no view-model work is in flight, and running work at the limit fails
+            // instead of writing a stale picture. The stillness rule plus ViewModelWork handle slow loads; the
+            // dispatcher above handles updates that would otherwise be lost to the Unconfined IO thread.
             var frame = 0L
 
-            fun next() = scene.render(frame++ * 16_000_000L).encodeToData(EncodedImageFormat.PNG)?.bytes ?: error("encode failed")
+            fun next(): ByteArray {
+                runQueued()
+                val picture = scene.render(frame++ * 16_000_000L)
+                runQueued()
+                return picture.encodeToData(EncodedImageFormat.PNG)?.bytes ?: error("encode failed")
+            }
             fun settle(png: ByteArray, limit: Long = 150, minimumFrames: Long = 10): ByteArray {
                 var currentPng = png
                 var stable = 0
-                while (frame < limit && (frame < minimumFrames || stable < 10)) {
+                while (frame < limit && (frame < minimumFrames || stable < 10 || ViewModelWork.active > 0)) {
                     Thread.sleep(100)
                     val current = next()
-                    stable = if (current.contentEquals(currentPng)) stable + 1 else 0
+                    stable = if (current.contentEquals(currentPng) && ViewModelWork.active == 0) stable + 1 else 0
                     currentPng = current
+                }
+                if (ViewModelWork.active > 0) {
+                    throw IllegalStateException("$name: view-model work still running after $frame frames")
                 }
                 return currentPng
             }
