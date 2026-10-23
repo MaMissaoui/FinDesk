@@ -10,9 +10,9 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 plugins {
-    kotlin("jvm") version "2.1.10"
-    id("org.jetbrains.compose") version "1.7.3"
-    id("org.jetbrains.kotlin.plugin.compose") version "2.1.10"
+    kotlin("jvm") version "2.4.21"
+    id("org.jetbrains.compose") version "1.12.2"
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.21"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
 }
 
@@ -55,7 +55,7 @@ dependencies {
     implementation("com.github.hbci4j:hbci4j-core:4.1.17")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
     // Testing
     testImplementation(kotlin("test"))
