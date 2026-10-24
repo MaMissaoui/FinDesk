@@ -11,7 +11,7 @@ import java.io.File
 import java.math.BigDecimal
 
 /**
- * Imports statement files (CSV, CAMT.053 XML/ZIP) into an account, skipping bookings imported before.
+ * Imports statement files (CSV, CAMT.052/053/054 XML or ZIP) into an account, skipping bookings imported before.
  */
 class StatementImportService(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
@@ -137,7 +137,7 @@ class StatementImportService(
         auditLogRepository.log(
             "IMPORT_STATEMENT",
             "user",
-            "${statement.format.label} into …${account.iban.takeLast(4)}: $imported new, ${plan.exactDuplicates} known, ${plan.probableDuplicates} probable duplicates" +
+            "${statement.formatLabel} into …${account.iban.takeLast(4)}: $imported new, ${plan.exactDuplicates} known, ${plan.probableDuplicates} probable duplicates" +
                 if (wrongCurrency.isNotEmpty()) ", ${wrongCurrency.size} in another currency skipped" else "",
         )
         ImportReport(imported, plan.exactDuplicates, categorized, newBalance, plan.probableDuplicates, wrongCurrency.size, account.currency)

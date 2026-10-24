@@ -19,7 +19,7 @@ data class ImportedBooking(
     val bankReference: String? = null,
 )
 
-enum class StatementFormat(val label: String) { CSV("CSV"), CAMT053("CAMT.053 XML"), MT940("MT940"), OFX("OFX"), QIF("QIF") }
+enum class StatementFormat(val label: String) { CSV("CSV"), CAMT053("CAMT XML"), MT940("MT940"), OFX("OFX"), QIF("QIF") }
 
 /** Result of reading a file: bookings plus what could be detected about it. */
 data class ParsedStatement(
@@ -35,7 +35,12 @@ data class ParsedStatement(
     val pendingSkipped: Int = 0,
     /** CSV only: header and detected mapping, so the user can adjust it. */
     val csv: CsvLayout? = null,
-)
+    /** Message type for display, e.g. "CAMT.052" (null when the format has no variants). */
+    val formatDetail: String? = null,
+) {
+    /** Format label for the preview and the audit log, e.g. "CAMT.052 XML" or "CSV". */
+    val formatLabel: String get() = formatDetail?.let { "$it XML" } ?: format.label
+}
 
 /** Which CSV column holds which field (indexes into [headers]). */
 data class CsvMapping(

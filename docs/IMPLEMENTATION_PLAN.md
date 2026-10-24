@@ -274,6 +274,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] Import CSV and CAMT.053
   - [x] QIF, OFX, MT940 files (hand-written parsers, same import pipeline and dedup as CSV/CAMT)
   - [x] Files holding several accounts (CAMT with several `Stmt`, MT940 with several `:25:`, OFX with several `STMTRS`, e.g. a Banking4 "all accounts" export) are refused with a message asking for one file per account; before, every booking went into the first account. Splitting such a file across accounts is not built.
+  - [x] The import preview and the audit log name the CAMT message type that was read (CAMT.052, .053 or .054, from the namespace or the root element). Before, every CAMT file was labelled "CAMT.053 XML".
 - [x] Budget tracking (monthly limits per category)
 - [x] Recurring transaction detection (weekly/monthly/quarterly/yearly; Reports "Recurring" tab with yearly cost)
 - [x] Multi-profile support (personal/business): each profile is its own data directory (db, documents, passports); default stays at the root; switching is live (the window closes and the unlock screen opens for the other profile); delete moves the folder to profiles-deleted

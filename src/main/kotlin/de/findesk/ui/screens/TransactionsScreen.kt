@@ -657,7 +657,7 @@ private fun ImportDialog(
                 val csv = st.csv
                 val delimLabel = csv?.let { if (it.delimiter == '\t') s[StringKey.TabDelimiter] else "'${it.delimiter}'" } ?: ""
                 Text(
-                    "${st.format.label}" + (csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
+                    "${st.formatLabel}" + (csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
                         " · ${s.format(StringKey.BookingCount, st.bookings.size)}" +
                         (if (st.pendingSkipped > 0) " · ${s.format(StringKey.PendingLeftOut, st.pendingSkipped)}" else "") +
                         (if (st.skipped.isNotEmpty()) " · ${s.format(StringKey.UnreadableCount, st.skipped.size)}" else ""),
