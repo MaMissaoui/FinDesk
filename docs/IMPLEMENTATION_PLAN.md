@@ -275,7 +275,7 @@ The earlier "all phases complete" status was wrong. This is what the code actual
   - [x] QIF, OFX, MT940 files (hand-written parsers, same import pipeline and dedup as CSV/CAMT)
 - [x] Budget tracking (monthly limits per category)
 - [x] Recurring transaction detection (weekly/monthly/quarterly/yearly; Reports "Recurring" tab with yearly cost)
-- [x] Multi-profile support (personal/business): each profile is its own data directory (db, documents, passports); default stays at the root; switching applies at next start; delete moves the folder to profiles-deleted
+- [x] Multi-profile support (personal/business): each profile is its own data directory (db, documents, passports); default stays at the root; switching is live (the window closes and the unlock screen opens for the other profile); delete moves the folder to profiles-deleted
 - [x] Backup and restore functionality (ZIP with consistent DB copy, documents, passports; restore applied at next start, previous data kept)
 - [x] Dark mode toggle (persisted)
 - [x] Keyboard shortcuts (Ctrl/Cmd+1..7, Ctrl/Cmd+,)
@@ -304,8 +304,8 @@ Database Layer (Exposed ORM + SQLite)
 ```
 
 ### Key Dependencies
-- Kotlin JVM 2.1.10
-- Compose Desktop 1.7.3
+- Kotlin JVM 2.4.21
+- Compose Desktop 1.12.2 (Material icons from `material-icons-core` 1.7.3, no longer bundled)
 - Exposed ORM 0.61.0
 - SQLite JDBC 3.53.4.0 (SQLCipher via `io.github.willena:sqlite-jdbc`, same `org.sqlite` package as xerial — do not add both)
 - HBCI4Java `com.github.hbci4j:hbci4j-core` 4.1.17
