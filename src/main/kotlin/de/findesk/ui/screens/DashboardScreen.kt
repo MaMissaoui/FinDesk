@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
+import de.findesk.model.CategoryShare
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
@@ -32,6 +33,7 @@ import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BudgetStatus
 import de.findesk.viewmodel.DashboardViewModel
+import de.findesk.viewmodel.Period
 
 @Composable
 fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
@@ -39,6 +41,18 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
     val state by vm.state.collectAsState()
     val s = strings()
     LaunchedEffect(Unit) { vm.loadDashboard() }
+
+    // A category row opens this month's bookings of that category; uncategorized without a category filter
+    val openTransactionsCategory: (Int?) -> Unit = { categoryId ->
+        onNavigate(
+            Screen.TRANSACTIONS,
+            if (categoryId == null) {
+                NavigationArgs(uncategorizedOnly = true, period = Period.THIS_MONTH)
+            } else {
+                NavigationArgs(categoryId = categoryId, period = Period.THIS_MONTH)
+            },
+        )
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -90,7 +104,12 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     if (state.expensesByCategory.isEmpty()) {
                         Text(s[StringKey.NoExpensesThisMonth], color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        DonutChart(state.expensesByCategory, s[StringKey.ExpensesByCategory], currency = state.currency)
+                        CategorySplit(
+                            slices = state.expensesByCategory.map { CategoryShare(it.categoryId, it.label, it.amount, it.color ?: "") },
+                            currency = state.currency,
+                            excludedTransfers = state.transfersThisMonth,
+                            onSelect = { share -> openTransactionsCategory(share.categoryId) },
+                        )
                     }
                 }
                 SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(1f).fillMaxHeight()) {

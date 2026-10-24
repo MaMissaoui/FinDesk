@@ -7,4 +7,5 @@ object CategoriesTable : IntIdTable("categories") {
     val color = varchar("color", 7).default("#3BC7B0")
     val budgetLimit = decimal("budget_limit", 15, 2).nullable()
     val isTaxRelevant = bool("is_tax_relevant").default(false)
+    val isTransfer = bool("is_transfer").default(false)
 }

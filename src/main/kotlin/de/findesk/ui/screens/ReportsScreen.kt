@@ -18,8 +18,10 @@ import androidx.compose.ui.unit.dp
 import de.findesk.document.ReportService
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
+import de.findesk.model.CategoryShare
 import de.findesk.ui.components.*
-import de.findesk.ui.theme.CategoryColors
+import de.findesk.ui.navigation.NavigationArgs
+import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
@@ -27,6 +29,7 @@ import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
+import de.findesk.viewmodel.Period
 import de.findesk.viewmodel.ReportsViewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -35,7 +38,7 @@ import java.time.Month
 import java.time.format.TextStyle
 
 @Composable
-fun ReportsScreen() {
+fun ReportsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     val vm = rememberViewModel { ReportsViewModel() }
     val state by vm.state.collectAsState()
     val s = strings()
@@ -126,9 +129,36 @@ fun ReportsScreen() {
         }
         when (selectedTab) {
             0 -> TaxSummaryTab(report)
+
             1 -> MonthlyBreakdownTab(report)
-            2 -> CategoryAnalysisTab(report)
+
+            2 -> CategoryAnalysisTab(report, linkablePeriod(report)) { share ->
+                // A report over exactly a Period deep-links into that period's bookings
+                when (val period = linkablePeriod(report)) {
+                    null -> {}
+
+                    else -> if (share.categoryId == null) {
+                        onNavigate(Screen.TRANSACTIONS, NavigationArgs(uncategorizedOnly = true, period = period))
+                    } else {
+                        onNavigate(Screen.TRANSACTIONS, NavigationArgs(categoryId = share.categoryId, period = period))
+                    }
+                }
+            }
         }
+    }
+}
+
+/**
+ * The [Period] the report's category rows can deep-link into the transactions screen with, only when the report
+ * covers exactly that period: the current calendar year or the previous one. Any other range links nowhere.
+ */
+private fun linkablePeriod(report: ReportService.TaxReport): Period? {
+    val today = LocalDate.now()
+    val range = report.from to report.to
+    return when (range) {
+        LocalDate.of(today.year, 1, 1) to LocalDate.of(today.year, 12, 31) -> Period.THIS_YEAR
+        LocalDate.of(today.year - 1, 1, 1) to LocalDate.of(today.year - 1, 12, 31) -> Period.LAST_YEAR
+        else -> null
     }
 }
 
@@ -226,29 +256,18 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
 }
 
 @Composable
-private fun CategoryAnalysisTab(report: ReportService.TaxReport) {
+private fun CategoryAnalysisTab(report: ReportService.TaxReport, linkablePeriod: Period?, onSelect: ((CategoryShare) -> Unit)) {
     val s = strings()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             SectionCard(s[StringKey.SpendingByCategory], Modifier.fillMaxWidth()) {
-                val total = report.totalExpenses.takeIf { it.signum() > 0 } ?: BigDecimal.ONE
-                report.expensesByCategory.entries.forEachIndexed { i, (category, amount) ->
-                    val share = amount.toFloat() / total.toFloat()
-                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                        AmountRow(category, amount, report.currency)
-                        LinearProgressIndicator(
-                            progress = { share },
-                            color = CategoryColors[i % CategoryColors.size],
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            strokeCap = StrokeCap.Round,
-                            // One continuous bar: no gap between fill and track, no dot at its end
-                            gapSize = 0.dp,
-                            drawStopIndicator = {},
-                            modifier = Modifier.fillMaxWidth().height(6.dp),
-                        )
-                        Text("%.1f%%".format(share * 100), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                CategorySplit(
+                    slices = report.categoryShares,
+                    currency = report.currency,
+                    excludedTransfers = report.transferTotal,
+                    onSelect = if (linkablePeriod != null) onSelect else null,
+                    maxRows = 12,
+                )
             }
         }
         item {

@@ -15,6 +15,7 @@ class Category(id: EntityID<Int>) : IntEntity(id) {
     var color by CategoriesTable.color
     var budgetLimit by CategoriesTable.budgetLimit
     var isTaxRelevant by CategoriesTable.isTaxRelevant
+    var isTransfer by CategoriesTable.isTransfer
 
     val rules by Rule referrersOn RulesTable.categoryId
 }

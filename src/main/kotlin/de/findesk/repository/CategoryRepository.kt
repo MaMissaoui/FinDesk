@@ -17,8 +17,8 @@ interface CategoryRepository {
     fun findById(id: Int): Category?
     fun findByName(name: String): Category?
     fun findTaxRelevant(): List<Category>
-    fun create(name: String, color: String = "#3BC7B0", budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean = false): Category
-    fun update(id: Int, name: String? = null, color: String? = null, budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean? = null): Category?
+    fun create(name: String, color: String = "#3BC7B0", budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean = false, isTransfer: Boolean = false): Category
+    fun update(id: Int, name: String? = null, color: String? = null, budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean? = null, isTransfer: Boolean? = null): Category?
     fun delete(id: Int): Boolean
     fun findAllItems(): List<CategoryItem>
 
@@ -48,12 +48,14 @@ class CategoryRepositoryImpl : CategoryRepository {
         color: String,
         budgetLimit: BigDecimal?,
         isTaxRelevant: Boolean,
+        isTransfer: Boolean,
     ): Category = transaction {
         Category.new {
             this.name = name
             this.color = color
             this.budgetLimit = budgetLimit
             this.isTaxRelevant = isTaxRelevant
+            this.isTransfer = isTransfer
         }
     }
 
@@ -63,12 +65,14 @@ class CategoryRepositoryImpl : CategoryRepository {
         color: String?,
         budgetLimit: BigDecimal?,
         isTaxRelevant: Boolean?,
+        isTransfer: Boolean?,
     ): Category? = transaction {
         Category.findById(id)?.apply {
             name?.let { this.name = it }
             color?.let { this.color = it }
             budgetLimit?.let { this.budgetLimit = it }
             isTaxRelevant?.let { this.isTaxRelevant = it }
+            isTransfer?.let { this.isTransfer = it }
         }
     }
 

@@ -192,6 +192,10 @@ fun SettingsScreen(
                             Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
                             Spacer(Modifier.width(12.dp))
                             Text(c.name, modifier = Modifier.weight(1f))
+                            if (c.isTransfer) {
+                                CategoryBadge(s[StringKey.CategoryTransferLabel], "#9E9E9E")
+                                Spacer(Modifier.width(8.dp))
+                            }
                             if (c.isTaxRelevant) {
                                 CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
                                 Spacer(Modifier.width(8.dp))
@@ -455,8 +459,8 @@ fun SettingsScreen(
                 newCategory = false
                 editCategory = null
             },
-            onConfirm = { name, color, budget, tax ->
-                vm.saveCategory(editCategory?.id, name, color, budget, tax)
+            onConfirm = { name, color, budget, tax, transfer ->
+                vm.saveCategory(editCategory?.id, name, color, budget, tax, transfer)
                 newCategory = false
                 editCategory = null
             },
@@ -620,12 +624,13 @@ private fun CategoryDialog(
     existing: CategoryItem?,
     validate: (String, String) -> String?,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, BigDecimal?, Boolean) -> Unit,
+    onConfirm: (String, String, BigDecimal?, Boolean, Boolean) -> Unit,
 ) {
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
     var color by remember { mutableStateOf(existing?.color ?: colorHex(0)) }
     var budget by remember { mutableStateOf(existing?.budgetLimit?.toPlainString()?.replace('.', ',').orEmpty()) }
     var tax by remember { mutableStateOf(existing?.isTaxRelevant ?: false) }
+    var isTransfer by remember { mutableStateOf(existing?.isTransfer ?: false) }
     val parsedBudget = budget.takeIf { it.isNotBlank() }?.let { Formats.parseAmount(it) }
     val s = strings()
     val error = validate(name, color) ?: if (budget.isNotBlank() && parsedBudget == null) s[StringKey.BudgetNotANumber] else null
@@ -651,10 +656,15 @@ private fun CategoryDialog(
                     Checkbox(checked = tax, onCheckedChange = { tax = it })
                     Text(s[StringKey.TaxRelevantHint])
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isTransfer, onCheckedChange = { isTransfer = it })
+                    Text(s[StringKey.CategoryIsTransfer])
+                }
+                Text(s[StringKey.CategoryIsTransferHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (error != null && name.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(name, color, parsedBudget, tax) }) { Text(s[StringKey.Save]) } },
+        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(name, color, parsedBudget, tax, isTransfer) }) { Text(s[StringKey.Save]) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }

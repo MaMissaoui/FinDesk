@@ -137,7 +137,7 @@ fun App(
 
                                     Screen.DOCUMENTS -> DocumentsScreen()
 
-                                    Screen.REPORTS -> ReportsScreen()
+                                    Screen.REPORTS -> ReportsScreen(onNavigate = navigate)
 
                                     Screen.SETTINGS -> SettingsScreen(
                                         darkTheme = isDarkTheme,
