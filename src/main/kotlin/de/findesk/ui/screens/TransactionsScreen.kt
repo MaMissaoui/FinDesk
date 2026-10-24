@@ -56,6 +56,7 @@ import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.CategoryFilter
 import de.findesk.viewmodel.ImportPreview
 import de.findesk.viewmodel.Period
+import de.findesk.viewmodel.ReapplyPreview
 import de.findesk.viewmodel.TransactionsViewModel
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -155,25 +156,49 @@ fun TransactionsScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                     OverflowMenu(
-                        items = listOf(
-                            OverflowItem(
-                                label = s[StringKey.Import],
-                                icon = Icons.Default.Add,
-                                disabledReason = s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() },
-                                onClick = { openImport() },
-                            ),
-                            OverflowItem(
-                                label = s[StringKey.AutoCategorize],
-                                icon = Icons.Default.Refresh,
-                                onClick = { vm.autoCategorizeTransactions() },
-                            ),
-                            OverflowItem(
-                                label = s[StringKey.ExportCsv],
-                                icon = AppIcons.FileDownload,
-                                disabledReason = s[StringKey.HintNothingToExport].takeIf { state.transactions.isEmpty() },
-                                onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
-                            ),
-                        ),
+                        items = buildList {
+                            add(
+                                OverflowItem(
+                                    label = s[StringKey.Import],
+                                    icon = Icons.Default.Add,
+                                    disabledReason = s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() },
+                                    onClick = { openImport() },
+                                ),
+                            )
+                            add(
+                                OverflowItem(
+                                    label = s[StringKey.AutoCategorize],
+                                    icon = Icons.Default.Refresh,
+                                    onClick = { vm.autoCategorizeTransactions() },
+                                ),
+                            )
+                            add(
+                                OverflowItem(
+                                    label = s[StringKey.ReapplyRules],
+                                    icon = Icons.Default.Done,
+                                    disabledReason = s[StringKey.HintNothingShown].takeIf { state.transactions.isEmpty() },
+                                    onClick = { vm.previewReapplyRules() },
+                                ),
+                            )
+                            // Only while this session still remembers the last re-apply's previous categories
+                            if (state.canUndoReapply) {
+                                add(
+                                    OverflowItem(
+                                        label = s[StringKey.UndoReapplyRules],
+                                        icon = Icons.Default.ArrowBack,
+                                        onClick = { vm.undoReapplyRules() },
+                                    ),
+                                )
+                            }
+                            add(
+                                OverflowItem(
+                                    label = s[StringKey.ExportCsv],
+                                    icon = AppIcons.FileDownload,
+                                    disabledReason = s[StringKey.HintNothingToExport].takeIf { state.transactions.isEmpty() },
+                                    onClick = { FileDialogs.saveFile(s[StringKey.ExportTransactions], "transactions-${LocalDate.now()}.csv")?.let { vm.exportCsv(it) } },
+                                ),
+                            )
+                        },
                     )
                     DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
                         Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
@@ -318,6 +343,13 @@ fun TransactionsScreen(
             onImport = { vm.confirmImport(it && preview.balanceUpdateAllowed) },
         )
     }
+    state.reapplyPreview?.let { preview ->
+        ReapplyRulesDialog(
+            preview = preview,
+            onCancel = vm::cancelReapplyRules,
+            onConfirm = { excluded -> vm.confirmReapplyRules(excluded) },
+        )
+    }
     if (showAdd) {
         AddTransactionDialog(
             accounts = state.accounts,
@@ -347,6 +379,66 @@ fun TransactionsScreen(
             onDismiss = { confirmDelete = null },
         )
     }
+}
+
+/**
+ * Confirm dialog of the re-apply preview: one checkbox row per (from, to) group, all ticked by default, so the
+ * user unticks whole groups to leave their bookings out. Confirm hands the excluded (from, to) pairs back.
+ */
+@Composable
+private fun ReapplyRulesDialog(
+    preview: ReapplyPreview,
+    onCancel: () -> Unit,
+    onConfirm: (Set<Pair<Int?, Int>>) -> Unit,
+) {
+    val s = strings()
+    var ticked by remember(preview) { mutableStateOf(preview.groups.associate { (it.fromCategoryId to it.toCategoryId) to true }) }
+    val tickedCount = preview.groups.filter { group -> ticked[group.fromCategoryId to group.toCategoryId] ?: true }.sumOf { it.count }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(s[StringKey.ReapplyRulesTitle]) },
+        text = {
+            Column(
+                modifier = Modifier.width(560.dp).heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(s.format(StringKey.ReapplyRulesSummary, preview.changes.size, preview.shownCount))
+                Text(
+                    s[StringKey.ReapplyRulesWarning],
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                preview.groups.forEach { group ->
+                    val pair = group.fromCategoryId to group.toCategoryId
+                    val sumText = group.sum?.let { Formats.money(it, group.currency) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = ticked[pair] ?: true,
+                            onCheckedChange = { checked -> ticked = ticked + (pair to checked) },
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text("${group.fromName} → ${group.toName}", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                listOfNotNull("${group.count}", sumText).joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(enabled = tickedCount > 0, onClick = { onConfirm(ticked.filterValues { !it }.keys) }) {
+                Text(s.format(StringKey.ReapplyRulesConfirm, tickedCount))
+            }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text(s[StringKey.Cancel]) } },
+    )
 }
 
 private fun categoryFilterLabel(filter: CategoryFilter, categories: List<CategoryItem>, s: Strings): String = when (filter) {

@@ -807,6 +807,17 @@ object Translations {
         K.ErrorOrderOfflineAccount to "This account cannot send orders: it belongs to an offline bank or has no IBAN.",
         K.BankOnlineMode to "Online banking (FinTS)",
         K.BankOfflineMode to "Offline (import statements only)",
+
+        K.ReapplyRules to "Re-apply rules to shown bookings",
+        K.ReapplyRulesTitle to "Re-apply rules?",
+        K.ReapplyRulesSummary to "New category for %1\$d of %2\$d shown {2:booking|bookings}.",
+        K.ReapplyRulesWarning to "Categories you set by hand are overwritten too. Narrow the list with the filters first if needed. You can undo this afterwards from the menu.",
+        K.ReapplyRulesConfirm to "Change %d",
+        K.UndoReapplyRules to "Undo re-applied rules",
+        K.MessageReapplyNothing to "No shown booking would get a different category",
+        K.MessageReapplied to "%d {1:booking|bookings} recategorized",
+        K.MessageReapplyUndone to "%d {1:booking|bookings} restored",
+        K.HintNothingShown to "No bookings shown",
     )
 
     val de: Map<K, String> = mapOf(
@@ -1604,6 +1615,17 @@ object Translations {
         K.ErrorOrderOfflineAccount to "Von diesem Konto können keine Aufträge gesendet werden: die Bank ist offline oder das Konto hat keine IBAN.",
         K.BankOnlineMode to "Online-Banking (FinTS)",
         K.BankOfflineMode to "Offline (nur Umsätze importieren)",
+
+        K.ReapplyRules to "Regeln auf angezeigte Buchungen erneut anwenden",
+        K.ReapplyRulesTitle to "Regeln erneut anwenden?",
+        K.ReapplyRulesSummary to "Neue Kategorie für %1\$d von %2\$d angezeigten {2:Buchung|Buchungen}.",
+        K.ReapplyRulesWarning to "Auch von Hand gesetzte Kategorien werden überschrieben. Grenzen Sie die Liste bei Bedarf vorher mit den Filtern ein. Sie können dies anschließend über das Menü rückgängig machen.",
+        K.ReapplyRulesConfirm to "%d ändern",
+        K.UndoReapplyRules to "Erneut angewendete Regeln rückgängig machen",
+        K.MessageReapplyNothing to "Keine angezeigte Buchung würde eine andere Kategorie erhalten",
+        K.MessageReapplied to "%d {1:Buchung|Buchungen} neu kategorisiert",
+        K.MessageReapplyUndone to "%d {1:Buchung|Buchungen} wiederhergestellt",
+        K.HintNothingShown to "Keine Umsätze angezeigt",
     )
 
     val fr: Map<K, String> = mapOf(
@@ -2401,5 +2423,16 @@ object Translations {
         K.ErrorOrderOfflineAccount to "Ce compte ne peut pas envoyer d'ordre : la banque est hors ligne ou le compte n'a pas d'IBAN.",
         K.BankOnlineMode to "Banque en ligne (FinTS)",
         K.BankOfflineMode to "Hors ligne (import de relevés uniquement)",
+
+        K.ReapplyRules to "Réappliquer les règles aux opérations affichées",
+        K.ReapplyRulesTitle to "Réappliquer les règles ?",
+        K.ReapplyRulesSummary to "Nouvelle catégorie pour %1\$d des %2\$d {2:opération affichée|opérations affichées}.",
+        K.ReapplyRulesWarning to "Les catégories définies à la main sont aussi remplacées. Filtrez d'abord la liste si nécessaire. Vous pourrez ensuite annuler depuis le menu.",
+        K.ReapplyRulesConfirm to "Modifier %d",
+        K.UndoReapplyRules to "Annuler la réapplication des règles",
+        K.MessageReapplyNothing to "Aucune opération affichée ne changerait de catégorie",
+        K.MessageReapplied to "%d {1:opération recatégorisée|opérations recatégorisées}",
+        K.MessageReapplyUndone to "%d {1:opération restaurée|opérations restaurées}",
+        K.HintNothingShown to "Aucune opération affichée",
     )
 }
