@@ -12,4 +12,10 @@ class Rule(id: EntityID<Int>) : IntEntity(id) {
     var category by Category referencedOn RulesTable.categoryId
     var priority by RulesTable.priority
     var autoApply by RulesTable.autoApply
+
+    /** Stored as the enum key ("any", "partner", "purpose"); see [de.findesk.model.RuleField.fromKey]. */
+    var matchField by RulesTable.matchField
+
+    /** Stored as the enum key ("any", "expense", "income"); see [de.findesk.model.RuleDirection.fromKey]. */
+    var direction by RulesTable.direction
 }

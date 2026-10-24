@@ -278,7 +278,7 @@ class BankingService(
                 currency = t.currency,
                 partnerName = t.partnerName?.take(255),
                 purpose = t.purpose,
-                categoryId = rules.categoryFor(purpose = t.purpose, partnerName = t.partnerName),
+                categoryId = rules.categoryFor(purpose = t.purpose, partnerName = t.partnerName, amount = t.amount),
                 hash = candidate.hash,
                 balanceAfter = t.balanceAfter,
                 isNew = !isFirstImport,

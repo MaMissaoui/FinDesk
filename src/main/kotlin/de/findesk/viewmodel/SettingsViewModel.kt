@@ -6,6 +6,9 @@ import de.findesk.document.DocumentService
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.model.CategoryItem
+import de.findesk.model.DefaultCategories
+import de.findesk.model.RuleDirection
+import de.findesk.model.RuleField
 import de.findesk.model.RuleItem
 import de.findesk.repository.*
 import de.findesk.util.Currencies
@@ -194,18 +197,42 @@ class SettingsViewModel(
         }
     }
 
-    fun saveRule(id: Int?, pattern: String, categoryId: Int, priority: Int, autoApply: Boolean): Job = launchSafely(onError) {
+    fun saveRule(
+        id: Int?,
+        pattern: String,
+        categoryId: Int,
+        priority: Int,
+        autoApply: Boolean,
+        matchField: RuleField = RuleField.ANY,
+        direction: RuleDirection = RuleDirection.ANY,
+    ): Job = launchSafely(onError) {
         validateRule(pattern)?.let { msg ->
             _state.update { it.copy(error = msg) }
             return@launchSafely
         }
         if (id == null) {
-            ruleRepository.create(pattern.trim(), categoryId, priority, autoApply)
+            ruleRepository.create(pattern.trim(), categoryId, priority, autoApply, matchField, direction)
         } else {
-            ruleRepository.update(id, pattern.trim(), categoryId, priority, autoApply)
+            ruleRepository.update(id, pattern.trim(), categoryId, priority, autoApply, matchField, direction)
         }
         auditLogRepository.log("SAVE_RULE", "user", "Saved rule '${pattern.trim()}'")
         refresh()
+    }
+
+    /** Adds the default categories that do not exist yet, in the current UI language; nothing else changes. */
+    fun addDefaultCategories(): Job = launchSafely(onError) {
+        val existing = categoryRepository.findAllItems().map { it.name.trim().lowercase() }.toSet()
+        val current = AppStrings.current
+        val toCreate = DefaultCategories.entries.filter { (key, _) -> current[key].trim().lowercase() !in existing }
+        val added = toCreate.size
+        toCreate.forEach { (key, color) -> categoryRepository.create(current[key].trim(), color) }
+        auditLogRepository.log("ADD_DEFAULT_CATEGORIES", "user", "Added $added default categories")
+        refresh()
+        _state.update {
+            it.copy(
+                message = if (added == 0) AppStrings[StringKey.MessageDefaultCategoriesNone] else AppStrings.format(StringKey.MessageDefaultCategoriesAdded, added),
+            )
+        }
     }
 
     fun deleteRule(id: Int): Job = launchSafely(onError) {

@@ -30,6 +30,8 @@ import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.CategoryItem
+import de.findesk.model.RuleDirection
+import de.findesk.model.RuleField
 import de.findesk.model.RuleItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
@@ -163,7 +165,10 @@ fun SettingsScreen(
 
             SettingsSection.CATEGORIES -> SettingsSectionHeader(
                 s[StringKey.Categories],
-                actions = { TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) } },
+                actions = {
+                    TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
+                    TextButton(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
+                },
             ) {
                 if (state.categories.isEmpty()) {
                     Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -234,7 +239,23 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                            Text("→ ${r.categoryName}", modifier = Modifier.weight(1f))
+                            Column(Modifier.weight(1f)) {
+                                Text("→ ${r.categoryName}")
+                                val restrictions = listOf(
+                                    RuleField.PARTNER to s[StringKey.RuleFieldPartner],
+                                    RuleField.PURPOSE to s[StringKey.RuleFieldPurpose],
+                                    RuleDirection.EXPENSE to s[StringKey.RuleDirectionExpense],
+                                    RuleDirection.INCOME to s[StringKey.RuleDirectionIncome],
+                                ).filter { (which, _) -> r.matchField == which || r.direction == which }
+                                if (restrictions.isNotEmpty()) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        restrictions.joinToString(" · ") { it.second },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                             Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
                             IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                         }
@@ -444,8 +465,8 @@ fun SettingsScreen(
                 newRule = false
                 editRule = null
             },
-            onConfirm = { pattern, categoryId, priority, autoApply ->
-                vm.saveRule(editRule?.id, pattern, categoryId, priority, autoApply)
+            onConfirm = { pattern, categoryId, priority, autoApply, matchField, direction ->
+                vm.saveRule(editRule?.id, pattern, categoryId, priority, autoApply, matchField, direction)
                 newRule = false
                 editRule = null
             },
@@ -631,12 +652,14 @@ private fun RuleDialog(
     categories: List<CategoryItem>,
     validate: (String) -> String?,
     onDismiss: () -> Unit,
-    onConfirm: (String, Int, Int, Boolean) -> Unit,
+    onConfirm: (String, Int, Int, Boolean, RuleField, RuleDirection) -> Unit,
 ) {
     var pattern by remember { mutableStateOf(existing?.pattern.orEmpty()) }
     var category by remember { mutableStateOf(categories.firstOrNull { it.id == existing?.categoryId } ?: categories.first()) }
     var priority by remember { mutableStateOf((existing?.priority ?: 0).toString()) }
     var autoApply by remember { mutableStateOf(existing?.autoApply ?: true) }
+    var matchField by remember { mutableStateOf(existing?.matchField ?: RuleField.ANY) }
+    var direction by remember { mutableStateOf(existing?.direction ?: RuleDirection.ANY) }
     val error = validate(pattern) ?: if (priority.toIntOrNull() == null) strings()[StringKey.PriorityMustBeNumber] else null
     val s = strings()
 
@@ -646,7 +669,28 @@ private fun RuleDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(pattern, { pattern = it }, label = { Text(s[StringKey.PatternExample]) }, singleLine = true)
-                DropdownSelector("Category: ${category.name}", categories, { it.name }, { category = it })
+                DropdownSelector(s.format(StringKey.RuleCategoryLabel, category.name), categories, { it.name }, { category = it })
+                val fieldLabel: (RuleField) -> String = {
+                    s[
+                        when (it) {
+                            RuleField.ANY -> StringKey.RuleFieldAny
+                            RuleField.PARTNER -> StringKey.RuleFieldPartner
+                            RuleField.PURPOSE -> StringKey.RuleFieldPurpose
+                        },
+                    ]
+                }
+                val directionLabel: (RuleDirection) -> String = {
+                    s[
+                        when (it) {
+                            RuleDirection.ANY -> StringKey.RuleDirectionAny
+                            RuleDirection.EXPENSE -> StringKey.RuleDirectionExpense
+                            RuleDirection.INCOME -> StringKey.RuleDirectionIncome
+                        },
+                    ]
+                }
+                // The button shows the current choice, like the category selector above
+                DropdownSelector("${s[StringKey.RuleSearchIn]}: ${fieldLabel(matchField)}", RuleField.entries, fieldLabel, { matchField = it })
+                DropdownSelector("${s[StringKey.RuleAppliesTo]}: ${directionLabel(direction)}", RuleDirection.entries, directionLabel, { direction = it })
                 OutlinedTextField(priority, { priority = it }, label = { Text(s[StringKey.Priority]) }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = autoApply, onCheckedChange = { autoApply = it })
@@ -655,7 +699,11 @@ private fun RuleDialog(
                 if (error != null && pattern.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply) }) { Text(s[StringKey.Save]) } },
+        confirmButton = {
+            Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply, matchField, direction) }) {
+                Text(s[StringKey.Save])
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }

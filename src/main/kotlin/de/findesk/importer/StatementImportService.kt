@@ -119,7 +119,7 @@ class StatementImportService(
                 currency = account.currency,
                 partnerName = booking.partnerName?.take(255),
                 purpose = booking.purpose,
-                categoryId = rules.categoryFor(booking.purpose, booking.partnerName),
+                categoryId = rules.categoryFor(booking.purpose, booking.partnerName, booking.amount),
                 hash = candidate.hash,
                 balanceAfter = booking.balanceAfter,
             )

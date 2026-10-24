@@ -110,7 +110,33 @@ data class RuleItem(
     val categoryName: String,
     val priority: Int,
     val autoApply: Boolean,
+    val matchField: RuleField = RuleField.ANY,
+    val direction: RuleDirection = RuleDirection.ANY,
 )
+
+/** Which text an auto-categorization rule matches. */
+enum class RuleField(val key: String) {
+    ANY("any"),
+    PARTNER("partner"),
+    PURPOSE("purpose"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): RuleField = entries.firstOrNull { it.key.equals(key, ignoreCase = true) } ?: ANY
+    }
+}
+
+/** Which money flow an auto-categorization rule applies to. */
+enum class RuleDirection(val key: String) {
+    ANY("any"),
+    EXPENSE("expense"),
+    INCOME("income"),
+    ;
+
+    companion object {
+        fun fromKey(key: String?): RuleDirection = entries.firstOrNull { it.key.equals(key, ignoreCase = true) } ?: ANY
+    }
+}
 
 enum class Direction { ALL, INCOME, EXPENSES }
 

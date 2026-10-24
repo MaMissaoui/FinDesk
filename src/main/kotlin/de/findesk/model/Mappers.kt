@@ -99,6 +99,8 @@ fun Rule.toItem() = RuleItem(
     categoryName = category.name,
     priority = priority,
     autoApply = autoApply,
+    matchField = RuleField.fromKey(matchField),
+    direction = RuleDirection.fromKey(direction),
 )
 
 fun PaymentOrder.toItem() = PaymentOrderItem(
