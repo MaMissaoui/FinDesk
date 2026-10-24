@@ -708,6 +708,8 @@ enum class StringKey {
     ErrorFileNotFound,
     ErrorFileTooLarge,
     ErrorImportSeveralAccounts,
+    ErrorXlsxTooLarge,
+    ErrorXlsxUnreadable,
 
     // Documents & reports
     ErrorFileDoesNotExist,

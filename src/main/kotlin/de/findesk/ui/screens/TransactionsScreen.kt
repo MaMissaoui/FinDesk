@@ -35,6 +35,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.importer.CsvMapping
+import de.findesk.importer.StatementFormat
 import de.findesk.importer.StatementImportService
 import de.findesk.model.AccountItem
 import de.findesk.model.CategoryItem
@@ -657,7 +658,8 @@ private fun ImportDialog(
                 val csv = st.csv
                 val delimLabel = csv?.let { if (it.delimiter == '\t') s[StringKey.TabDelimiter] else "'${it.delimiter}'" } ?: ""
                 Text(
-                    "${st.formatLabel}" + (csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
+                    "${st.formatLabel}" +
+                        (if (st.format == StatementFormat.XLSX) "" else csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
                         " · ${s.format(StringKey.BookingCount, st.bookings.size)}" +
                         (if (st.pendingSkipped > 0) " · ${s.format(StringKey.PendingLeftOut, st.pendingSkipped)}" else "") +
                         (if (st.skipped.isNotEmpty()) " · ${s.format(StringKey.UnreadableCount, st.skipped.size)}" else ""),

@@ -19,7 +19,7 @@ data class ImportedBooking(
     val bankReference: String? = null,
 )
 
-enum class StatementFormat(val label: String) { CSV("CSV"), CAMT053("CAMT XML"), MT940("MT940"), OFX("OFX"), QIF("QIF") }
+enum class StatementFormat(val label: String) { CSV("CSV"), CAMT053("CAMT XML"), MT940("MT940"), OFX("OFX"), QIF("QIF"), XLSX("XLSX") }
 
 /** Result of reading a file: bookings plus what could be detected about it. */
 data class ParsedStatement(
