@@ -111,7 +111,12 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         }
 
         item {
-            Row(modifier = Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            // Tall enough for every split row (up to 8, the "more" row and the transfers line): the chart beside it
+            // measures with BoxWithConstraints, so the row can't take its height from the content's intrinsics
+            val splitRows = minOf(state.expensesByCategory.size, 8) +
+                (if (state.expensesByCategory.size > 8) 1 else 0) +
+                (if (state.transfersThisMonth.signum() > 0) 1 else 0)
+            Row(modifier = Modifier.fillMaxWidth().height(maxOf(300.dp, 104.dp + 34.dp * splitRows)), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionCard(s[StringKey.ExpensesByCategory], Modifier.weight(1f).fillMaxHeight()) {
                     if (state.expensesByCategory.isEmpty()) {
                         Text(s[StringKey.NoExpensesThisMonth], color = MaterialTheme.colorScheme.onSurfaceVariant)
