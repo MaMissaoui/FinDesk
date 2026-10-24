@@ -147,6 +147,8 @@ private fun ProfileMenu(model: ProfileMenuModel, enabled: Boolean) {
                 },
                 enabled = enabled,
                 modifier = Modifier.widthIn(min = 160.dp, max = 260.dp).semantics { contentDescription = s[StringKey.SwitchProfileMenu] },
+                colors = OutlinedButtonStyle.colors(),
+                border = OutlinedButtonStyle.border(enabled = enabled),
             ) {
                 Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 Spacer(Modifier.width(8.dp))

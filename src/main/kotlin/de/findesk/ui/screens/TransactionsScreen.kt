@@ -784,7 +784,12 @@ internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String =
         else -> s[StringKey.AmountFilterAny]
     }
     Box {
-        OutlinedButton(onClick = { expanded = true }, shape = RoundedCornerShape(50)) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(50),
+            colors = OutlinedButtonStyle.colors(),
+            border = OutlinedButtonStyle.border(),
+        ) {
             Text(labelText, maxLines = 1)
             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
         }

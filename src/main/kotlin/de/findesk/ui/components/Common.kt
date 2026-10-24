@@ -260,7 +260,11 @@ fun <T> DropdownSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        OutlinedButton(onClick = { expanded = true }) {
+        OutlinedButton(
+            onClick = { expanded = true },
+            colors = OutlinedButtonStyle.colors(),
+            border = OutlinedButtonStyle.border(),
+        ) {
             if (leadingIcon != null) {
                 Icon(leadingIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -396,7 +400,8 @@ fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
             onClick = { expanded = true },
             shape = RoundedCornerShape(50),
             contentPadding = PaddingValues(0.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            border = OutlinedButtonStyle.border(),
+            colors = OutlinedButtonStyle.colors(),
             modifier = Modifier.size(40.dp),
         ) {
             Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(20.dp))
@@ -426,6 +431,18 @@ fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** Outlined button style as Material3 drew it before Compose 1.12: `outline` border and `primary` text, not the faint `outlineVariant` / grey of newer releases. */
+internal object OutlinedButtonStyle {
+    @Composable
+    fun colors(): ButtonColors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+
+    @Composable
+    fun border(enabled: Boolean = true): BorderStroke = BorderStroke(
+        1.dp,
+        if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+    )
 }
 
 /** Native file dialogs (AWT FileDialog renders the platform dialog on macOS and Windows). */

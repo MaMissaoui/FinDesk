@@ -292,9 +292,14 @@ fun SettingsScreen(
                     Button(enabled = !state.isBusy, onClick = {
                         FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
                     }) { Text(s[StringKey.CreateBackup]) }
-                    OutlinedButton(enabled = !state.isBusy && !state.hasPendingRestore, onClick = {
-                        FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
-                    }) { Text(s[StringKey.RestoreFromBackup]) }
+                    OutlinedButton(
+                        enabled = !state.isBusy && !state.hasPendingRestore,
+                        onClick = {
+                            FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
+                        },
+                        colors = OutlinedButtonStyle.colors(),
+                        border = OutlinedButtonStyle.border(enabled = !state.isBusy && !state.hasPendingRestore),
+                    ) { Text(s[StringKey.RestoreFromBackup]) }
                     if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 }
                 if (state.hasPendingRestore) {
