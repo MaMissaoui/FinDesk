@@ -363,8 +363,13 @@ tasks.register("checkInstallSource") {
             println("Warning: not a git checkout (or git is not installed), so FinDesk cannot tell whether this is a released build.")
             source = "an unversioned checkout"
         } else {
-            // Porcelain lines are "XY <path>"; name the first five so the failure is actionable
-            val changed = status.second.lines().map { it.drop(3).trim() }.filter { it.isNotEmpty() }
+            // Porcelain lines are "XY <path>"; name the first five so the failure is actionable. Untracked files
+            // ("??") only count inside the build inputs: a stray download in the repo folder is never packaged,
+            // but a new source file under src/ would be.
+            val buildInputs = listOf("src/", "gradle/", "build.gradle.kts", "settings.gradle.kts", "gradle.properties")
+            val changed = status.second.lines().filter { it.isNotBlank() }
+                .filter { line -> !line.startsWith("??") || buildInputs.any { line.drop(3).trim().startsWith(it) } }
+                .map { it.drop(3).trim() }
             if (changed.isNotEmpty() && !force) {
                 error("This checkout has uncommitted changes (${changed.take(5).joinToString(", ")}). Install from a clean checkout of a release, or pass -Pforce to install it anyway.")
             }
