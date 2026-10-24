@@ -3,6 +3,7 @@ package de.findesk.repository
 import de.findesk.TestDatabase
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertNotNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AuditLogRepositoryTest {

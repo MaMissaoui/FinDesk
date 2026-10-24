@@ -3,6 +3,7 @@ package de.findesk.banking
 import de.findesk.TestDatabase
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertNotNull
 import java.math.BigDecimal
 import java.time.LocalDate
 
