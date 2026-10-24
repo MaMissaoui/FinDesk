@@ -56,6 +56,9 @@ class FinTSClient(
      * if unset, from the bundled bank directory.
      */
     fun connectionFor(bankAccess: BankAccessItem): BankingResult<FinTSConnection> {
+        // Choke point: an offline bank never reaches FinTS — before the server lookup and before the
+        // passport passphrase (which may create a stored passphrase). Every FinTS job goes through run().
+        if (bankAccess.offline) return BankingResult.Error("OFFLINE", AppStrings[StringKey.ErrorBankOffline])
         val serverUrl = bankAccess.serverUrl?.takeIf { it.isNotBlank() } ?: BankDirectory.lookup(bankAccess.blz)?.pinTanUrl
             ?: return BankingResult.Error("NO_SERVER", AppStrings.format(StringKey.ErrorNoFintsServer, bankAccess.blz))
         runCatching { FinDeskHbciCallback.hostFor(serverUrl) }.onFailure {

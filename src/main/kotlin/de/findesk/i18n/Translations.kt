@@ -722,6 +722,14 @@ object Translations {
         K.PaymentActionStandingOrder to "Standing order",
         K.PaymentActionStandingOrderDelete to "Standing order deleted",
         K.PaymentOrderId to "Reference",
+
+        K.BankOfflineHint to "Offline: import statements in Transactions.",
+        K.IbanOrCardLast4 to "IBAN or last 4 digits of the card",
+        K.CardLast4Only to "Enter only the last 4 digits of the card.",
+        K.ErrorBankOffline to "This bank is offline: nothing is sent to the bank.",
+        K.ErrorOrderOfflineAccount to "This account cannot send orders: it belongs to an offline bank or has no IBAN.",
+        K.BankOnlineMode to "Online banking (FinTS)",
+        K.BankOfflineMode to "Offline (import statements only)",
     )
 
     val de: Map<K, String> = mapOf(
@@ -1434,6 +1442,14 @@ object Translations {
         K.PaymentActionStandingOrder to "Dauerauftrag",
         K.PaymentActionStandingOrderDelete to "Dauerauftrag gelöscht",
         K.PaymentOrderId to "Referenz",
+
+        K.BankOfflineHint to "Offline: Umsätze im Bereich „Umsätze“ importieren.",
+        K.IbanOrCardLast4 to "IBAN oder die letzten 4 Ziffern der Karte",
+        K.CardLast4Only to "Geben Sie nur die letzten 4 Ziffern der Karte ein.",
+        K.ErrorBankOffline to "Diese Bank ist offline: es wird nichts an die Bank gesendet.",
+        K.ErrorOrderOfflineAccount to "Von diesem Konto können keine Aufträge gesendet werden: die Bank ist offline oder das Konto hat keine IBAN.",
+        K.BankOnlineMode to "Online-Banking (FinTS)",
+        K.BankOfflineMode to "Offline (nur Umsätze importieren)",
     )
 
     val fr: Map<K, String> = mapOf(
@@ -2146,5 +2162,13 @@ object Translations {
         K.PaymentActionStandingOrder to "Virement permanent",
         K.PaymentActionStandingOrderDelete to "Virement permanent supprimé",
         K.PaymentOrderId to "Référence",
+
+        K.BankOfflineHint to "Hors ligne : importez les relevés dans « Opérations ».",
+        K.IbanOrCardLast4 to "IBAN ou 4 derniers chiffres de la carte",
+        K.CardLast4Only to "Saisissez uniquement les 4 derniers chiffres de la carte.",
+        K.ErrorBankOffline to "Cette banque est hors ligne : rien n'est envoyé à la banque.",
+        K.ErrorOrderOfflineAccount to "Ce compte ne peut pas envoyer d'ordre : la banque est hors ligne ou le compte n'a pas d'IBAN.",
+        K.BankOnlineMode to "Banque en ligne (FinTS)",
+        K.BankOfflineMode to "Hors ligne (import de relevés uniquement)",
     )
 }

@@ -22,4 +22,10 @@ object BankAccessTable : IntIdTable("bank_access") {
 
     /** Whether "Sync all" syncs this connection; the default keeps existing connections included. */
     val includeInSyncAll = bool("include_in_sync_all").default(true)
+
+    /**
+     * Whether this connection never goes online (e.g. a credit card whose statements are imported from files).
+     * Fixed at creation; an offline bank never reaches FinTS (see BankingService and FinTSClient).
+     */
+    val offline = bool("offline").default(false)
 }

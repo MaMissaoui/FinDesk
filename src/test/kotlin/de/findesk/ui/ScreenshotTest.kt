@@ -396,6 +396,17 @@ class ScreenshotTest {
         render("transactions-new-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::panel) }
     }
 
+    /** An offline bank that never goes online, with one card account imported from statement files. */
+    @Test
+    fun `render accounts with an offline bank`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-offline").toFile().absolutePath)
+        val offlineBank = BankAccessRepositoryImpl().createOffline("Bank Norwegian Visa").id.value
+        AccountRepositoryImpl().create(offlineBank, "CARD4321", balance = BigDecimal("-45.10"), accountType = "credit_card")
+
+        render("accounts-offline", Screen.ACCOUNTS, dark = false)
+        render("accounts-offline-dark", Screen.ACCOUNTS, dark = true)
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, content: @Composable () -> Unit) {

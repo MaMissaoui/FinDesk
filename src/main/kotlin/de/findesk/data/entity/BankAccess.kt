@@ -20,6 +20,7 @@ class BankAccess(id: EntityID<Int>) : IntEntity(id) {
     var syncFrom by BankAccessTable.syncFrom
     var capabilities by BankAccessTable.capabilities
     var includeInSyncAll by BankAccessTable.includeInSyncAll
+    var offline by BankAccessTable.offline
 
     val accounts by Account referrersOn AccountsTable.bankAccessId
 }

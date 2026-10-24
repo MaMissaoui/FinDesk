@@ -39,6 +39,7 @@ import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceColor
 import de.findesk.util.ACCOUNT_TYPES
+import de.findesk.util.AccountIds
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.AccountDetail
@@ -279,9 +280,14 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             search = vm::searchBanks,
             lookup = vm::lookupBank,
             validate = vm::validateBankAccess,
+            validateOffline = vm::validateOfflineBank,
             onDismiss = { showAddBank = false },
             onConfirm = { name, blz, bic, user ->
                 vm.addBankAccess(name, blz, bic, user)
+                showAddBank = false
+            },
+            onConfirmOffline = { name ->
+                vm.addOfflineBank(name)
                 showAddBank = false
             },
         )
@@ -289,7 +295,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     addAccountFor?.let { bank ->
         AddAccountDialog(
             bank = bank,
-            validate = vm::validateAccount,
+            validate = { identifier -> vm.validateAccount(identifier, bank.offline) },
             onDismiss = { addAccountFor = null },
             onConfirm = { iban, type, balance, currency ->
                 vm.addAccount(bank.id, iban, type, balance, currency)
@@ -312,7 +318,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
     confirmDeleteAccount?.let { account ->
         ConfirmDialog(
             title = s[StringKey.DeleteAccountTitle],
-            text = s.format(StringKey.DeleteAccountText, Formats.iban(account.iban)),
+            text = s.format(StringKey.DeleteAccountText, AccountIds.display(account.iban)),
             onConfirm = { vm.deleteAccount(account.id) },
             onDismiss = { confirmDeleteAccount = null },
         )
@@ -358,11 +364,12 @@ private fun BankCard(
     FinDeskCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             RowContextMenu(
-                syncEnabled.takeIf { it && !syncing }?.let { menuItem(s[StringKey.SyncNow], onSync) },
-                syncEnabled.takeIf { it }?.let { menuItem(s[StringKey.FetchHistory], onFetchHistory) },
+                // An offline bank never syncs, so its context menu has no sync or connection entries
+                syncEnabled.takeIf { it && !syncing && !bank.offline }?.let { menuItem(s[StringKey.SyncNow], onSync) },
+                syncEnabled.takeIf { it && !bank.offline }?.let { menuItem(s[StringKey.FetchHistory], onFetchHistory) },
                 menuItem(s[StringKey.AddAccount], onAddAccount),
                 menuItem(s[StringKey.RenameConnection], onRename),
-                menuItem(s[StringKey.ConnectionSettings], onEditConnection),
+                syncEnabled.takeIf { it && !bank.offline }?.let { menuItem(s[StringKey.ConnectionSettings], onEditConnection) },
                 menuItem(s[StringKey.RemoveBank], onDeleteBank),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -391,14 +398,20 @@ private fun BankCard(
                             }
                         }
                         Text(
-                            s.format(StringKey.BlzPrefix, bank.blz) + (bank.bic.takeIf { it.isNotBlank() }?.let { " · ${s.format(StringKey.BicPrefix, it)}" } ?: "") +
-                                (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: "") +
-                                (bank.syncFrom?.let { " · ${s.format(StringKey.NextSyncFrom, Formats.date(it))}" } ?: "") +
-                                (if (bank.includeInSyncAll) "" else " · ${s[StringKey.NotInSyncAll]}"),
+                            if (bank.offline) {
+                                s[StringKey.BankOfflineHint]
+                            } else {
+                                s.format(StringKey.BlzPrefix, bank.blz) +
+                                    (bank.bic.takeIf { it.isNotBlank() }?.let { " · ${s.format(StringKey.BicPrefix, it)}" } ?: "") +
+                                    (bank.lastSync?.let { " · ${s.format(StringKey.SyncedPrefix, Formats.dateTime(it))}" } ?: "") +
+                                    (bank.syncFrom?.let { " · ${s.format(StringKey.NextSyncFrom, Formats.date(it))}" } ?: "") +
+                                    (if (bank.includeInSyncAll) "" else " · ${s[StringKey.NotInSyncAll]}")
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        val centralBlz = BankDirectory.finTsBlz(bank.blz)
+                        // A BIC lookup means a BankDirectory call; an offline bank has neither BLZ nor server
+                        val centralBlz = if (bank.offline) bank.blz else BankDirectory.finTsBlz(bank.blz)
                         if (centralBlz != bank.blz) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
@@ -410,21 +423,23 @@ private fun BankCard(
                             }
                         }
                     }
-                    if (syncing) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(syncStep ?: s[StringKey.Syncing], style = MaterialTheme.typography.bodySmall)
-                        Spacer(Modifier.width(8.dp))
-                    } else {
-                        OutlinedButton(
-                            onClick = onSync,
-                            enabled = syncEnabled,
-                            colors = OutlinedButtonStyle.colors(),
-                            border = OutlinedButtonStyle.border(enabled = syncEnabled),
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(s[StringKey.Sync])
+                    if (!bank.offline) {
+                        if (syncing) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(syncStep ?: s[StringKey.Syncing], style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.width(8.dp))
+                        } else {
+                            OutlinedButton(
+                                onClick = onSync,
+                                enabled = syncEnabled,
+                                colors = OutlinedButtonStyle.colors(),
+                                border = OutlinedButtonStyle.border(enabled = syncEnabled),
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(s[StringKey.Sync])
+                            }
                         }
                     }
                     TextButton(onClick = onAddAccount) {
@@ -438,32 +453,35 @@ private fun BankCard(
                     Box {
                         IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
                         DropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text(s[StringKey.FetchHistory]) },
-                                leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                                enabled = syncEnabled,
-                                onClick = {
-                                    bankMenu = false
-                                    onFetchHistory()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(s[StringKey.IncludeInSyncAll]) },
-                                leadingIcon = {
-                                    if (bank.includeInSyncAll) {
-                                        Icon(Icons.Default.Check, contentDescription = null)
-                                    } else {
-                                        Spacer(Modifier.size(24.dp))
-                                    }
-                                },
-                                enabled = syncEnabled,
-                                onClick = {
-                                    bankMenu = false
-                                    onToggleIncludeInSyncAll()
-                                },
-                                // The check mark alone says nothing to a screen reader
-                                modifier = Modifier.semantics { toggleableState = ToggleableState(bank.includeInSyncAll) },
-                            )
+                            // Sync-only entries (history, include in "Sync all", connection settings) exist for online banks only
+                            if (!bank.offline) {
+                                DropdownMenuItem(
+                                    text = { Text(s[StringKey.FetchHistory]) },
+                                    leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                                    enabled = syncEnabled,
+                                    onClick = {
+                                        bankMenu = false
+                                        onFetchHistory()
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(s[StringKey.IncludeInSyncAll]) },
+                                    leadingIcon = {
+                                        if (bank.includeInSyncAll) {
+                                            Icon(Icons.Default.Check, contentDescription = null)
+                                        } else {
+                                            Spacer(Modifier.size(24.dp))
+                                        }
+                                    },
+                                    enabled = syncEnabled,
+                                    onClick = {
+                                        bankMenu = false
+                                        onToggleIncludeInSyncAll()
+                                    },
+                                    // The check mark alone says nothing to a screen reader
+                                    modifier = Modifier.semantics { toggleableState = ToggleableState(bank.includeInSyncAll) },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(s[StringKey.RenameConnection]) },
                                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
@@ -472,14 +490,16 @@ private fun BankCard(
                                     onRename()
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text(s[StringKey.ConnectionSettings]) },
-                                leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                                onClick = {
-                                    bankMenu = false
-                                    onEditConnection()
-                                },
-                            )
+                            if (!bank.offline) {
+                                DropdownMenuItem(
+                                    text = { Text(s[StringKey.ConnectionSettings]) },
+                                    leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                                    onClick = {
+                                        bankMenu = false
+                                        onEditConnection()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(s[StringKey.RemoveBank], color = MaterialTheme.colorScheme.error) },
                                 leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
@@ -523,7 +543,7 @@ private fun BankCard(
                             Column(Modifier.weight(1f)) {
                                 Text(s.accountName(account), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                                 Text(
-                                    account.name?.let { "${s.accountType(account.accountType)} · ${Formats.iban(account.iban)}" } ?: Formats.iban(account.iban),
+                                    account.name?.let { "${s.accountType(account.accountType)} · ${AccountIds.display(account.iban)}" } ?: AccountIds.display(account.iban),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -627,7 +647,11 @@ internal fun AddBankDialog(
     validate: (String, String) -> String?,
     onDismiss: () -> Unit,
     onConfirm: (String, String, String, String) -> Unit,
+    /** For the offline choice: validates the bank's only field, its name. */
+    validateOffline: (String) -> String? = { name -> if (name.isBlank()) validate(name, "") else null },
+    onConfirmOffline: (String) -> Unit = {},
 ) {
+    var offline by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var bankName by remember { mutableStateOf("") }
     var blz by remember { mutableStateOf("") }
@@ -637,7 +661,7 @@ internal fun AddBankDialog(
 
     /** The branch BLZ a picked/typed bank had before it was mapped to the central FinTS BLZ, while that is shown. */
     var originalBlz by remember { mutableStateOf<String?>(null) }
-    val error = validate(bankName, blz)
+    val error = if (offline) validateOffline(bankName) else validate(bankName, blz)
     val s = strings()
     // Recompute per keystroke; it is an in-memory scan over the bundled bank directory.
     val suggestions = remember(query) { if (query.isBlank()) emptyList() else search(query) }
@@ -658,68 +682,81 @@ internal fun AddBankDialog(
         title = { Text(s[StringKey.AddBank]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.widthIn(max = 480.dp)) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text(s[StringKey.BankSearchHint]) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                SingleChoiceRow(
+                    options = listOf(false, true),
+                    selected = offline,
+                    label = { if (it) s[StringKey.BankOfflineMode] else s[StringKey.BankOnlineMode] },
+                    onSelect = { offline = it },
                 )
-                when {
-                    query.isBlank() -> Unit
-
-                    suggestions.isEmpty() -> Text(
-                        s[StringKey.BankSearchNoMatch],
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                if (offline) {
+                    // An offline bank has no BLZ, BIC, login or server: its name is everything
+                    OutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                } else {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text(s[StringKey.BankSearchHint]) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    when {
+                        query.isBlank() -> Unit
 
-                    else -> Column(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
-                    ) {
-                        suggestions.forEach { entry ->
-                            BankSuggestionRow(entry, onSelect = { applySuggestion(entry) })
-                        }
-                    }
-                }
-                Text(s[StringKey.BankManualEntry], style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                OutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
-                    blz,
-                    { input ->
-                        blz = input.filter(Char::isDigit).take(8)
-                        if (blz.length == 8) {
-                            lookup(blz)?.let { entry ->
-                                val mapped = BankDirectory.finTsBlz(entry.blz)
-                                originalBlz = entry.blz.takeIf { it != mapped }
-                                if (mapped != entry.blz) blz = mapped
-                                if (bankName.isBlank()) bankName = entry.name
-                                if (bic.isBlank()) bic = entry.bic
+                        suggestions.isEmpty() -> Text(
+                            s[StringKey.BankSearchNoMatch],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        else -> Column(
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).verticalScroll(rememberScrollState()),
+                        ) {
+                            suggestions.forEach { entry ->
+                                BankSuggestionRow(entry, onSelect = { applySuggestion(entry) })
                             }
                         }
-                    },
-                    label = { Text(s[StringKey.BlzDigits]) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                originalBlz?.takeIf { BankDirectory.finTsBlz(it) == blz }?.let { original ->
-                    Text(
-                        s.format(StringKey.CentralBlzNote, blz, original),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    }
+                    Text(s[StringKey.BankManualEntry], style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        blz,
+                        { input ->
+                            blz = input.filter(Char::isDigit).take(8)
+                            if (blz.length == 8) {
+                                lookup(blz)?.let { entry ->
+                                    val mapped = BankDirectory.finTsBlz(entry.blz)
+                                    originalBlz = entry.blz.takeIf { it != mapped }
+                                    if (mapped != entry.blz) blz = mapped
+                                    if (bankName.isBlank()) bankName = entry.name
+                                    if (bic.isBlank()) bic = entry.bic
+                                }
+                            }
+                        },
+                        label = { Text(s[StringKey.BlzDigits]) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    originalBlz?.takeIf { BankDirectory.finTsBlz(it) == blz }?.let { original ->
+                        Text(
+                            s.format(StringKey.CentralBlzNote, blz, original),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    OutlinedTextField(bic, { bic = it.uppercase() }, label = { Text(s[StringKey.BicOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.OnlineUserIdOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    ConnectionProposal(knownBank, blz)
                 }
-                OutlinedTextField(bic, { bic = it.uppercase() }, label = { Text(s[StringKey.BicOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.OnlineUserIdOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                ConnectionProposal(knownBank, blz)
                 if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
             Button(onClick = {
                 touched = true
-                if (error == null) onConfirm(bankName, blz, bic, userId)
+                if (error == null) {
+                    if (offline) onConfirmOffline(bankName) else onConfirm(bankName, blz, bic, userId)
+                }
             }) { Text(s[StringKey.Add]) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
@@ -786,7 +823,8 @@ private fun AddAccountDialog(
     onConfirm: (String, String, BigDecimal, String) -> Unit,
 ) {
     var iban by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf(ACCOUNT_TYPES.first()) }
+    // A card account is the common case for an offline bank (e.g. a credit card imported from statements)
+    var type by remember { mutableStateOf(if (bank.offline) "credit_card" else ACCOUNT_TYPES.first()) }
     var currency by remember { mutableStateOf(Currencies.DEFAULT) }
     var balance by remember { mutableStateOf("0,00") }
     var touched by remember { mutableStateOf(false) }
@@ -799,7 +837,13 @@ private fun AddAccountDialog(
         title = { Text(s.format(StringKey.AddAccountAt, bank.bankName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(iban, { iban = it.uppercase() }, label = { Text(s[StringKey.Iban]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    iban,
+                    { iban = it.uppercase() },
+                    label = { Text(if (bank.offline) s[StringKey.IbanOrCardLast4] else s[StringKey.Iban]) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 DropdownSelector(
                     label = s.accountType(type),
                     options = ACCOUNT_TYPES,
@@ -837,7 +881,7 @@ internal fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfir
         title = { Text(s[StringKey.UpdateBalance]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(Formats.iban(account.iban), style = MaterialTheme.typography.bodySmall)
+                Text(AccountIds.display(account.iban), style = MaterialTheme.typography.bodySmall)
                 DropdownSelector(
                     label = "${s[StringKey.AccountTypeLabel]}: ${s.accountType(type)}",
                     options = ACCOUNT_TYPES,
@@ -909,12 +953,35 @@ private fun ConnectionDialog(
     onConfirm: (name: String, blz: String, userId: String, url: String) -> Unit,
 ) {
     var name by remember { mutableStateOf(bank.bankName) }
-    var blzField by remember { mutableStateOf(initialBlz ?: bank.blz) }
-    var userId by remember { mutableStateOf(bank.userId) }
-    var url by remember { mutableStateOf(bank.serverUrl.orEmpty()) }
     val nameField = remember { FocusRequester() }
     LaunchedEffect(focusName) { if (focusName) runCatching { nameField.requestFocus() } }
     val s = strings()
+    // An offline bank has no BLZ, user id, server or PIN: the dialog is only a rename
+    if (bank.offline) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(s[StringKey.RenameConnection]) },
+            text = {
+                Column(modifier = Modifier.width(460.dp)) {
+                    OutlinedTextField(
+                        name,
+                        { name = it.take(de.findesk.repository.MAX_BANK_NAME_LENGTH) },
+                        label = { Text(s[StringKey.ConnectionName]) },
+                        supportingText = { Text(s[StringKey.ConnectionNameHint]) },
+                        isError = name.isBlank(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().focusRequester(nameField),
+                    )
+                }
+            },
+            confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onConfirm(name, bank.blz, bank.userId, bank.serverUrl.orEmpty()) }) { Text(s[StringKey.Save]) } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        )
+        return
+    }
+    var blzField by remember { mutableStateOf(initialBlz ?: bank.blz) }
+    var userId by remember { mutableStateOf(bank.userId) }
+    var url by remember { mutableStateOf(bank.serverUrl.orEmpty()) }
     val knownField = if (blzField.length == 8) lookup(blzField) else null
     // The endpoint follows what the field says now, not the stored BLZ, so a correction updates the proposal too.
     val defaultUrl = knownField?.pinTanUrl
@@ -1054,7 +1121,7 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
             Column(Modifier.width(760.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(Formats.iban(a.iban), style = MaterialTheme.typography.bodySmall)
+                        Text(AccountIds.display(a.iban), style = MaterialTheme.typography.bodySmall)
                         Text(
                             Formats.money(a.balance, a.currency),
                             style = MaterialTheme.typography.headlineSmall,
