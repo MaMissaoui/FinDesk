@@ -55,6 +55,15 @@ dependencies {
     // FinTS/HBCI online banking
     implementation("com.github.hbci4j:hbci4j-core:4.1.17")
 
+    // Bouncy Castle comes in only through tess4j -> pdfbox-tools -> pdfbox-debugger (bcpkix, bcutil, bcprov), and
+    // PDFBox uses it for certificate-encrypted PDFs. Raised above the transitive 1.84 for CVE-2026-8763 and
+    // CVE-2026-13506 (fixed in 1.85).
+    constraints {
+        listOf("bcprov", "bcpkix", "bcutil").forEach { artifact ->
+            implementation("org.bouncycastle:$artifact-jdk18on:1.86") { because("CVE-2026-8763, CVE-2026-13506") }
+        }
+    }
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
 
@@ -164,6 +173,14 @@ tasks.test {
 
 ktlint {
     version.set("1.8.0")
+}
+
+// ktlint 1.8.0 brings logback 1.3.16 (CVE-2026-1225, CVE-2026-9828, CVE-2026-10532). It only runs the linter at build
+// time and is not shipped, but is raised to the fixed 1.5 line anyway.
+configurations.matching { it.name.startsWith("ktlint") }.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "ch.qos.logback") useVersion("1.5.34")
+    }
 }
 
 // Task to build current platform distribution
