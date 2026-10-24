@@ -42,3 +42,12 @@ AGENTS.md
 
 # Never ignore the Gradle wrapper jar (keep the build reproducible)
 !gradle/wrapper/gradle-wrapper.jar
+
+# Bank statement exports dropped into the checkout root (real account data; test fixtures live under src/test)
+/*.eom.txt
+/*.xml
+/*.csv
+/*.sta
+/*.mt940
+/*.ofx
+/*.xlsx
