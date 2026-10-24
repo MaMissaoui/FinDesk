@@ -6,10 +6,11 @@ import de.findesk.i18n.StringKey
  * A sensible starting set of categories for a new database, in display order.
  *
  * The names come from the string keys, so the current UI language decides what is stored.
- * The colours cycle through the same palette as the UI's `ui/theme/CategoryColors`; the hex strings are copied here
- * because the model package must not depend on Compose.
+ * The colours are the same 24 hex strings as the UI's `ui/theme/CategoryColors`, which is built from [colors]; they
+ * are kept here because the model package must not depend on Compose.
  */
 object DefaultCategories {
+    /** The palette, one comment with the colour's name per line. */
     val colors: List<String> = listOf(
         "#FF5722", // Deep Orange
         "#4CAF50", // Green
@@ -21,9 +22,23 @@ object DefaultCategories {
         "#795548", // Brown
         "#607D8B", // Blue Grey
         "#CDDC39", // Lime
+        "#3F51B5", // Indigo
+        "#009688", // Teal
+        "#FFC107", // Amber
+        "#673AB7", // Deep Purple
+        "#8BC34A", // Light Green
+        "#03A9F4", // Light Blue
+        "#AFB42B", // Dark Lime
+        "#880E4F", // Dark Pink
+        "#1A237E", // Dark Indigo
+        "#004D40", // Dark Teal
+        "#BF360C", // Burnt Orange
+        "#33691E", // Dark Green
+        "#F06292", // Light Pink
+        "#A1887F", // Light Brown
     )
 
-    /** Name key, colour and transfer flag, `(StringKey, color hex, isTransfer)`, colours cycling through [colors]. */
+    /** Name key, colour and transfer flag, `(StringKey, color hex, isTransfer)`, entry `i` coloured `colors[i]`. */
     val entries: List<Triple<StringKey, String, Boolean>> = listOf(
         StringKey.DefaultCategoryGroceries,
         StringKey.DefaultCategoryDrugstore,
@@ -51,5 +66,5 @@ object DefaultCategories {
         StringKey.DefaultCategoryFamily,
         StringKey.DefaultCategoryChildrenSchool,
         StringKey.DefaultCategoryOtherIncome,
-    ).mapIndexed { index, key -> Triple(key, colors[index % colors.size], key == StringKey.DefaultCategoryOwnTransfers) }
+    ).mapIndexed { index, key -> Triple(key, colors[index], key == StringKey.DefaultCategoryOwnTransfers) }
 }

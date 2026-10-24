@@ -515,6 +515,12 @@ enum class StringKey {
     Language,
     Categories,
     AddCategory,
+
+    /** Colour swatch content description in the category dialog: "Colour %1$d of %2$d". */
+    ColourSwatch,
+
+    /** Settings > categories button that gives every shared colour its own category. */
+    FixDuplicateColours,
     NoCategoriesYet,
     AddDefaultCategories,
     CategoryIsTransfer,
@@ -668,6 +674,10 @@ enum class StringKey {
     MessageRuleCreated,
     MessageDefaultCategoriesAdded,
     MessageDefaultCategoriesNone,
+
+    /** Result of the duplicate-colour fix: how many categories were recoloured, or that nothing was shared. */
+    MessageColoursFixed,
+    MessageColoursAlreadyDistinct,
     MessageAutoCategorized,
     MessageExportedCount,
     MessageBackupSaved,

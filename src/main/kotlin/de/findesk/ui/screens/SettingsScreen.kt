@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +44,9 @@ import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsViewModel
 import java.math.BigDecimal
+
+/** Whether two or more categories currently share one colour (hex compared case-insensitively). */
+private fun List<CategoryItem>.hasSharedColours(): Boolean = groupBy { it.color.uppercase() }.any { it.value.size > 1 }
 
 @Composable
 fun SettingsScreen(
@@ -167,6 +171,10 @@ fun SettingsScreen(
                 s[StringKey.Categories],
                 actions = {
                     TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
+                    // Only while two or more categories share a colour: otherwise there is nothing to fix
+                    if (state.categories.hasSharedColours()) {
+                        TextButton(onClick = { vm.fixDuplicateColours() }) { Text(s[StringKey.FixDuplicateColours]) }
+                    }
                     TextButton(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
                 },
             ) {
@@ -619,6 +627,7 @@ private fun colorHex(index: Int): String {
     return "#%02X%02X%02X".format((c.red * 255).toInt(), (c.green * 255).toInt(), (c.blue * 255).toInt())
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CategoryDialog(
     existing: CategoryItem?,
@@ -641,12 +650,17 @@ private fun CategoryDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text(s[StringKey.Name]) }, singleLine = true)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // The swatches wrap over several rows instead of one row
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     CategoryColors.indices.forEach { i ->
                         val hex = colorHex(i)
                         Box(
                             Modifier.size(if (hex.equals(color, true)) 26.dp else 20.dp)
                                 .background(CategoryColors[i], CircleShape)
+                                .semantics { contentDescription = s.format(StringKey.ColourSwatch, i + 1, CategoryColors.size) }
                                 .clickable { color = hex },
                         )
                     }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import de.findesk.model.DefaultCategories
 import java.math.BigDecimal
 
 // Primary Colors
@@ -63,18 +64,12 @@ fun balanceColor(value: BigDecimal): Color = when (value.signum()) {
 }
 
 // Category Colors
-val CategoryColors = listOf(
-    Color(0xFFFF5722), // Deep Orange
-    Color(0xFF4CAF50), // Green
-    Color(0xFF2196F3), // Blue
-    Color(0xFFFF9800), // Orange
-    Color(0xFF9C27B0), // Purple
-    Color(0xFFE91E63), // Pink
-    Color(0xFF00BCD4), // Cyan
-    Color(0xFF795548), // Brown
-    Color(0xFF607D8B), // Blue Grey
-    Color(0xFFCDDC39), // Lime
-)
+// The hex strings (and the one-name-per-line comments) live in `model/DefaultCategories.colors`, because the model
+// package must not depend on Compose; this list is built from them so the palette and the defaults cannot drift apart.
+val CategoryColors: List<Color> = DefaultCategories.colors.map { hex ->
+    val value = hex.removePrefix("#").toLong(16)
+    Color(0xFF000000 or value)
+}
 
 /** WCAG contrast ratio between two opaque colours, 1 to 21. */
 fun contrastRatio(foreground: Color, background: Color): Float {
