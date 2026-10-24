@@ -183,10 +183,11 @@ fun StatCard(
             }
             Spacer(Modifier.height(8.dp))
             // One line that shrinks to fit below headlineSmall, at most down to 14.sp: a money amount is never
-            // wrapped or ellipsized, however wide the card is
+            // wrapped or ellipsized, however wide the card is. BasicText, unlike Text, ignores LocalContentColor,
+            // so the colour is passed explicitly (or the value is black on the dark theme's cards)
             BasicText(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, color = LocalContentColor.current),
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.headlineSmall.fontSize),
                 onTextLayout = onValueLayout,
