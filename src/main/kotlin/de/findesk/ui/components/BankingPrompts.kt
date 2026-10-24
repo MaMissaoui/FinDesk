@@ -8,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -63,7 +62,7 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
 
         is BankingPrompt.Tan -> {
             val bitmap = remember(p.challenge) {
-                p.challenge.image?.let { runCatching { org.jetbrains.skia.Image.makeFromEncoded(it).toComposeImageBitmap() }.getOrNull() }
+                p.challenge.image?.let { TanImage.decode(it) }
             }
             SecretDialog(
                 title = s[StringKey.TanRequired],
