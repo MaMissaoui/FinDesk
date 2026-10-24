@@ -27,10 +27,13 @@ object Mt940Parser {
         val statements = splitStatements(text)
         val bookings = mutableListOf<ImportedBooking>()
         val skipped = mutableListOf<String>()
+        val accounts = mutableListOf<String>()
         var accountIban: String? = null
         var recordNo = 0
 
         statements.forEach { stmt ->
+            val accountId = statementAccountId(stmt)
+            if (accountId != null && !accounts.contains(accountId)) accounts += accountId
             accountIban = accountIban ?: extractIban(stmt)
             val currency = extractCurrency(stmt)
             val tags = parseTags(stmt)
@@ -62,6 +65,7 @@ object Mt940Parser {
             format = StatementFormat.MT940,
             bookings = bookings,
             accountIban = accountIban,
+            accounts = accounts,
             skipped = skipped,
         )
     }
@@ -132,6 +136,13 @@ object Mt940Parser {
             return Iban.normalize(candidate.dropLast(3)).takeIf { Iban.isValid(it) }
         }
         return null
+    }
+
+    private fun statementAccountId(text: String): String? {
+        val iban = extractIban(text)
+        if (iban != null) return iban
+        val raw = parseTags(text).firstOrNull { it.name == "25" }?.content?.trim() ?: return null
+        return raw.takeIf { it.isNotEmpty() }
     }
 
     private fun extractCurrency(text: String): String? = extractBalanceTag(text, "60F")?.currency

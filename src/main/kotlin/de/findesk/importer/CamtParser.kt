@@ -28,12 +28,18 @@ object CamtParser {
         val documents = if (isZip(bytes)) unzipXml(bytes) else listOf(bytes)
         val bookings = mutableListOf<ImportedBooking>()
         val skipped = mutableListOf<String>()
+        val accounts = mutableListOf<String>()
         var iban: String? = null
         var entryNo = 0
         documents.forEach { xml ->
             val root = parseXml(xml).documentElement
             root.descendants("Stmt").ifEmpty { root.descendants("Rpt") }.forEach { stmt ->
-                if (iban == null) iban = stmt.child("Acct")?.child("Id")?.child("IBAN")?.textContent?.let(Iban::normalize)
+                val acctId = stmt.child("Acct")?.child("Id")
+                val acctIban = acctId?.child("IBAN")?.textContent?.let(Iban::normalize)
+                val acctOther = acctId?.child("Othr")?.child("Id")?.textContent?.trim()
+                val account = acctIban ?: acctOther?.takeIf { it.isNotEmpty() }
+                if (account != null && !accounts.contains(account)) accounts += account
+                if (iban == null) iban = acctIban
                 stmt.children("Ntry").forEach { entry ->
                     entryNo++
                     try {
@@ -44,7 +50,7 @@ object CamtParser {
                 }
             }
         }
-        return ParsedStatement(StatementFormat.CAMT053, bookings, accountIban = iban, skipped = skipped)
+        return ParsedStatement(StatementFormat.CAMT053, bookings, accountIban = iban, accounts = accounts, skipped = skipped)
     }
 
     private fun Element.toBookings(): List<ImportedBooking> {

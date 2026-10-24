@@ -51,7 +51,7 @@ class StatementImportService(
         require(file.length() <= MAX_FILE_BYTES) { AppStrings[StringKey.ErrorFileTooLarge] }
         val bytes = file.readBytes()
         val ext = file.extension.lowercase()
-        when {
+        val statement = when {
             ext == "xml" || ext == "zip" -> CamtParser.parse(bytes)
             ext == "ofx" || ext == "qfx" -> OfxParser.parse(bytes)
             ext == "qif" -> QifParser.parse(bytes)
@@ -63,6 +63,8 @@ class StatementImportService(
             QifParser.looksLike(bytes) -> QifParser.parse(bytes)
             else -> CsvStatementParser.parse(bytes, csvMapping)
         }
+        requireSingleAccount(statement)
+        statement
     }
 
     /** Account whose IBAN the statement names, if it exists locally. */
@@ -71,11 +73,24 @@ class StatementImportService(
         return accountRepository.findAllItems().firstOrNull { it.iban == iban }?.id
     }
 
+    private fun requireSingleAccount(statement: ParsedStatement) {
+        if (statement.accounts.size > 1) {
+            throw IllegalArgumentException(
+                AppStrings.format(
+                    StringKey.ErrorImportSeveralAccounts,
+                    statement.accounts.size,
+                    statement.accounts.joinToString(", ") { "…${it.takeLast(4)}" },
+                ),
+            )
+        }
+    }
+
     /**
      * Stores the bookings. If [updateBalance] and the file reports running balances, the account balance is set
      * to the balance after the newest booking.
      */
     suspend fun import(accountId: Int, statement: ParsedStatement, updateBalance: Boolean = true): ImportReport = withContext(Dispatchers.IO) {
+        requireSingleAccount(statement)
         val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: throw IllegalArgumentException(AppStrings[StringKey.ErrorAccountNotFound])
         // Decided before inserting anything, so the balance check and dedup see the account as it was
         val (bookings, wrongCurrency) = statement.bookings.partition { it.currency == null || it.currency == account.currency }

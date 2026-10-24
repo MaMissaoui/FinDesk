@@ -27,6 +27,8 @@ data class ParsedStatement(
     val bookings: List<ImportedBooking>,
     /** IBAN of the statement's own account, if the file names it. */
     val accountIban: String? = null,
+    /** Distinct accounts the file's statements belong to (IBAN, or the raw account id when it isn't one), in file order. More than one is refused. */
+    val accounts: List<String> = emptyList(),
     /** Rows that couldn't be read, with the reason (1-based line/entry number). */
     val skipped: List<String> = emptyList(),
     /** Pending (not yet booked) entries that were left out; they'd be imported twice once booked. */

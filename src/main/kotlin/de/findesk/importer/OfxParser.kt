@@ -35,6 +35,7 @@ object OfxParser {
         require(ofxStart >= 0) { "OFX root not found" }
         val body = text.substring(ofxStart)
         val accountIban = extractSgmlAccountId(body)
+        val accounts = parseSgmlStatementAccounts(body)
         val currency = extractSgmlCurrency(body)
         val transactions = extractSgmlTransactions(body)
         val bookings = mutableListOf<ImportedBooking>()
@@ -48,7 +49,7 @@ object OfxParser {
             }
         }
 
-        return ParsedStatement(StatementFormat.OFX, bookings, accountIban = accountIban, skipped = skipped)
+        return ParsedStatement(StatementFormat.OFX, bookings, accountIban = accountIban, accounts = accounts, skipped = skipped)
     }
 
     private fun extractSgmlAccountId(text: String): String? {
@@ -118,6 +119,7 @@ object OfxParser {
         val doc = parseXml(bytes)
         val root = doc.documentElement
         val accountIban = findAccountId(root)
+        val accounts = parseXmlStatementAccounts(root)
         val currency = findCurrency(root)
         val txElements = root.descendants("STMTTRN")
         val bookings = mutableListOf<ImportedBooking>()
@@ -131,7 +133,7 @@ object OfxParser {
             }
         }
 
-        return ParsedStatement(StatementFormat.OFX, bookings, accountIban = accountIban, skipped = skipped)
+        return ParsedStatement(StatementFormat.OFX, bookings, accountIban = accountIban, accounts = accounts, skipped = skipped)
     }
 
     private fun parseXmlTransaction(el: Element, currency: String?): ImportedBooking {
@@ -168,6 +170,40 @@ object OfxParser {
 
     private fun findCurrency(root: Element): String? = root.child("CURDEF")?.textContent?.trim()?.uppercase()?.takeIf { it.length == 3 }
         ?: root.descendants("CURDEF").firstOrNull()?.textContent?.trim()?.uppercase()?.takeIf { it.length == 3 }
+
+    private fun parseSgmlStatementAccounts(text: String): List<String> {
+        val result = mutableListOf<String>()
+        val tags = listOf("STMTRS", "CCSTMTRS")
+        for (tag in tags) {
+            var start = text.indexOf("<$tag>")
+            while (start >= 0) {
+                val end = text.indexOf("</$tag>", start)
+                if (end < 0) break
+                val block = text.substring(start, end + "</$tag>".length)
+                // A block without an account id adds nothing, but the blocks after it still count
+                extractSgmlLeaf(block, "ACCTID")?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->
+                    val normalized = Iban.normalize(id).takeIf { Iban.isValid(it) } ?: id
+                    if (!result.contains(normalized)) result += normalized
+                }
+                start = text.indexOf("<$tag>", end)
+            }
+        }
+        return result
+    }
+
+    private fun parseXmlStatementAccounts(root: Element): List<String> {
+        val result = mutableListOf<String>()
+        val tags = listOf("STMTRS", "CCSTMTRS")
+        val accountTags = listOf("BANKACCTFROM", "CCACCTFROM", "INVACCTFROM")
+        for (tag in tags) {
+            root.descendants(tag).forEach { block ->
+                val id = accountTags.firstNotNullOfOrNull { block.child(it)?.child("ACCTID")?.textContent?.trim() } ?: return@forEach
+                val normalized = Iban.normalize(id).takeIf { Iban.isValid(it) } ?: id
+                if (!result.contains(normalized)) result += normalized
+            }
+        }
+        return result
+    }
 
     private fun isSgml(text: String): Boolean {
         // OFX 1.x uses a header block and leaf elements without closing tags.

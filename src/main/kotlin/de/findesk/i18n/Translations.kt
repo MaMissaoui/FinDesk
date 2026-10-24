@@ -668,6 +668,7 @@ object Translations {
         K.ImportSummaryBalance to ". Balance set to %s",
         K.ErrorFileNotFound to "File not found: %s",
         K.ErrorFileTooLarge to "File is too large",
+        K.ErrorImportSeveralAccounts to "This file holds bookings for %d accounts (%s). Export one file per account and import them one at a time.",
 
         K.ErrorFileDoesNotExist to "File does not exist: %s",
         K.ErrorUnsupportedFileType to "Unsupported file type: %s",
@@ -1377,6 +1378,7 @@ object Translations {
         K.ImportSummaryBalance to ". Saldo auf %s gesetzt",
         K.ErrorFileNotFound to "Datei nicht gefunden: %s",
         K.ErrorFileTooLarge to "Datei ist zu groß",
+        K.ErrorImportSeveralAccounts to "Diese Datei enthält Buchungen von %d Konten (%s). Exportieren Sie eine Datei pro Konto und importieren Sie sie einzeln.",
 
         K.ErrorFileDoesNotExist to "Datei existiert nicht: %s",
         K.ErrorUnsupportedFileType to "Nicht unterstützter Dateityp: %s",
@@ -2086,6 +2088,7 @@ object Translations {
         K.ImportSummaryBalance to ". Solde défini à %s",
         K.ErrorFileNotFound to "Fichier introuvable : %s",
         K.ErrorFileTooLarge to "Le fichier est trop volumineux",
+        K.ErrorImportSeveralAccounts to "Ce fichier contient des opérations de %d comptes (%s). Exportez un fichier par compte et importez-les un par un.",
 
         K.ErrorFileDoesNotExist to "Le fichier n'existe pas : %s",
         K.ErrorUnsupportedFileType to "Type de fichier non pris en charge : %s",
