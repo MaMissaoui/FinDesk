@@ -482,10 +482,10 @@ class TransactionsViewModel(
     fun createRule(pattern: String, categoryId: Int): Job = launchSafely(onError) {
         ruleRepository.create(pattern, categoryId, priority = 5)
         val uncategorized = transactionRepository.findItems(TransactionFilter(uncategorizedOnly = true))
-        val matcher = RuleMatcher(listOf(pattern to categoryId))
+        val matcher = RuleMatcher.of(listOf(pattern to categoryId))
         var applied = 0
         uncategorized.forEach { t ->
-            if (matcher.categoryFor(t.purpose, t.partnerName) != null) {
+            if (matcher.categoryFor(t.purpose, t.partnerName, t.amount) != null) {
                 transactionRepository.updateCategory(t.id, categoryId)
                 applied++
             }
@@ -527,7 +527,7 @@ class TransactionsViewModel(
         // A repeat gets its own hash, so each entry stays distinguishable
         val repeat = if (identical > 0) "#$identical" else ""
         val hash = FinTSClient.transactionHash(date, amount, partner, "${text.orEmpty()}#${account.iban}#manual$repeat")
-        val resolvedCategory = categoryId ?: ruleRepository.matchCategoryId(purpose, partnerName)
+        val resolvedCategory = categoryId ?: ruleRepository.matchCategoryId(purpose, partnerName, amount)
         transactionRepository.create(
             accountId = accountId,
             date = date,
@@ -566,7 +566,7 @@ class TransactionsViewModel(
         var updated = 0
         val rules = ruleRepository.matcher()
         uncategorized.forEach { txn ->
-            val matched = rules.categoryFor(txn.purpose, txn.partnerName)
+            val matched = rules.categoryFor(txn.purpose, txn.partnerName, txn.amount)
             if (matched != null) {
                 transactionRepository.updateCategory(txn.id, matched)
                 updated++
