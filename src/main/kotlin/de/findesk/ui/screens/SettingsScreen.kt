@@ -212,6 +212,9 @@ fun SettingsScreen(
                                 Text(s.format(StringKey.BudgetAmount, Formats.money(it, state.primaryCurrency)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.width(8.dp))
                             }
+                            // Bookings for this category; 0 through the default, so unused categories show "0 bookings"
+                            Text(s.format(StringKey.CategoryUsage, state.categoryUsage[c.id] ?: 0), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(8.dp))
                             IconButton(onClick = { confirmDeleteCategory = c }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                         }
                     }

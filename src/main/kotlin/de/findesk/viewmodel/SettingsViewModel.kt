@@ -28,6 +28,8 @@ data class AuditEntry(val timestamp: LocalDateTime, val action: String, val deta
 
 data class SettingsState(
     val categories: List<CategoryItem> = emptyList(),
+    /** Bookings per category id ([CategoryRepository.usageCounts]); a category with no bookings is simply absent. */
+    val categoryUsage: Map<Int, Int> = emptyMap(),
     val rules: List<RuleItem> = emptyList(),
     val auditLog: List<AuditEntry> = emptyList(),
     val darkTheme: Boolean = false,
@@ -98,6 +100,7 @@ class SettingsViewModel(
         _state.update {
             it.copy(
                 categories = categoryRepository.findAllItems(),
+                categoryUsage = categoryRepository.usageCounts(),
                 rules = ruleRepository.findAllItems(),
                 auditLog = auditLogRepository.findRecent(100).map { e -> AuditEntry(e.timestamp, e.action, e.details) },
                 darkTheme = settingsRepository.getValue(KEY_DARK_THEME) == "true",
