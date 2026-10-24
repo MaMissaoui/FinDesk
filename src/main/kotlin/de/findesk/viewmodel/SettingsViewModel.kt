@@ -180,6 +180,37 @@ class SettingsViewModel(
         refresh()
     }
 
+    /**
+     * Recolours categories that share a colour so each one is identifiable in charts: in every group with more
+     * than one category, the lowest id keeps its colour and each other one gets the first palette colour
+     * ([DefaultCategories.colors], upper-case `#RRGGBB`) that no category uses at that moment. Colours that are
+     * already unique, names and other fields are never touched.
+     */
+    fun fixDuplicateColours(): Job = launchSafely(onError) {
+        val categories = categoryRepository.findAllItems()
+        val used = categories.mapTo(mutableSetOf()) { it.color.uppercase() }
+        var recoloured = 0
+        categories
+            .groupBy { it.color.uppercase() }
+            .filter { it.value.size > 1 }
+            .forEach { (_, group) ->
+                // The lowest id keeps its colour; the others, in id order, each pick the first free palette colour
+                group.sortedBy { it.id }.drop(1).forEach { category ->
+                    val free = DefaultCategories.colors.firstOrNull { it.uppercase() !in used } ?: return@forEach
+                    categoryRepository.update(category.id, color = free)
+                    used += free.uppercase()
+                    recoloured++
+                }
+            }
+        refresh()
+        if (recoloured > 0) {
+            auditLogRepository.log("FIX_CATEGORY_COLOURS", "user", "Recoloured $recoloured categories")
+            _state.update { it.copy(message = AppStrings.format(StringKey.MessageColoursFixed, recoloured)) }
+        } else {
+            _state.update { it.copy(message = AppStrings[StringKey.MessageColoursAlreadyDistinct]) }
+        }
+    }
+
     /** Deleting a category un-assigns its transactions and removes its rules. */
     fun deleteCategory(id: Int): Job = launchSafely(onError) {
         transactionRepository.findByCategory(id).forEach { transactionRepository.updateCategory(it.id.value, null) }

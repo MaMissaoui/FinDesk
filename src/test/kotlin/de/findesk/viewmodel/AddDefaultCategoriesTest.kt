@@ -79,6 +79,6 @@ class AddDefaultCategoriesTest {
     fun `the list holds 24 entries in palette order`() {
         assertEquals(24, DefaultCategories.entries.size)
         assertEquals("#FF5722", DefaultCategories.entries.first().second)
-        assertEquals(10, DefaultCategories.colors.size)
+        assertEquals(24, DefaultCategories.colors.size, "24 categories, 24 distinct colours, no cycling any more")
     }
 }
