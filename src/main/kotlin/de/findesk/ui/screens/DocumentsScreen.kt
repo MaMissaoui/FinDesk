@@ -213,9 +213,21 @@ private fun DocumentDetail(
                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = s[StringKey.Close]) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { openExternally(File(doc.filePath)) }) { Text(s[StringKey.Open]) }
-                OutlinedButton(onClick = onReprocess) { Text(s[StringKey.ReExtractText]) }
-                OutlinedButton(onClick = onDelete) { Text(s[StringKey.Delete]) }
+                OutlinedButton(
+                    onClick = { openExternally(File(doc.filePath)) },
+                    colors = OutlinedButtonStyle.colors(),
+                    border = OutlinedButtonStyle.border(),
+                ) { Text(s[StringKey.Open]) }
+                OutlinedButton(
+                    onClick = onReprocess,
+                    colors = OutlinedButtonStyle.colors(),
+                    border = OutlinedButtonStyle.border(),
+                ) { Text(s[StringKey.ReExtractText]) }
+                OutlinedButton(
+                    onClick = onDelete,
+                    colors = OutlinedButtonStyle.colors(),
+                    border = OutlinedButtonStyle.border(),
+                ) { Text(s[StringKey.Delete]) }
             }
 
             val preview by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, doc.id) {

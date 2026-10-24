@@ -135,7 +135,12 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                             } else {
                                 val anyIncluded = state.bankAccesses.any { it.includeInSyncAll }
                                 DisabledReason(s[StringKey.SyncAllNothingIncluded].takeIf { !anyIncluded }) {
-                                    OutlinedButton(onClick = { vm.syncAll() }, enabled = !state.isSyncing && anyIncluded) {
+                                    OutlinedButton(
+                                        onClick = { vm.syncAll() },
+                                        enabled = !state.isSyncing && anyIncluded,
+                                        colors = OutlinedButtonStyle.colors(),
+                                        border = OutlinedButtonStyle.border(enabled = !state.isSyncing && anyIncluded),
+                                    ) {
                                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(4.dp))
                                         Text(s[StringKey.SyncAll])
@@ -411,7 +416,12 @@ private fun BankCard(
                         Text(syncStep ?: s[StringKey.Syncing], style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.width(8.dp))
                     } else {
-                        OutlinedButton(onClick = onSync, enabled = syncEnabled) {
+                        OutlinedButton(
+                            onClick = onSync,
+                            enabled = syncEnabled,
+                            colors = OutlinedButtonStyle.colors(),
+                            border = OutlinedButtonStyle.border(enabled = syncEnabled),
+                        ) {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text(s[StringKey.Sync])
