@@ -25,6 +25,14 @@ object BankingRedactor {
     /** Account numbers and bank codes: 6 or more digits on their own. */
     private val LONG_DIGITS = Regex("(?<![\\dA-Za-z])\\d{6,}(?![\\dA-Za-z])")
 
+    private val RETURN_CODE = Regex("(?<![\\w…])[39]\\d{3}(?!\\w)")
+
+    /**
+     * FinTS return codes (3xxx warnings, 9xxx errors) in already masked bank text. A code standing right after the
+     * mask is the kept tail of an account number ("…3000"), not a code.
+     */
+    internal fun returnCodes(maskedText: String?): List<String> = maskedText?.let { text -> RETURN_CODE.findAll(text).map { it.value }.distinct().toList() }.orEmpty()
+
     fun redact(text: String, secrets: Collection<String>): String {
         var result = text
         // Longest first, so a value that contains another is masked in one go instead of leaving fragments

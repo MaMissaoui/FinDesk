@@ -127,6 +127,10 @@ object DatabaseFactory {
             if (System.getenv("FINDESK_SQL_LOG") == "1") addLogger(StdOutSqlLogger)
             updateSchema()
         }
+
+        // A failure rolls back the cleanup transaction, leaves the flag unset and retries on the next start;
+        // it must never prevent the database from opening. Nothing is logged here.
+        runCatching { BankTextCleanup.run() }
     }
 
     /**
