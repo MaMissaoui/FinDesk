@@ -30,6 +30,7 @@ object CamtParser {
         val skipped = mutableListOf<String>()
         val accounts = mutableListOf<String>()
         val messageTypes = mutableListOf<String>()
+        val reports = mutableListOf<Pair<LocalDate, ClosingBalance?>>()
         var iban: String? = null
         var entryNo = 0
         documents.forEach { xml ->
@@ -42,7 +43,8 @@ object CamtParser {
                 val account = acctIban ?: acctOther?.takeIf { it.isNotEmpty() }
                 if (account != null && !accounts.contains(account)) accounts += account
                 if (iban == null) iban = acctIban
-                stmt.children("Ntry").forEach { entry ->
+                val entryEls = stmt.children("Ntry")
+                entryEls.forEach { entry ->
                     entryNo++
                     try {
                         bookings += entry.toBookings()
@@ -50,8 +52,11 @@ object CamtParser {
                         skipped += "Entry $entryNo: ${e.message}"
                     }
                 }
+                reportBalance(stmt, entryEls)?.let { reports += it }
             }
         }
+        // A skipped entry makes the balance check unreliable, so the closing balance can't be used
+        val closing = if (skipped.isEmpty()) takeLatest(reports) else null
         return ParsedStatement(
             StatementFormat.CAMT053,
             bookings,
@@ -59,8 +64,84 @@ object CamtParser {
             accounts = accounts,
             skipped = skipped,
             formatDetail = messageTypes.takeIf { it.isNotEmpty() }?.joinToString("/"),
+            closingBalance = closing,
         )
     }
+
+    /**
+     * The report's closing balance when it is consistent with its entries, best effort: anything malformed in
+     * `<Bal>` simply yields null, never a parse failure. Opening plus the booked entries must add up to the closing
+     * balance; some exporters (e.g. Banking4) include the pending entries in the closing balance, in which case
+     * their sum is taken back out. The result keeps the closing date even when reconciliation fails, so an
+     * unreconciled latest report can block older ones.
+     */
+    private fun reportBalance(stmt: Element, entryEls: List<Element>): Pair<LocalDate, ClosingBalance?>? = runCatching {
+        val closing = balanceOf(stmt, "CLBD") ?: balanceOf(stmt, "ITBD") ?: return null
+        val date = balanceDate(closing.element) ?: return null
+        val opening = balanceOf(stmt, "OPBD") ?: balanceOf(stmt, "PRCD") ?: return date to null
+        var booked = BigDecimal.ZERO
+        var pending = BigDecimal.ZERO
+        var pendingCount = 0
+        val currencies = mutableListOf<String?>()
+        entryEls.forEach { entry ->
+            val amount = entrySignedAmount(entry) ?: return@forEach
+            currencies += entry.child("Amt")?.getAttribute("Ccy")?.ifEmpty { null }
+            if (entryStatus(entry) == "BOOK" || entryStatus(entry) == null) {
+                booked += amount
+            } else {
+                pending += amount
+                pendingCount++
+            }
+        }
+        if (closing.currency != null && currencies.any { it != closing.currency }) return date to null
+        val reconciled = when {
+            opening.amount.add(booked).compareTo(closing.amount) == 0 -> ClosingBalance(closing.amount, date, closing.currency)
+            pendingCount > 0 && opening.amount.add(booked).add(pending).compareTo(closing.amount) == 0 -> ClosingBalance(closing.amount.subtract(pending), date, closing.currency, pendingCount)
+            else -> null
+        }
+        date to reconciled
+    }.getOrNull()
+
+    /** The first `<Bal>` of the given type code, or null; also used to tell which balance codes exist at all. */
+    private fun balanceOf(stmt: Element, code: String): ParsedBalance? = stmt.children("Bal").firstOrNull { bal -> bal.child("Tp")?.child("CdOrPrtry")?.child("Cd")?.textContent?.trim() == code }?.let(::parseBal)
+
+    /** A balance's signed value (missing `CdtDbtInd` = credit) and currency; null when anything is malformed. */
+    private fun parseBal(bal: Element): ParsedBalance? {
+        val amt = bal.child("Amt") ?: return null
+        val value = amt.textContent.trim().toBigDecimalOrNull() ?: return null
+        return ParsedBalance(
+            if (bal.child("CdtDbtInd")?.textContent?.trim() == "DBIT") value.negate() else value,
+            amt.getAttribute("Ccy").ifEmpty { null },
+            bal,
+        )
+    }
+
+    /** `<Bal/Dt/Dt>`, or `<Bal/Dt/DtTm>`'s first ten characters. */
+    private fun balanceDate(bal: Element): LocalDate? {
+        val dt = bal.child("Dt") ?: return null
+        val text = (dt.child("Dt") ?: dt.child("DtTm"))?.textContent?.trim() ?: return null
+        return runCatching { LocalDate.parse(text.take(10)) }.getOrNull()
+    }
+
+    private fun entryStatus(entry: Element): String? = entry.child("Sts")?.let { it.child("Cd")?.textContent ?: it.textContent }?.trim()
+
+    /** The entry's `Amt` with the `CdtDbtInd` sign (the raw entry, not its split `TxDtls` bookings). */
+    private fun entrySignedAmount(entry: Element): BigDecimal? {
+        val amt = entry.child("Amt") ?: return null
+        val value = amt.textContent.trim().toBigDecimalOrNull() ?: return null
+        return if (entry.child("CdtDbtInd")?.textContent?.trim() == "DBIT") value.negate() else value
+    }
+
+    /** Across several reports (or a ZIP of files): the one with the latest closing date, which must reconcile; a disagreement on that date → none. */
+    private fun takeLatest(reports: List<Pair<LocalDate, ClosingBalance?>>): ClosingBalance? {
+        if (reports.isEmpty()) return null
+        val atLatest = reports.filter { it.first == reports.maxOf { r -> r.first } }.map { it.second }
+        if (atLatest.any { it == null }) return null
+        val first = atLatest.first()!!
+        return if (atLatest.all { b -> b!!.amount.compareTo(first.amount) == 0 && b.currency == first.currency }) first else null
+    }
+
+    private class ParsedBalance(val amount: BigDecimal, val currency: String?, val element: Element)
 
     /** The document's message type, e.g. "CAMT.052", from the namespace, or the root's first child element. */
     private fun messageType(root: Element): String? = Regex("camt\\.(\\d{3})\\.").find(root.namespaceURI ?: "")

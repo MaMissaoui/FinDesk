@@ -88,7 +88,8 @@ class StatementImportService(
 
     /**
      * Stores the bookings. If [updateBalance] and the file reports running balances, the account balance is set
-     * to the balance after the newest booking.
+     * to the balance after the newest booking. A CAMT file without running balances but with a reconciled closing
+     * balance sets the balance from it instead.
      */
     suspend fun import(accountId: Int, statement: ParsedStatement, updateBalance: Boolean = true): ImportReport = withContext(Dispatchers.IO) {
         requireSingleAccount(statement)
@@ -128,11 +129,21 @@ class StatementImportService(
 
         // The list is chronological now, so the newest booking with a balance is simply the last one
         val latestBalance = chronological.lastOrNull { it.balanceAfter != null }?.balanceAfter
-        val newBalance = if (updateBalance && balanceAllowed && latestBalance != null) {
-            accountRepository.updateBalance(accountId, latestBalance)
-            latestBalance
-        } else {
-            null
+        val newBalance = when {
+            !updateBalance || !balanceAllowed -> null
+
+            latestBalance != null -> {
+                accountRepository.updateBalance(accountId, latestBalance)
+                latestBalance
+            }
+
+            statement.closingBalance != null &&
+                (statement.closingBalance.currency == null || statement.closingBalance.currency == account.currency) -> {
+                accountRepository.updateBalance(accountId, statement.closingBalance.amount)
+                statement.closingBalance.amount
+            }
+
+            else -> null
         }
 
         auditLogRepository.log(
@@ -145,12 +156,14 @@ class StatementImportService(
     }
 
     /**
-     * The file's running balance may only replace the account balance if the file is at least as recent as the
-     * account's newest booking; back-filling an old statement must not reset today's balance.
+     * The file's figures may only replace the account balance if the file is at least as recent as the account's
+     * newest booking; back-filling an old statement must not reset today's balance. With running balances the file
+     * decides by its newest booking date, otherwise by the closing balance's date.
      */
     fun balanceUpdateAllowed(accountId: Int, statement: ParsedStatement): Boolean {
-        if (statement.bookings.none { it.balanceAfter != null }) return false
-        val fileNewest = statement.bookings.maxOf { it.date }
+        val hasRunningBalances = statement.bookings.any { it.balanceAfter != null }
+        if (!hasRunningBalances && statement.closingBalance == null) return false
+        val fileNewest = if (hasRunningBalances) statement.bookings.maxOf { it.date } else statement.closingBalance!!.date
         val accountNewest = transactionRepository.findItems(de.findesk.model.TransactionFilter(accountId = accountId), limit = 1).firstOrNull()?.date
         return accountNewest == null || !fileNewest.isBefore(accountNewest)
     }
