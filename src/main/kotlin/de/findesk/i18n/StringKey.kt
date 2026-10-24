@@ -707,6 +707,7 @@ enum class StringKey {
     ImportSummaryBalance,
     ErrorFileNotFound,
     ErrorFileTooLarge,
+    ErrorImportSeveralAccounts,
 
     // Documents & reports
     ErrorFileDoesNotExist,
