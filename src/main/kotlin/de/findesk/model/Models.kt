@@ -29,6 +29,8 @@ data class BankAccessItem(
     val syncFrom: LocalDate? = null,
     /** Whether "Sync all" syncs this connection. */
     val includeInSyncAll: Boolean = true,
+    /** Whether this connection never goes online (statements only); fixed at creation. */
+    val offline: Boolean = false,
 )
 
 data class AccountItem(

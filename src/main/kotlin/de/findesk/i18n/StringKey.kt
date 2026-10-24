@@ -765,4 +765,27 @@ enum class StringKey {
     PaymentActionStandingOrder,
     PaymentActionStandingOrderDelete,
     PaymentOrderId,
+
+    // Offline banks (no online banking; statements are imported from files)
+
+    /** Hint shown on an offline bank's card. */
+    BankOfflineHint,
+
+    /** Label of the add-account field for an offline bank: an IBAN or the card's last 4 digits. */
+    IbanOrCardLast4,
+
+    /** Validation error when the field holds more than the card's last 4 digits (a pasted card number). */
+    CardLast4Only,
+
+    /** Banking error: the bank access is offline, so no FinTS dialog is opened. */
+    ErrorBankOffline,
+
+    /** Order error: the source account belongs to an offline bank or has no IBAN. */
+    ErrorOrderOfflineAccount,
+
+    /** Add-bank dialog choice: a normal online banking (FinTS) connection. */
+    BankOnlineMode,
+
+    /** Add-bank dialog choice: an offline bank whose statements are imported from files only. */
+    BankOfflineMode,
 }

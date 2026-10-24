@@ -16,6 +16,12 @@ interface BankAccessRepository {
     fun findById(id: Int): BankAccess?
     fun findByBlz(blz: String): List<BankAccess>
     fun create(bankName: String, blz: String, bic: String, userId: String, hbciVersion: String = "300"): BankAccess
+
+    /**
+     * Creates a bank that never goes online (e.g. a credit card whose statements are imported from files):
+     * it has no BLZ, BIC, login or FinTS data, is marked offline and is excluded from "Sync all".
+     */
+    fun createOffline(bankName: String): BankAccess
     fun update(id: Int, bankName: String? = null, tanMethod: String? = null): BankAccess?
     fun delete(id: Int): Boolean
     fun updateLastSync(id: Int): BankAccess?
@@ -79,6 +85,18 @@ class BankAccessRepositoryImpl : BankAccessRepository {
             this.bic = bic
             this.userId = userId
             this.hbciVersion = hbciVersion
+        }
+    }
+
+    override fun createOffline(bankName: String): BankAccess = transaction {
+        BankAccess.new {
+            this.bankName = bankName
+            blz = ""
+            bic = ""
+            userId = ""
+            offline = true
+            // Nothing to sync: an offline bank must never appear in a "Sync all" run
+            includeInSyncAll = false
         }
     }
 

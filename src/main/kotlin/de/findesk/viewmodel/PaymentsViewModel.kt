@@ -77,8 +77,12 @@ class PaymentsViewModel(
         val interrupted = paymentOrderRepository.markInterrupted(AppInfo.startedAt)
         if (interrupted > 0) auditLogRepository.log("PAYMENT_ORDERS_INTERRUPTED", "system", "$interrupted order(s) left pending by an earlier run marked as outcome unknown")
         _state.update {
+            // SEPA is EUR only; accounts of offline banks and card identifiers without an IBAN can never be a source
+            val offlineBanks = bankAccessRepository.findAllItems().filter { it.offline }.map { it.id }.toSet()
             it.copy(
-                accounts = accountRepository.findAllItems().filter { a -> a.currency == "EUR" }, // SEPA is EUR only
+                accounts = accountRepository.findAllItems().filter { a ->
+                    a.currency == "EUR" && a.bankAccessId !in offlineBanks && Iban.isValid(a.iban)
+                },
                 paymentOrders = paymentOrderRepository.findRecentItems(20),
                 bankCapabilities = bankAccessRepository.findAllItems()
                     .mapNotNull { bank -> BankCapabilities.parse(bank.capabilities)?.let { caps -> bank.id to caps } }

@@ -24,6 +24,7 @@ fun BankAccess.toItem() = BankAccessItem(
     capabilities = capabilities,
     syncFrom = syncFrom,
     includeInSyncAll = includeInSyncAll,
+    offline = offline,
 )
 
 fun Account.toItem(newCount: Int = 0) = AccountItem(

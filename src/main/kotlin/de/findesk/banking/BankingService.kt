@@ -110,6 +110,10 @@ class BankingService(
      */
     suspend fun updateConnection(bankAccessId: Int, name: String, blz: String, userId: String, serverUrl: String): BankAccessItem? = withContext(Dispatchers.IO) {
         val previous = bankAccessRepository.findItem(bankAccessId)
+        // An offline bank has no FinTS login: only its name may change, and never its passport or PIN
+        if (previous?.offline == true) {
+            return@withContext bankAccessRepository.updateConnection(bankAccessId, bankName = name)
+        }
         val newBlz = blz.trim()
         val newUserId = userId.trim()
         val newUrl = serverUrl.trim().ifEmpty { null }
@@ -167,6 +171,10 @@ class BankingService(
         try {
             val bankAccess = withContext(Dispatchers.IO) { bankAccessRepository.findItem(bankAccessId) }
                 ?: return BankingResult.Error("NOT_FOUND", AppStrings[StringKey.ErrorBankConnectionNotFound])
+            // An offline bank never reaches FinTS: no dialog, no credentials, no sync
+            if (bankAccess.offline) {
+                return BankingResult.Error("OFFLINE", AppStrings[StringKey.ErrorBankOffline]).also { _error.value = it.message }
+            }
             val known = withContext(Dispatchers.IO) { accountRepository.findAllItems() }.filter { it.bankAccessId == bankAccessId }
             val now = today()
             val defaultStart = now.minusDays(INITIAL_SYNC_DAYS)
@@ -372,6 +380,10 @@ class BankingService(
     suspend fun loadStandingOrders(fromAccountId: Int, interaction: BankingInteraction): BankingResult<List<StandingOrder>> {
         val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
             ?: return BankingResult.Error("NOT_FOUND", AppStrings[StringKey.ErrorAccountNotFound])
+        // No standing orders for an account of an offline bank, nor for one whose identifier is not an IBAN
+        if (bankAccessRepository.findItem(account.bankAccessId)?.offline == true || !Iban.isValid(account.iban)) {
+            return BankingResult.Error("OFFLINE", AppStrings[StringKey.ErrorOrderOfflineAccount])
+        }
         unsupported(account.bankAccessId, BankCapabilities.JOB_STANDING_LIST)?.let { return BankingResult.Error("UNSUPPORTED", it) }
         return finTSClient.listStandingOrders(account.bankAccessId, interaction, account.iban)
     }
@@ -439,6 +451,10 @@ class BankingService(
         try {
             val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
                 ?: return deny("NOT_FOUND", AppStrings[StringKey.ErrorAccountNotFound])
+            // An offline bank (or an account whose identifier is not an IBAN, e.g. a card) can never move money
+            if (bankAccessRepository.findItem(account.bankAccessId)?.offline == true || !Iban.isValid(account.iban)) {
+                return deny("OFFLINE", AppStrings[StringKey.ErrorOrderOfflineAccount], account.iban)
+            }
             accountCheck?.let { it(account)?.let { message -> return deny("INVALID", message, account.iban) } }
             // SEPA credit transfers are EUR only; the order amount is in EUR, so another account currency would be wrong
             if (account.currency != "EUR") return deny("CURRENCY", AppStrings.format(StringKey.ErrorSepaEurOnly, account.currency), account.iban)

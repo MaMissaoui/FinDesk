@@ -11,6 +11,7 @@ import de.findesk.model.BankAccessItem
 import de.findesk.repository.*
 import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AccountGroupView
+import de.findesk.util.AccountIds
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
@@ -239,13 +240,46 @@ class AccountsViewModel(
         _state.update { it.copy(message = AppStrings.format(StringKey.MessageAdded, bankName.trim()), error = null) }
     }
 
-    fun validateAccount(iban: String): String? {
-        val normalized = Iban.normalize(iban)
+    /** Validates an offline bank's name; the only field an offline bank has. */
+    fun validateOfflineBank(name: String): String? = if (name.isBlank()) AppStrings[StringKey.BankNameRequired] else null
+
+    fun addOfflineBank(name: String): Job = launchSafely(onError) {
+        validateOfflineBank(name)?.let { msg ->
+            _state.update { it.copy(error = msg) }
+            return@launchSafely
+        }
+        bankAccessRepository.createOffline(name.trim())
+        auditLogRepository.log("ADD_BANK_ACCESS", "user", "Added offline bank: ${name.trim()}")
+        refresh()
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageAdded, name.trim()), error = null) }
+    }
+
+    /**
+     * Validates an account's identifier; returns an error message or null. For an online bank a valid IBAN is
+     * required. For an offline bank the identifier may also be the card's last 4 digits (it becomes the synthetic
+     * id CARD + the digits) — more than 4 digits (a pasted card number) is refused, never truncated.
+     */
+    fun validateAccount(identifier: String, offline: Boolean = false): String? {
+        val normalized = Iban.normalize(identifier)
+        fun duplicate(id: String): Boolean = _state.value.accounts.any { it.iban == id }
+
+        // An IBAN is always accepted, online or offline; only the duplicate check differs for cards
+        if (Iban.isValid(normalized)) return if (duplicate(normalized)) AppStrings[StringKey.AccountIbanExists] else null
+        if (!offline) {
+            return when {
+                normalized.isEmpty() -> AppStrings[StringKey.IbanRequired]
+                else -> AppStrings[StringKey.IbanChecksumFailed]
+            }
+        }
+        // An offline bank accepts a card's last 4 digits instead of an IBAN; never truncate a longer one
+        val digits = identifier.trim()
         return when {
             normalized.isEmpty() -> AppStrings[StringKey.IbanRequired]
-            !Iban.isValid(normalized) -> AppStrings[StringKey.IbanChecksumFailed]
-            _state.value.accounts.any { it.iban == normalized } -> AppStrings[StringKey.AccountIbanExists]
-            else -> null
+
+            digits.length == 4 && digits.all { it.isDigit() } ->
+                if (duplicate(AccountIds.card(digits))) AppStrings[StringKey.AccountIbanExists] else null
+
+            else -> AppStrings[StringKey.CardLast4Only]
         }
     }
 
@@ -256,19 +290,22 @@ class AccountsViewModel(
         balance: BigDecimal,
         currency: String = "EUR",
     ): Job = launchSafely(onError) {
-        validateAccount(iban)?.let { msg ->
+        val offline = _state.value.bankAccesses.firstOrNull { it.id == bankAccessId }?.offline == true
+        validateAccount(iban, offline)?.let { msg ->
             _state.update { it.copy(error = msg) }
             return@launchSafely
         }
         val normalized = Iban.normalize(iban)
+        // An offline bank stores what was validated: the IBAN, or the synthetic card id of the last 4 digits
+        val id = if (offline && !Iban.isValid(normalized)) AccountIds.card(iban.trim()) else normalized
         accountRepository.create(
             bankAccessId = bankAccessId,
-            iban = normalized,
+            iban = id,
             balance = balance,
             currency = currency,
             accountType = accountType,
         )
-        auditLogRepository.log("ADD_ACCOUNT", "user", "Added account ${normalized.takeLast(4)}")
+        auditLogRepository.log("ADD_ACCOUNT", "user", "Added account ${id.takeLast(4)}")
         refresh()
         _state.update { it.copy(message = AppStrings[StringKey.MessageAccountAdded], error = null) }
     }
@@ -369,6 +406,23 @@ class AccountsViewModel(
 
     /** Saves the connection settings. [name] is the label shown for the connection; blank is rejected. */
     fun updateConnection(bankAccessId: Int, name: String, blz: String, userId: String, serverUrl: String): Job = launchSafely(onError) {
+        // An offline bank has no login data: only its display name may change
+        val offlineBank = bankAccessRepository.findItem(bankAccessId)
+        if (offlineBank?.offline == true) {
+            if (name.isBlank()) {
+                _state.update { it.copy(error = AppStrings[StringKey.BankNameRequired]) }
+                return@launchSafely
+            }
+            val oldName = offlineBank.bankName
+            // The service updates the stored name and never touches the FinTS passport for an offline bank
+            val updated = bankingService.updateConnection(bankAccessId, name, offlineBank.blz, offlineBank.userId, offlineBank.serverUrl.orEmpty())
+            if (updated != null && updated.bankName != oldName) {
+                auditLogRepository.log("RENAME_BANK_ACCESS", "user", "Renamed bank access $bankAccessId from $oldName to ${updated.bankName}")
+            }
+            refresh()
+            _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
+            return@launchSafely
+        }
         validateBankAccess(name, blz)?.let { msg ->
             _state.update { it.copy(error = msg) }
             return@launchSafely
@@ -432,6 +486,11 @@ class AccountsViewModel(
             _state.update { it.copy(error = AppStrings[StringKey.ErrorConnectionBusy]) }
             return Job().apply { complete() }
         }
+        // An offline bank never syncs: it has no FinTS login, and the service's own error is the whole story
+        if (_state.value.bankAccesses.firstOrNull { it.id == bankAccessId }?.offline == true) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorBankOffline]) }
+            return Job().apply { complete() }
+        }
         _state.update { it.copy(syncingBankId = bankAccessId, syncStep = AppStrings[StringKey.SyncConnecting], error = null, message = null) }
         return launchSafely({ e -> _state.update { it.copy(syncingBankId = null, error = e.userMessage()) } }) {
             when (val outcome = syncOne(bankAccessId)) {
@@ -456,7 +515,8 @@ class AccountsViewModel(
         }
         return launchSafely({ e -> _state.update { it.copy(syncAll = null, error = e.userMessage()) } }) {
             try {
-                val included = bankAccessRepository.findAllItems().filter { it.includeInSyncAll }
+                // Offline banks never sync, even if the stored flag says they are included
+                val included = bankAccessRepository.findAllItems().filter { it.includeInSyncAll && !it.offline }
                 if (included.isEmpty()) {
                     _state.update { it.copy(error = AppStrings[StringKey.SyncAllNothingIncluded]) }
                     return@launchSafely
