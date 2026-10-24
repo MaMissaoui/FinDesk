@@ -3,6 +3,8 @@ package de.findesk.repository
 import de.findesk.data.entity.Category
 import de.findesk.data.entity.Rule
 import de.findesk.data.table.RulesTable
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import de.findesk.model.RuleDirection
 import de.findesk.model.RuleField
 import de.findesk.model.RuleItem
@@ -10,6 +12,7 @@ import de.findesk.model.toItem
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.math.BigDecimal
+import java.util.regex.PatternSyntaxException
 
 /** One auto-apply rule compiled for [RuleMatcher]. */
 data class RuleSpec(
@@ -121,6 +124,21 @@ class RuleRepositoryImpl : RuleRepository {
 
     override fun matcher(): RuleMatcher = transaction {
         RuleMatcher(findAutoApplyRules().map { RuleSpec(it.pattern, it.category.id.value, RuleField.fromKey(it.matchField), RuleDirection.fromKey(it.direction)) })
+    }
+}
+
+/**
+ * Why [pattern] is unusable as a rule pattern, as a localized user message, or null when it is fine.
+ * Shared by the settings dialog, rule-file import and every saved pattern.
+ */
+fun validateRulePattern(pattern: String): String? = when {
+    pattern.isBlank() -> AppStrings[StringKey.ErrorPatternRequired]
+
+    else -> try {
+        pattern.toRegex()
+        null
+    } catch (e: PatternSyntaxException) {
+        AppStrings.format(StringKey.ErrorInvalidRegex, e.description)
     }
 }
 

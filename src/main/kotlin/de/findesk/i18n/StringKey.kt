@@ -556,6 +556,37 @@ enum class StringKey {
     RuleDirectionExpense,
     RuleDirectionIncome,
     RuleCategoryLabel,
+
+    /** Settings > rules: header buttons and the preview dialog for rule-file import and export. */
+    ImportRules,
+    ExportRules,
+    RuleImportTitle,
+    RuleImportCategorize,
+    RuleImportNewRules,
+    RuleImportCategories,
+    RuleImportDuplicates,
+    RuleImportConflicts,
+    RuleImportErrors,
+    RuleImportConflictLine,
+    RuleImportErrorLine,
+    MessageRulesExported,
+    MessageRulesExportSkipped,
+    MessageRulesImported,
+
+    /** Rule file: one reason per rejected data row (with the file's line number). */
+    RuleFileErrorColumns,
+    RuleFileErrorCategory,
+    RuleFileErrorPattern,
+    RuleFileErrorPatternLength,
+    RuleFileErrorSearchIn,
+    RuleFileErrorAppliesTo,
+    RuleFileErrorPriority,
+    RuleFileErrorAutoApply,
+
+    /** Rule file: whole-file rejections. */
+    ErrorRuleFileHeader,
+    ErrorRuleFileTooLarge,
+    ErrorRuleFileEncoding,
     DataAndOcr,
     Database,
     DocumentsFolder,

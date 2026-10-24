@@ -213,6 +213,12 @@ fun SettingsScreen(
                     DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
                         TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
                     }
+                    TextButton(onClick = {
+                        FileDialogs.openFiles(s[StringKey.ImportRules], setOf("tsv", "txt")).firstOrNull()?.let { vm.chooseRuleImport(it) }
+                    }) { Text(s[StringKey.ImportRules]) }
+                    TextButton(onClick = {
+                        FileDialogs.saveFile(s[StringKey.ExportRules], "findesk-rules-${java.time.LocalDate.now()}.tsv")?.let { vm.exportRules(it) }
+                    }) { Text(s[StringKey.ExportRules]) }
                 },
             ) {
                 Text(
@@ -470,6 +476,13 @@ fun SettingsScreen(
                 newRule = false
                 editRule = null
             },
+        )
+    }
+    state.ruleImport?.let { preview ->
+        RuleImportDialog(
+            preview = preview,
+            onConfirm = vm::confirmRuleImport,
+            onDismiss = vm::cancelRuleImport,
         )
     }
     state.restoreCandidate?.let { (file, info) ->
@@ -759,4 +772,72 @@ private fun ProfileNameDialog(initial: String, onDismiss: () -> Unit, onConfirm:
         confirmButton = { Button(enabled = valid, onClick = { onConfirm(name) }) { Text(s[StringKey.Save]) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
+}
+
+/**
+ * Reads a rule import back to the user before it is applied: the counts of new rules and new categories, the
+ * duplicates and conflicts that are skipped, the invalid rows and, when bookings would be categorized now,
+ * a checkbox for it. Long content scrolls inside the dialog.
+ */
+@Composable
+private fun RuleImportDialog(
+    preview: de.findesk.importer.RuleImportPreview,
+    onConfirm: (categorize: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val s = strings()
+    var categorize by remember { mutableStateOf(true) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s[StringKey.RuleImportTitle]) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(s.format(StringKey.RuleImportNewRules, preview.newRules.size))
+                if (preview.categoriesToCreate.isNotEmpty()) {
+                    Text(s.format(StringKey.RuleImportCategories, preview.categoriesToCreate.size))
+                    val more = preview.categoriesToCreate.size - 20
+                    Text(
+                        preview.categoriesToCreate.take(20).joinToString(", ") +
+                            (if (more > 0) ", ${s.format(StringKey.AndMore, more)}" else ""),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (preview.duplicates > 0) Text(s.format(StringKey.RuleImportDuplicates, preview.duplicates))
+                if (preview.conflicts.isNotEmpty()) {
+                    Text(s.format(StringKey.RuleImportConflicts, preview.conflicts.size))
+                    LineList(preview.conflicts.map { s.format(StringKey.RuleImportConflictLine, it.line, it.pattern, it.fileCategory, it.existingCategory) })
+                }
+                if (preview.errors.isNotEmpty()) {
+                    Text(s.format(StringKey.RuleImportErrors, preview.errors.size))
+                    LineList(preview.errors.map { s.format(StringKey.RuleImportErrorLine, it.line, it.reason) })
+                }
+                if (preview.matchCount > 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = categorize, onCheckedChange = { categorize = it })
+                        Text(s.format(StringKey.RuleImportCategorize, preview.matchCount))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = preview.newRules.isNotEmpty() || preview.categoriesToCreate.isNotEmpty(),
+                onClick = { onConfirm(categorize) },
+            ) { Text(s[StringKey.Import]) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+    )
+}
+
+/** The first 20 lines of a list, then "… and N more". */
+@Composable
+private fun LineList(lines: List<String>) {
+    val s = strings()
+    lines.take(20).forEach { line ->
+        Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    if (lines.size > 20) {
+        Text(s.format(StringKey.AndMore, lines.size - 20), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }

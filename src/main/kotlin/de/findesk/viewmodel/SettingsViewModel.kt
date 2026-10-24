@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.math.BigDecimal
 import java.time.LocalDateTime
-import java.util.regex.PatternSyntaxException
 
 data class AuditEntry(val timestamp: LocalDateTime, val action: String, val details: String?)
 
@@ -55,6 +54,8 @@ data class SettingsState(
     /** Profile running now (null = default) and the one that opens at the next start. */
     val openProfile: String? = null,
     val nextProfile: String? = null,
+    /** Rule file chosen for import, waiting for confirmation in the preview dialog. */
+    val ruleImport: de.findesk.importer.RuleImportPreview? = null,
     val isBusy: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -68,6 +69,7 @@ class SettingsViewModel(
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
+    private val ruleImportService: de.findesk.importer.RuleImportService = de.findesk.importer.RuleImportService(),
     private val dataDirectory: String = de.findesk.util.AppPaths.dataDir.absolutePath,
     private val isOcrAvailable: Boolean = false,
     private val backupService: de.findesk.data.backup.BackupService = de.findesk.data.backup.BackupService(java.io.File(dataDirectory)),
@@ -186,16 +188,7 @@ class SettingsViewModel(
         refresh()
     }
 
-    fun validateRule(pattern: String): String? = when {
-        pattern.isBlank() -> AppStrings[StringKey.ErrorPatternRequired]
-
-        else -> try {
-            pattern.toRegex()
-            null
-        } catch (e: PatternSyntaxException) {
-            AppStrings.format(StringKey.ErrorInvalidRegex, e.description)
-        }
-    }
+    fun validateRule(pattern: String): String? = de.findesk.repository.validateRulePattern(pattern)
 
     fun saveRule(
         id: Int?,
@@ -239,6 +232,48 @@ class SettingsViewModel(
         ruleRepository.delete(id)
         auditLogRepository.log("DELETE_RULE", "user", "Deleted rule $id")
         refresh()
+    }
+
+    /** Writes the current rules (auto-apply and manual) to a shareable, reviewable rule file. */
+    fun exportRules(file: java.io.File): Job = launchSafely(onError) {
+        val written = ruleImportService.export(file)
+        val skipped = de.findesk.importer.RuleFile.skippedRules(ruleRepository.findAllItems())
+        _state.update {
+            it.copy(
+                message = if (skipped == 0) {
+                    AppStrings.format(StringKey.MessageRulesExported, written)
+                } else {
+                    AppStrings.format(StringKey.MessageRulesExportSkipped, written, skipped)
+                },
+            )
+        }
+    }
+
+    /** Step 1: parse and classify the rule file; the preview dialog shows what would change. Nothing is written yet. */
+    fun chooseRuleImport(file: java.io.File): Job = launchSafely(onError) {
+        if (file.length() > de.findesk.importer.RuleFile.MAX_FILE_BYTES) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorRuleFileTooLarge]) }
+            return@launchSafely
+        }
+        val preview = ruleImportService.preview(de.findesk.importer.RuleFile.parse(file.readBytes()))
+        _state.update { it.copy(ruleImport = preview, error = null, message = null) }
+    }
+
+    /** Step 2: confirmed. Applies the preview to the database and marks the import done. */
+    fun confirmRuleImport(categorize: Boolean): Job = launchSafely(onError) {
+        val preview = _state.value.ruleImport ?: return@launchSafely
+        val result = ruleImportService.apply(preview, categorize)
+        refresh()
+        _state.update {
+            it.copy(
+                ruleImport = null,
+                message = AppStrings.format(StringKey.MessageRulesImported, result.rules, result.categories, result.categorized),
+            )
+        }
+    }
+
+    fun cancelRuleImport() {
+        _state.update { it.copy(ruleImport = null) }
     }
 
     fun createBackup(target: java.io.File): Job {
