@@ -21,6 +21,16 @@ data class ImportedBooking(
 
 enum class StatementFormat(val label: String) { CSV("CSV"), CAMT053("CAMT XML"), MT940("MT940"), OFX("OFX"), QIF("QIF"), XLSX("XLSX") }
 
+/** The statement's closing balance, already checked against its entries. */
+data class ClosingBalance(
+    val amount: BigDecimal,
+    val date: LocalDate,
+    /** ISO code from the balance, or null when the file doesn't say. */
+    val currency: String?,
+    /** Number of pending entries whose sum was taken out of the bank's figure (0 when none). */
+    val pendingExcluded: Int = 0,
+)
+
 /** Result of reading a file: bookings plus what could be detected about it. */
 data class ParsedStatement(
     val format: StatementFormat,
@@ -37,6 +47,8 @@ data class ParsedStatement(
     val csv: CsvLayout? = null,
     /** Message type for display, e.g. "CAMT.052" (null when the format has no variants). */
     val formatDetail: String? = null,
+    /** CAMT only: the report's closing balance when it matches the file's entries. */
+    val closingBalance: ClosingBalance? = null,
 ) {
     /** Format label for the preview and the audit log, e.g. "CAMT.052 XML" or "CSV". */
     val formatLabel: String get() = formatDetail?.let { "$it XML" } ?: format.label

@@ -645,9 +645,11 @@ private fun ImportDialog(
     onImport: (Boolean) -> Unit,
 ) {
     val st = preview.statement
-    val hasBalances = st.bookings.any { it.balanceAfter != null }
-    var updateBalance by remember(preview.file, preview.accountId, preview.balanceUpdateAllowed) { mutableStateOf(preview.balanceUpdateAllowed) }
     val account = accounts.firstOrNull { it.id == preview.accountId }
+    // Closing balances only apply to the selected account when their currencies match, or the file doesn't say
+    val closingBalance = st.closingBalance?.takeIf { account == null || it.currency == null || it.currency == account.currency }
+    val hasBalances = st.bookings.any { it.balanceAfter != null } || closingBalance != null
+    var updateBalance by remember(preview.file, preview.accountId, preview.balanceUpdateAllowed) { mutableStateOf(preview.balanceUpdateAllowed) }
     val s = strings()
 
     AlertDialog(
@@ -742,7 +744,20 @@ private fun ImportDialog(
                 if (hasBalances && preview.balanceUpdateAllowed) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = updateBalance, onCheckedChange = { updateBalance = it })
-                        Text(s[StringKey.SetAccountBalance])
+                        val runningBalances = st.bookings.any { it.balanceAfter != null }
+                        val closing = closingBalance
+                        Text(
+                            if (runningBalances) {
+                                s[StringKey.SetAccountBalance]
+                            } else {
+                                val money = Formats.money(closing!!.amount, closing.currency ?: account?.currency ?: "EUR")
+                                if (closing.pendingExcluded > 0) {
+                                    s.format(StringKey.SetAccountBalanceClosingPending, money, closing.pendingExcluded)
+                                } else {
+                                    s.format(StringKey.SetAccountBalanceClosing, money)
+                                }
+                            },
+                        )
                     }
                 } else if (hasBalances && account != null) {
                     Text(

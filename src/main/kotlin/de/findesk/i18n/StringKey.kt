@@ -341,6 +341,8 @@ enum class StringKey {
     ColumnN,
     AndMore,
     SetAccountBalance,
+    SetAccountBalanceClosing,
+    SetAccountBalanceClosingPending,
     NewerBookingsUnchanged,
     BookingsSkippedHint,
     Importing,
