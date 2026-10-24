@@ -29,6 +29,7 @@ import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
+import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BudgetStatus
@@ -128,7 +129,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     state.upcoming.forEach { r ->
                         LedgerRow(
                             date = Formats.date(r.nextDate),
-                            title = r.name,
+                            title = BankText.displayPartner(r.name) ?: r.name,
                             meta = s.cadence(r.cadence) + (r.categoryName?.let { " · $it" } ?: "") + if (r.fixedAmount) "" else " · ${s[StringKey.AmountVaries]}",
                             amount = (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, r.currency, signed = true),
                             isExpense = !r.isIncome,
@@ -176,7 +177,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                     ) {
                         LedgerRow(
                             date = Formats.date(txn.date),
-                            title = txn.description,
+                            title = BankText.displayDescription(txn),
                             meta = txn.categoryName ?: s[StringKey.Uncategorized],
                             amount = Formats.money(txn.amount, txn.currency, signed = true),
                             isExpense = txn.isExpense,

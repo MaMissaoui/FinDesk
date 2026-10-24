@@ -27,6 +27,7 @@ import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
+import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.Period
@@ -275,7 +276,7 @@ private fun CategoryAnalysisTab(report: ReportService.TaxReport, linkablePeriod:
                 report.topVendors.forEachIndexed { index, (vendor, amount) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${index + 1}.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
-                        Text(vendor, modifier = Modifier.weight(1f))
+                        Text(BankText.displayPartner(vendor) ?: vendor, modifier = Modifier.weight(1f))
                         Text(Formats.money(amount, report.currency), fontWeight = FontWeight.SemiBold)
                     }
                     if (index < report.topVendors.size - 1) HorizontalDivider()

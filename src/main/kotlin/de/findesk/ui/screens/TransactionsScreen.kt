@@ -48,6 +48,7 @@ import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceColor
 import de.findesk.util.AccountGroupView
+import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
@@ -421,10 +422,14 @@ private fun TransactionRow(
     var categoryMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf(false) }
     val s = strings()
+    // Display only: the list shows cleaned bank text, the stored purpose and partner stay raw (see BankText)
+    val title = BankText.displayDescription(txn)
+    val secondary = BankText.displayPurpose(txn.purpose).takeIf { txn.partnerName != null }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .semantics { contentDescription = listOfNotNull(title, secondary).joinToString(" · ") }
             .clickable(
                 onClick = onOpen,
                 onClickLabel = s[StringKey.OpenDetails],
@@ -453,13 +458,12 @@ private fun TransactionRow(
         }
         Column(Modifier.weight(3f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(txn.description, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isNew) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isNew) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (txn.documentCount > 0) {
                     Spacer(Modifier.width(6.dp))
                     Icon(AppIcons.AttachFile, contentDescription = s.format(StringKey.DocumentsCount, txn.documentCount), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                 }
             }
-            val secondary = if (txn.partnerName != null) txn.purpose else null
             if (!secondary.isNullOrBlank()) {
                 Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
