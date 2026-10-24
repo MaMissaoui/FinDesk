@@ -114,4 +114,108 @@ class RunningBalanceTest {
             assertEquals(endOfDay, entries[newestThatDay.id]!!.balance, "end of $day")
         }
     }
+
+    // Day 2026-10-01 rows in list order -25.32, -858.00, -682.05 (NOT the bank's booking order), created so that
+    // ids sort into that list order (the row that comes last in the list is created first).
+    private val oct1 = LocalDate.of(2026, 10, 1)
+    private val sep30 = LocalDate.of(2026, 9, 30)
+
+    /** The day-reconcile base example: rows and the expected list given to compute. */
+    private fun baseExample(): Pair<List<TransactionItem>, Map<TransactionItem, String>> {
+        val minus1250 = txn(sep30, "-1250.00", balanceAfter = "3594.76")
+        val minus682 = txn(oct1, "-682.05", balanceAfter = "2887.39")
+        val minus858 = txn(oct1, "-858.00", balanceAfter = "2029.39")
+        val minus25 = txn(oct1, "-25.32", balanceAfter = "3569.44")
+        return listOf(minus25, minus858, minus682, minus1250) to mapOf(
+            minus25 to "-25.32",
+            minus682 to "-682.05",
+            minus858 to "-858.00",
+            minus1250 to "-1250.00",
+        )
+    }
+
+    @Test
+    fun `a day whose list order differs from the bank's booking order is placed arithmetically`() {
+        val (newestFirst, rows) = baseExample()
+        val minus25 = rows.keys.first { it.amount == BigDecimal("-25.32") }
+        val minus858 = rows.keys.first { it.amount == BigDecimal("-858.00") }
+        val minus682 = rows.keys.first { it.amount == BigDecimal("-682.05") }
+        val minus1250 = rows.keys.first { it.amount == BigDecimal("-1250.00") }
+
+        val entries = RunningBalance.compute(BigDecimal("2029.39"), newestFirst)
+
+        assertTrue(entries.values.all { it.bankDifference == null })
+        assertEquals(BigDecimal("2029.39"), entries[minus25.id]!!.balance)
+        assertEquals(BigDecimal("2054.71"), entries[minus858.id]!!.balance)
+        assertEquals(BigDecimal("2912.71"), entries[minus682.id]!!.balance)
+        assertEquals(BigDecimal("3594.76"), entries[minus1250.id]!!.balance)
+        val history = BalanceHistory.fromRunning(newestFirst, entries, sep30, oct1)
+        assertEquals(
+            listOf(sep30 to BigDecimal("3594.76"), oct1 to BigDecimal("2029.39")),
+            history,
+        )
+    }
+
+    @Test
+    fun `a day reconciles from its start balance even when its end balance matches no bank value`() {
+        val minus1250 = txn(sep30, "-1250.00", balanceAfter = "3594.76")
+        val minus682 = txn(oct1, "-682.05", balanceAfter = "2887.39")
+        val minus858 = txn(oct1, "-858.00", balanceAfter = "2029.39")
+        val minus25 = txn(oct1, "-25.32", balanceAfter = "3569.44")
+        val plus100 = txn(oct1, "100.00")
+
+        val entries = RunningBalance.compute(BigDecimal("2129.39"), listOf(plus100, minus25, minus858, minus682, minus1250))
+
+        assertTrue(entries.values.all { it.bankDifference == null })
+        assertEquals(BigDecimal("2129.39"), entries[plus100.id]!!.balance)
+        assertEquals(BigDecimal("2029.39"), entries[minus25.id]!!.balance)
+        assertEquals(BigDecimal("2054.71"), entries[minus858.id]!!.balance)
+        assertEquals(BigDecimal("2912.71"), entries[minus682.id]!!.balance)
+        assertEquals(BigDecimal("3594.76"), entries[minus1250.id]!!.balance)
+    }
+
+    @Test
+    fun `a day reconciles when a bank value equals its end balance`() {
+        val minus1250 = txn(sep30, "-1250.00", balanceAfter = "3594.76")
+        val plus100 = txn(oct1, "100.00")
+        val minus682 = txn(oct1, "-682.05", balanceAfter = "2987.39")
+        val minus858 = txn(oct1, "-858.00", balanceAfter = "2129.39")
+        val minus25 = txn(oct1, "-25.32", balanceAfter = "3669.44")
+
+        val entries = RunningBalance.compute(BigDecimal("2129.39"), listOf(minus25, minus858, minus682, plus100, minus1250))
+
+        assertTrue(entries.values.all { it.bankDifference == null })
+        assertEquals(BigDecimal("3594.76"), entries[minus1250.id]!!.balance)
+    }
+
+    @Test
+    fun `a fully bank-covered day with a real gap no longer reconciles from one matching end`() {
+        // Base example with the -682.05 booking removed. With both ends of the 10-01 bank chain known, only the END
+        // matches (2029.39), but S = 2912.71 matches neither 3569.44 + 25.32 nor 2029.39 + 858.00: the day does not
+        // reconcile and the missing booking is flagged by bank differences instead.
+        val minus1250 = txn(sep30, "-1250.00", balanceAfter = "3594.76")
+        val minus858 = txn(oct1, "-858.00", balanceAfter = "2029.39")
+        val minus25 = txn(oct1, "-25.32", balanceAfter = "3569.44")
+
+        val entries = RunningBalance.compute(BigDecimal("2029.39"), listOf(minus25, minus858, minus1250))
+
+        assertTrue(
+            listOf(minus25, minus858).any { entries[it.id]!!.bankDifference != null },
+            "at least one 10-01 row is flagged with a bank difference",
+        )
+        val sum = entries.values.fold(BigDecimal.ZERO) { acc, entry -> acc + (entry.bankDifference ?: BigDecimal.ZERO) }
+        assertEquals(BigDecimal("682.05"), sum)
+    }
+
+    @Test
+    fun `a fully bank-covered day where only the end matches keeps a bank difference`() {
+        // Every booking has a bank balance and both ends must match: E = 100.00 matches, but S = 130.00 matches
+        // neither 150.00 + 20.00 nor 100.00 + 10.00, so the day does not reconcile.
+        val minus20 = txn(LocalDate.of(2026, 10, 1), "-20.00", balanceAfter = "150.00")
+        val minus10 = txn(LocalDate.of(2026, 10, 1), "-10.00", balanceAfter = "100.00")
+
+        val entries = RunningBalance.compute(BigDecimal("100.00"), listOf(minus10, minus20))
+
+        assertTrue(entries.values.any { it.bankDifference != null })
+    }
 }
