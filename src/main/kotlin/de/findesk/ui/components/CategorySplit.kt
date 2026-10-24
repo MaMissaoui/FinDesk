@@ -134,7 +134,7 @@ private fun SplitRow(slice: CategoryShare, percent: Int, currency: String, onSel
             percentText,
             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
             textAlign = TextAlign.End,
-            modifier = Modifier.width(64.dp),
+            modifier = Modifier.width(48.dp),
         )
         Text(
             amountText,
@@ -173,7 +173,7 @@ private fun MutedRow(label: String, percent: String, amount: String) {
             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
-            modifier = Modifier.width(64.dp),
+            modifier = Modifier.width(48.dp),
         )
         Text(
             amount,
