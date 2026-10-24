@@ -84,6 +84,8 @@ fun CategorySplit(
                     label = s.format(StringKey.CategorySplitMore, rest.size),
                     percent = Formats.percent(restPercent / 100.0),
                     amount = Formats.money(rest.fold(BigDecimal.ZERO) { acc, slice -> acc + slice.amount }, currency),
+                    // Clickable rows end in a chevron; the "more" row keeps its place so the columns line up
+                    chevronSpace = onSelect != null,
                 )
             }
         }
@@ -154,11 +156,11 @@ private fun SplitRow(slice: CategoryShare, percent: Int, currency: String, onSel
 }
 
 @Composable
-private fun MutedRow(label: String, percent: String, amount: String) {
+private fun MutedRow(label: String, percent: String, amount: String, chevronSpace: Boolean) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
     ) {
         Text(
             label,
@@ -182,6 +184,7 @@ private fun MutedRow(label: String, percent: String, amount: String) {
             textAlign = TextAlign.End,
             modifier = Modifier.width(96.dp),
         )
+        if (chevronSpace) Spacer(Modifier.width(20.dp))
     }
 }
 
