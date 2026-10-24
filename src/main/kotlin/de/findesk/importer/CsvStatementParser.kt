@@ -17,11 +17,19 @@ import java.time.format.DateTimeParseException
  */
 object CsvStatementParser {
     private val WINDOWS_1252: Charset = Charset.forName("windows-1252")
+    private val UTF_16LE: Charset = Charset.forName("UTF-16LE")
+    private val UTF_16BE: Charset = Charset.forName("UTF-16BE")
     private val BOM = 0xFEFF.toChar().toString()
 
     // Header aliases, normalised (lowercase, umlauts folded, non-alphanumerics removed). Order matters: first match wins.
-    private val DATE = listOf("buchungstag", "buchungsdatum", "buchung", "datum", "bookingdate", "date", "transactiondate")
-    private val VALUE_DATE = listOf("valutadatum", "valuta", "wertstellung", "wertstellungsdatum", "valuedate")
+    private val DATE = listOf(
+        "buchungstag", "buchungsdatum", "buchung",
+        // Card statements (HVB "Eingangstag", Bank Norwegian "BookDate"): the posting date wins, so date aliases
+        // for the document/purchase date ("belegdatum", "transactiondate") only match later.
+        "eingangstag", "bookdate",
+        "datum", "bookingdate", "date", "transactiondate",
+    )
+    private val VALUE_DATE = listOf("valutadatum", "valuta", "wertstellung", "wertstellungsdatum", "valuedate", "belegdatum")
     private val AMOUNT = listOf("betrag", "betrageur", "betrageuro", "umsatz", "umsatzineur", "amount", "amounteur", "betragineur")
     private val DEBIT = listOf("soll", "sollbetrag", "ausgang", "debit", "lastschrift", "belastung")
     private val CREDIT = listOf("haben", "habenbetrag", "eingang", "credit", "gutschrift")
@@ -32,7 +40,7 @@ object CsvStatementParser {
     private val PAYER = listOf("zahlungspflichtiger", "zahlungspflichtigerin", "zahlungspflichtige")
     private val PENDING_MARKERS = setOf("umsatz vorgemerkt", "vorgemerkt", "pending", "ausstehend", "nicht gebucht")
     private val PARTNER_IBAN = listOf("ibanzahlungsbeteiligter", "kontonummeriban", "iban", "kontonummer", "partneriban", "counterpartyiban")
-    private val PURPOSE = listOf("verwendungszweck", "purpose", "reference", "beschreibung", "description", "buchungstext", "umsatzart", "vorgang")
+    private val PURPOSE = listOf("verwendungszweck", "purpose", "reference", "beschreibung", "description", "buchungstext", "umsatzart", "vorgang", "textverwendungszweck", "text")
     private val CURRENCY = listOf("waehrung", "currency", "whrg")
     private val BALANCE = listOf("saldonachbuchung", "saldo", "kontostand", "balance")
 
@@ -46,13 +54,24 @@ object CsvStatementParser {
         val lines = clean.lines()
         val delimiter = detectDelimiter(lines)
         val rows = splitRecords(clean, delimiter)
+        return parseRows(rows, override, StatementFormat.CSV, charset.name(), delimiter)
+    }
+
+    /** Everything [parse] does after decoding and [splitRecords]; also used for XLSX sheets (no delimiter splitting). */
+    internal fun parseRows(
+        rows: List<List<String>>,
+        override: CsvMapping?,
+        format: StatementFormat,
+        charsetName: String,
+        delimiter: Char,
+    ): ParsedStatement {
         val headerIndex = findHeader(rows)
         val headers = rows.getOrNull(headerIndex).orEmpty().map { it.trim() }
         val mapping = override ?: detectMapping(headers)
-        val layout = CsvLayout(delimiter, charset.name(), headerIndex + 1, headers, mapping)
+        val layout = CsvLayout(delimiter, charsetName, headerIndex + 1, headers, mapping)
 
         if (!mapping.isComplete) {
-            return ParsedStatement(StatementFormat.CSV, emptyList(), accountIban = preambleIban(rows.take(headerIndex)), skipped = listOf("Date and amount columns not recognised"), csv = layout)
+            return ParsedStatement(format, emptyList(), accountIban = preambleIban(rows.take(headerIndex)), skipped = listOf("Date and amount columns not recognised"), csv = layout)
         }
 
         val bookings = mutableListOf<ImportedBooking>()
@@ -72,7 +91,7 @@ object CsvStatementParser {
             }
         }
         return ParsedStatement(
-            format = StatementFormat.CSV,
+            format = format,
             bookings = bookings,
             accountIban = preambleIban(rows.take(headerIndex)),
             skipped = skipped,
@@ -138,12 +157,44 @@ object CsvStatementParser {
         return null
     }
 
-    /** UTF-8 if the bytes are valid UTF-8, otherwise Windows-1252 (what most German bank exports use). */
-    private fun decode(bytes: ByteArray): Pair<String, Charset> = try {
-        val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
-        decoder.decode(ByteBuffer.wrap(bytes)).toString() to Charsets.UTF_8
-    } catch (e: CharacterCodingException) {
-        String(bytes, WINDOWS_1252) to WINDOWS_1252
+    /**
+     * UTF-8 if the bytes are valid UTF-8, otherwise Windows-1252 (what most German bank exports use).
+     * UTF-16 is detected first, before the strict UTF-8 attempt: card-export CSVs are UTF-16 without a BOM,
+     * which would "decode" as UTF-8 with NUL bytes between the characters and then fail to map anything.
+     */
+    internal fun decode(bytes: ByteArray): Pair<String, Charset> {
+        utf16Charset(bytes)?.let { return String(bytes, it) to it }
+        return try {
+            val decoder = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
+            decoder.decode(ByteBuffer.wrap(bytes)).toString() to Charsets.UTF_8
+        } catch (e: CharacterCodingException) {
+            String(bytes, WINDOWS_1252) to WINDOWS_1252
+        }
+    }
+
+    /** UTF-16LE/BE by BOM or (without one) by where the NUL bytes sit: every second byte is 0. */
+    internal fun utf16Charset(bytes: ByteArray): Charset? {
+        if (bytes.size >= 2) {
+            if (bytes[0] == 0xFF.toByte() && bytes[1] == 0xFE.toByte()) return UTF_16LE
+            if (bytes[0] == 0xFE.toByte() && bytes[1] == 0xFF.toByte()) return UTF_16BE
+        }
+        val n = minOf(bytes.size, 512)
+        if (n < 2) return null
+        var evenZeros = 0
+        var oddZeros = 0
+        for (i in 0 until n) {
+            if (bytes[i] == 0.toByte()) if (i % 2 == 0) evenZeros++ else oddZeros++
+        }
+        val evenTotal = n - n / 2
+        val oddTotal = n / 2
+        // LE: NULs on the odd (high-byte) indexes; BE: on the even ones
+        val lowHalfZero = oddZeros * 100 >= 30 * oddTotal && evenZeros * 100 < 5 * evenTotal
+        val mirrorZero = evenZeros * 100 >= 30 * evenTotal && oddZeros * 100 < 5 * oddTotal
+        return when {
+            lowHalfZero -> UTF_16LE
+            mirrorZero -> UTF_16BE
+            else -> null
+        }
     }
 
     private fun detectDelimiter(lines: List<String>): Char {
@@ -186,7 +237,11 @@ object CsvStatementParser {
         val payer = find(PAYER)
         val partner = find(PARTNER)
         val purpose = find(PURPOSE)
-        val currency = find(CURRENCY)
+        var currency = find(CURRENCY)
+        // With both an "Amount" and a "Currency Amount" column (Bank Norwegian card exports) the "Currency" column
+        // describes the original purchase amount, not the booked one; no currency column is mapped then, so the
+        // booking takes the account currency.
+        if (currency != null && norm.any { it == "currencyamount" } && norm.any { it == "amount" }) currency = null
         return CsvMapping(
             date = date,
             valueDate = valueDate,

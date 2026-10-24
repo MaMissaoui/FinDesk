@@ -42,7 +42,7 @@ class StatementImportService(
 
     companion object {
         const val MAX_FILE_BYTES = 100L * 1024 * 1024
-        val EXTENSIONS = setOf("csv", "txt", "xml", "zip", "sta", "mt940", "ofx", "qfx", "qif")
+        val EXTENSIONS = setOf("csv", "txt", "xml", "zip", "sta", "mt940", "ofx", "qfx", "qif", "xlsx")
     }
 
     /** Reads and parses a file. [csvMapping] overrides the detected CSV column mapping. */
@@ -56,6 +56,7 @@ class StatementImportService(
             ext == "ofx" || ext == "qfx" -> OfxParser.parse(bytes)
             ext == "qif" -> QifParser.parse(bytes)
             ext == "sta" || ext == "mt940" -> Mt940Parser.parse(bytes)
+            ext == "xlsx" -> CsvStatementParser.parseRows(XlsxReader.firstSheetRows(bytes), csvMapping, StatementFormat.XLSX, "XLSX", ';')
             ext == "csv" -> CsvStatementParser.parse(bytes, csvMapping)
             Mt940Parser.looksLike(bytes) -> Mt940Parser.parse(bytes)
             CamtParser.looksLikeCamt(bytes) -> CamtParser.parse(bytes)
