@@ -83,6 +83,35 @@ data class ImportPreview(
     val balanceUpdateAllowed: Boolean = false,
 )
 
+/** One booking the rules would recategorize (see [TransactionsViewModel.previewReapplyRules]). */
+data class ReapplyChange(
+    val transactionId: Int,
+    /** The booking's category at preview time; null when it was uncategorized. */
+    val fromCategoryId: Int?,
+    /** The category the highest-priority matching rule assigns. */
+    val toCategoryId: Int,
+)
+
+/** All bookings a re-apply would move from one category to another: one checkbox row of the preview dialog. */
+data class ReapplyGroup(
+    val fromCategoryId: Int?,
+    val fromName: String,
+    val toCategoryId: Int,
+    val toName: String,
+    val count: Int,
+    /** Sum of the bookings' amounts in [currency], but null when they do not all use the primary currency. */
+    val sum: BigDecimal?,
+    val currency: String,
+)
+
+/** The exact change list a re-apply preview computed; [TransactionsViewModel.confirmReapplyRules] applies it as is. */
+data class ReapplyPreview(
+    val changes: List<ReapplyChange>,
+    val groups: List<ReapplyGroup>,
+    /** The bookings the preview checked (exactly what the list showed at action time). */
+    val shownCount: Int,
+)
+
 data class TransactionsState(
     val transactions: List<TransactionItem> = emptyList(),
     val categories: List<CategoryItem> = emptyList(),
@@ -127,6 +156,10 @@ data class TransactionsState(
     /** A manual entry identical to one already booked that day, waiting for the user to confirm it (see [TransactionsViewModel.confirmDuplicate]). */
     val pendingDuplicate: ManualEntry? = null,
     val isImporting: Boolean = false,
+    /** The rules' preview of the shown bookings, waiting for the user's confirmation in the dialog. */
+    val reapplyPreview: ReapplyPreview? = null,
+    /** Whether [TransactionsViewModel.undoReapplyRules] still has the last re-apply's previous categories (memory only). */
+    val canUndoReapply: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     val message: String? = null,
@@ -604,6 +637,90 @@ class TransactionsViewModel(
         auditLogRepository.log("AUTO_CATEGORIZE", "user", "Auto-categorized $updated of ${uncategorized.size} transactions")
         refresh()
         _state.update { it.copy(message = AppStrings.format(StringKey.MessageAutoCategorized, updated, uncategorized.size)) }
+    }
+
+    /** Every booking the last [confirmReapplyRules] changed, with its previous and new category; it lives only in memory. */
+    private var reapplyUndo: List<ReapplyChange> = emptyList()
+
+    /**
+     * Computes the re-apply preview for exactly the bookings the list shows with the current filters ("Auto-categorize"
+     * in reverse): for each booking, the highest-priority matching rule's category wins, and only a category other
+     * than the booking's own counts as a change. No match leaves a booking alone; a category is never set to null.
+     */
+    fun previewReapplyRules(): Job = launchSafely(onError) {
+        val items = transactionRepository.findItems(currentFilter())
+        val matcher = ruleRepository.matcher()
+        val changes = items.mapNotNull { txn ->
+            val matched = matcher.categoryFor(txn.purpose, txn.partnerName, txn.amount)
+            if (matched != null && matched != txn.categoryId) ReapplyChange(txn.id, txn.categoryId, matched) else null
+        }
+        if (changes.isEmpty()) {
+            _state.update { it.copy(reapplyPreview = null, message = AppStrings[StringKey.MessageReapplyNothing]) }
+            return@launchSafely
+        }
+        val primary = Currencies.primary(settingsRepository)
+        val names = categoryRepository.findAllItems().associate { it.id to it.name }
+        val uncategorizedName = AppStrings[StringKey.Uncategorized]
+        val byId = items.associateBy { it.id }
+        val groups = changes
+            .groupBy { it.fromCategoryId to it.toCategoryId }
+            .map { (pair, same) ->
+                val bookings = same.mapNotNull { byId[it.transactionId] }
+                val sum = if (bookings.all { it.currency == primary }) bookings.fold(BigDecimal.ZERO) { acc, b -> acc + b.amount } else null
+                ReapplyGroup(
+                    fromCategoryId = pair.first,
+                    fromName = pair.first?.let { names[it] ?: it.toString() } ?: uncategorizedName,
+                    toCategoryId = pair.second,
+                    toName = names[pair.second] ?: pair.second.toString(),
+                    count = same.size,
+                    sum = sum,
+                    currency = primary,
+                )
+            }
+            .sortedWith(compareByDescending<ReapplyGroup> { it.count }.thenBy { it.fromName }.thenBy { it.toName })
+        _state.update { it.copy(reapplyPreview = ReapplyPreview(changes, groups, items.size)) }
+    }
+
+    /** Closes the preview dialog without changing anything. */
+    fun cancelReapplyRules() {
+        _state.update { it.copy(reapplyPreview = null) }
+    }
+
+    /**
+     * Applies exactly the stored preview's changes minus the [excluded] groups; the matches are not recomputed, so a
+     * rule added after the preview changes nothing here. A booking whose category changed since the preview (by hand)
+     * is skipped, not overwritten; the old categories of the rows that did change are kept for [undoReapplyRules].
+     */
+    fun confirmReapplyRules(excluded: Set<Pair<Int?, Int>> = emptySet()): Job = launchSafely(onError) {
+        val preview = _state.value.reapplyPreview ?: return@launchSafely
+        _state.update { it.copy(reapplyPreview = null) }
+        val current = transactionRepository.findItems(TransactionFilter()).associate { it.id to it.categoryId }
+        val changes: List<ReapplyChange> = preview.changes
+            .filter { change -> (change.fromCategoryId to change.toCategoryId) !in excluded }
+            // A booking categorized by hand since the preview keeps its category; everything else moves as previewed
+            .filter { change -> current[change.transactionId] == change.fromCategoryId }
+        val count = if (changes.isEmpty()) 0 else transactionRepository.updateCategories(changes.associate { it.transactionId to it.toCategoryId })
+        if (count > 0) {
+            reapplyUndo = changes
+            auditLogRepository.log("REAPPLY_RULES", "user", "Re-applied rules: $count bookings recategorized")
+        }
+        refresh()
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageReapplied, count), canUndoReapply = reapplyUndo.isNotEmpty()) }
+    }
+
+    /**
+     * Restores the previous categories of the last re-apply, including uncategorized bookings back to null. A booking
+     * moved again since (by hand) is no longer on the re-apply's category and keeps the newer choice.
+     */
+    fun undoReapplyRules(): Job = launchSafely(onError) {
+        if (reapplyUndo.isEmpty()) return@launchSafely
+        val current = transactionRepository.findItems(TransactionFilter()).associate { it.id to it.categoryId }
+        val previous = reapplyUndo.filter { current[it.transactionId] == it.toCategoryId }.associate { it.transactionId to it.fromCategoryId }
+        val count = if (previous.isEmpty()) 0 else transactionRepository.updateCategories(previous)
+        reapplyUndo = emptyList()
+        auditLogRepository.log("UNDO_REAPPLY_RULES", "user", "Undid re-applied rules: $count bookings")
+        refresh()
+        _state.update { it.copy(message = AppStrings.format(StringKey.MessageReapplyUndone, count), canUndoReapply = false) }
     }
 
     /** Exports exactly what is currently shown. */

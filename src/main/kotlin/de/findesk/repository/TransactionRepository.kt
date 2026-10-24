@@ -62,6 +62,13 @@ interface TransactionRepository {
     /** Inserts all [bookings] in one database transaction: all or none, and far faster than one commit per booking. */
     fun createAll(bookings: List<NewTransaction>): Int
     fun updateCategory(id: Int, categoryId: Int?): Transaction?
+
+    /**
+     * One batch recategorization: applies every given category in one `transaction { }` (all or none) and returns
+     * the number of rows that actually changed. A booking already sitting on its target category is skipped,
+     * not overwritten.
+     */
+    fun updateCategories(changes: Map<Int, Int?>): Int
     fun delete(id: Int): Boolean
     fun findByHash(hash: String): Transaction?
 
@@ -155,6 +162,19 @@ class TransactionRepositoryImpl : TransactionRepository {
         Transaction.findById(id)?.apply {
             category = categoryId?.let { Category.findById(it) }
         }
+    }
+
+    override fun updateCategories(changes: Map<Int, Int?>): Int = transaction {
+        var updated = 0
+        changes.forEach { (id, categoryId) ->
+            val booking = Transaction.findById(id) ?: return@forEach
+            // A booking that already sits on its target would be a no-op write: skip it, so the count stays honest
+            if (booking.category?.id?.value != categoryId) {
+                booking.category = categoryId?.let { Category.findById(it) }
+                updated++
+            }
+        }
+        updated
     }
 
     override fun delete(id: Int): Boolean = transaction {

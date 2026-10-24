@@ -881,4 +881,36 @@ enum class StringKey {
 
     /** Add-bank dialog choice: an offline bank whose statements are imported from files only. */
     BankOfflineMode,
+
+    // Transactions: re-apply rules to shown bookings
+
+    /** Overflow menu action that re-categorizes the shown bookings from the rules again, with a preview first. */
+    ReapplyRules,
+
+    /** Title of the preview dialog. */
+    ReapplyRulesTitle,
+
+    /** Preview dialog: how many bookings would change, of how many shown. */
+    ReapplyRulesSummary,
+
+    /** Preview dialog: the recategorization also overwrites categories the user set by hand. */
+    ReapplyRulesWarning,
+
+    /** Confirm button; %1$d is the number of bookings in the ticked groups. */
+    ReapplyRulesConfirm,
+
+    /** Overflow menu action, shown only while an undo of the last re-apply is possible. */
+    UndoReapplyRules,
+
+    /** Status message when no shown booking would change. */
+    MessageReapplyNothing,
+
+    /** Status message after the re-apply: %d is the number of changed bookings. */
+    MessageReapplied,
+
+    /** Status message after the undo: %d is the number of restored bookings. */
+    MessageReapplyUndone,
+
+    /** Disabled hint on the re-apply action when the filters hide every booking. */
+    HintNothingShown,
 }
