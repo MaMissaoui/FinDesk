@@ -5,6 +5,7 @@ import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertNull
 import java.math.BigDecimal
 import java.time.LocalDate
 

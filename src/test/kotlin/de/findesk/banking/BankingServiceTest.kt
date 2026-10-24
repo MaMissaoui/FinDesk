@@ -4,6 +4,7 @@ import de.findesk.TestDatabase
 import de.findesk.repository.*
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BankingServiceTest {

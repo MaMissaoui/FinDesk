@@ -11,7 +11,9 @@ import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertNull
 import java.io.File
+import java.nio.file.Files
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DatabaseFactoryTest {
@@ -19,7 +21,7 @@ class DatabaseFactoryTest {
 
     @BeforeAll
     fun setup() {
-        tempDir = createTempDir("findesk-test")
+        tempDir = Files.createTempDirectory("findesk-test").toFile()
     }
 
     @AfterAll

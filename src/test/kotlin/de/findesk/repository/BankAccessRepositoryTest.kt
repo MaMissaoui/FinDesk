@@ -6,6 +6,8 @@ import de.findesk.data.table.BankAccessTable
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class BankAccessRepositoryTest {
