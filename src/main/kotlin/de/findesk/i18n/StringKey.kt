@@ -74,6 +74,12 @@ enum class StringKey {
     WelcomeDescription,
     AddAccount,
     TotalBalance,
+
+    /** First stat card: money on checking, savings and credit-card accounts (no loans, no depots). */
+    AvailableBalance,
+
+    /** [AvailableBalance]'s subtitle when loan accounts exist: the loans' balance and the total balance. */
+    LoansSubtitle,
     IncomeThisMonth,
     ExpensesThisMonth,
     PendingTasks,
@@ -515,6 +521,9 @@ enum class StringKey {
     Language,
     Categories,
     AddCategory,
+
+    /** Settings > categories: how many bookings use this category. */
+    CategoryUsage,
 
     /** Colour swatch content description in the category dialog: "Colour %1$d of %2$d". */
     ColourSwatch,

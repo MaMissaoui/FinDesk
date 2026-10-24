@@ -47,6 +47,15 @@ data class DashboardState(
     /** Currency of every total and chart below; other currencies are only listed in [otherBalances]. */
     val currency: String = Currencies.DEFAULT,
     val totalBalance: BigDecimal = BigDecimal.ZERO,
+    /**
+     * Money on checking, savings and credit-card accounts (a card's negative balance is money owed and reduces
+     * it): what is available to spend, without the loans' balances that [totalBalance] adds.
+     */
+    val availableBalance: BigDecimal = BigDecimal.ZERO,
+    /** Sum of the loan accounts' balances; only shown when [hasLoans] says there are loans at all. */
+    val loanBalance: BigDecimal = BigDecimal.ZERO,
+    /** Whether the accounts include loans, so the balance card can show what they do to [totalBalance]. */
+    val hasLoans: Boolean = false,
     /** Balances of accounts in other currencies, per currency (never added to [totalBalance]). */
     val otherBalances: Map<String, BigDecimal> = emptyMap(),
     val monthlyIncome: BigDecimal = BigDecimal.ZERO,
@@ -95,6 +104,9 @@ class DashboardViewModel(
             val currency = Currencies.primary(settingsRepository)
             val accounts = accountRepository.findAllItems()
             val balances = Currencies.totals(accounts, currency, { it.currency }, { it.balance })
+            // Loans are money owed and depots are neither, so only the other account types are money available to spend
+            val availableBalance = Currencies.totals(accounts.filter { it.accountType != LOAN_TYPE && it.accountType != DEPOT_TYPE }, currency, { it.currency }, { it.balance })[currency] ?: BigDecimal.ZERO
+            val loanBalance = Currencies.totals(accounts.filter { it.accountType == LOAN_TYPE }, currency, { it.currency }, { it.balance })[currency] ?: BigDecimal.ZERO
             val recent = transactionRepository.findItems(limit = 8)
             // One query covering both the 6-month chart and the year-to-date tax chart
             val window = transactionRepository.findItems(
@@ -117,6 +129,9 @@ class DashboardViewModel(
             _state.value = DashboardState(
                 currency = currency,
                 totalBalance = balances[currency] ?: BigDecimal.ZERO,
+                availableBalance = availableBalance,
+                loanBalance = loanBalance,
+                hasLoans = accounts.any { it.accountType == LOAN_TYPE },
                 otherBalances = balances - currency,
                 monthlyIncome = thisMonth.filter { it.countsAsIncome }.sumOf { it.amount },
                 monthlyExpenses = thisMonthExpenses.sumOf { it.amount.abs() },
@@ -159,5 +174,11 @@ class DashboardViewModel(
          * whatever palette colour its label hashed to, e.g. the same purple as a "Donations" category.
          */
         const val UNCATEGORIZED_COLOR = "#757575"
+
+        // Loans are money owed and depots money invested: every other account type counts as available, so an
+        // account of an unexpected type still shows up somewhere
+        private const val LOAN_TYPE = "loan"
+
+        private const val DEPOT_TYPE = "depot"
     }
 }

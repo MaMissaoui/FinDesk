@@ -79,13 +79,24 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         item {
             // Equal heights even when a subtitle wraps in a narrow window
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Loans are money owed: the first card shows what is available, and squeezes the loans in as its subtitle
                 StatCard(
-                    s[StringKey.TotalBalance],
-                    Formats.money(state.totalBalance, state.currency),
+                    s[StringKey.AvailableBalance],
+                    Formats.money(state.availableBalance, state.currency),
                     AppIcons.AccountBalance,
                     PrimaryBlue,
                     Modifier.weight(1f).fillMaxHeight(),
-                    subtitle = state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
+                    // Loans and other currencies can both apply; neither line hides the other
+                    subtitle = listOfNotNull(
+                        state.hasLoans.takeIf { it }?.let {
+                            s.format(
+                                StringKey.LoansSubtitle,
+                                Formats.money(state.loanBalance, state.currency),
+                                Formats.money(state.totalBalance, state.currency),
+                            )
+                        },
+                        state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
+                    ).joinToString("\n").ifEmpty { null },
                 )
                 StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome, state.currency), AppIcons.ArrowDownward, Success, Modifier.weight(1f).fillMaxHeight())
                 StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses, state.currency), AppIcons.ArrowUpward, Error, Modifier.weight(1f).fillMaxHeight())
@@ -131,7 +142,7 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                             date = Formats.date(r.nextDate),
                             title = BankText.displayPartner(r.name) ?: r.name,
                             meta = s.cadence(r.cadence) + (r.categoryName?.let { " · $it" } ?: "") + if (r.fixedAmount) "" else " · ${s[StringKey.AmountVaries]}",
-                            amount = (if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, r.currency, signed = true),
+                            amount = upcomingAmount(r),
                             isExpense = !r.isIncome,
                         )
                     }
@@ -188,6 +199,12 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
         }
     }
 }
+
+/**
+ * The amount column for one upcoming payment. Varying amounts carry no "~" prefix: their meta line already says
+ * "amount varies", and a squiggle only ever referred to the median shown.
+ */
+internal fun upcomingAmount(payment: de.findesk.document.RecurringDetector.RecurringPayment): String = Formats.money(payment.typicalAmount, payment.currency, signed = true)
 
 @Composable
 internal fun GettingStartedCard(onAddBank: () -> Unit, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {

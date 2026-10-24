@@ -7,6 +7,7 @@ import de.findesk.data.table.TransactionsTable
 import de.findesk.model.CategoryItem
 import de.findesk.model.toItem
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
@@ -21,6 +22,13 @@ interface CategoryRepository {
     fun update(id: Int, name: String? = null, color: String? = null, budgetLimit: BigDecimal? = null, isTaxRelevant: Boolean? = null, isTransfer: Boolean? = null): Category?
     fun delete(id: Int): Boolean
     fun findAllItems(): List<CategoryItem>
+
+    /**
+     * How many bookings use each category: the `transactions` table grouped by `category_id`, in one query.
+     * Uncategorized bookings (a null category) are not included; a category every booking is gone from sums to 0 by
+     * default, not by a query of its own.
+     */
+    fun usageCounts(): Map<Int, Int>
 
     /** Sets or clears (null) the monthly budget. */
     fun setBudget(id: Int, budgetLimit: BigDecimal?): Boolean
@@ -85,6 +93,15 @@ class CategoryRepositoryImpl : CategoryRepository {
 
     override fun findAllItems(): List<CategoryItem> = transaction {
         Category.all().orderBy(CategoriesTable.name to org.jetbrains.exposed.sql.SortOrder.ASC).map { it.toItem() }
+    }
+
+    override fun usageCounts(): Map<Int, Int> = transaction {
+        val count = TransactionsTable.id.count()
+        TransactionsTable
+            .select(TransactionsTable.categoryId, count)
+            .groupBy(TransactionsTable.categoryId)
+            .mapNotNull { row -> row[TransactionsTable.categoryId]?.let { it.value to row[count].toInt() } }
+            .toMap()
     }
 
     override fun setBudget(id: Int, budgetLimit: BigDecimal?): Boolean = transaction {

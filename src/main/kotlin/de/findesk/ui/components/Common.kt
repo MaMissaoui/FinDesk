@@ -10,7 +10,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
@@ -155,8 +158,18 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, actions: @Composab
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun StatCard(title: String, value: String, icon: ImageVector?, color: Color, modifier: Modifier = Modifier, subtitle: String? = null) {
+fun StatCard(
+    title: String,
+    value: String,
+    icon: ImageVector?,
+    color: Color,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    /** Reports the layout of the value text, e.g. for tests; like @Composable Text's [onTextLayout]. */
+    onValueLayout: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null,
+) {
     FinDeskCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -169,7 +182,15 @@ fun StatCard(title: String, value: String, icon: ImageVector?, color: Color, mod
                 if (icon != null) Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            // One line that shrinks to fit below headlineSmall, at most down to 14.sp: a money amount is never
+            // wrapped or ellipsized, however wide the card is
+            BasicText(
+                text = value,
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.headlineSmall.fontSize),
+                onTextLayout = onValueLayout,
+            )
             // Always laid out, empty or not, so a card without one is as tall as its neighbours
             Text(subtitle.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
