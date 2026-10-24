@@ -29,10 +29,12 @@ object CamtParser {
         val bookings = mutableListOf<ImportedBooking>()
         val skipped = mutableListOf<String>()
         val accounts = mutableListOf<String>()
+        val messageTypes = mutableListOf<String>()
         var iban: String? = null
         var entryNo = 0
         documents.forEach { xml ->
             val root = parseXml(xml).documentElement
+            messageType(root)?.let { if (!messageTypes.contains(it)) messageTypes += it }
             root.descendants("Stmt").ifEmpty { root.descendants("Rpt") }.forEach { stmt ->
                 val acctId = stmt.child("Acct")?.child("Id")
                 val acctIban = acctId?.child("IBAN")?.textContent?.let(Iban::normalize)
@@ -50,8 +52,29 @@ object CamtParser {
                 }
             }
         }
-        return ParsedStatement(StatementFormat.CAMT053, bookings, accountIban = iban, accounts = accounts, skipped = skipped)
+        return ParsedStatement(
+            StatementFormat.CAMT053,
+            bookings,
+            accountIban = iban,
+            accounts = accounts,
+            skipped = skipped,
+            formatDetail = messageTypes.takeIf { it.isNotEmpty() }?.joinToString("/"),
+        )
     }
+
+    /** The document's message type, e.g. "CAMT.052", from the namespace, or the root's first child element. */
+    private fun messageType(root: Element): String? = Regex("camt\\.(\\d{3})\\.").find(root.namespaceURI ?: "")
+        ?.let { "CAMT.${it.groupValues[1]}" }
+        ?: root.firstChildElement()?.let { first ->
+            when (first.localName ?: first.nodeName) {
+                "BkToCstmrAcctRpt" -> "CAMT.052"
+                "BkToCstmrStmt" -> "CAMT.053"
+                "BkToCstmrDbtCdtNtfctn" -> "CAMT.054"
+                else -> null
+            }
+        }
+
+    private fun Element.firstChildElement(): Element? = (0 until childNodes.length).map { childNodes.item(it) }.filterIsInstance<Element>().firstOrNull()
 
     private fun Element.toBookings(): List<ImportedBooking> {
         // Only booked entries; pending ones (PDNG) would be imported twice once they book
