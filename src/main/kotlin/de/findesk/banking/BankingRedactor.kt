@@ -25,6 +25,16 @@ object BankingRedactor {
     /** Account numbers and bank codes: 6 or more digits on their own. */
     private val LONG_DIGITS = Regex("(?<![\\dA-Za-z])\\d{6,}(?![\\dA-Za-z])")
 
+    /**
+     * Account numbers printed in digit groups after an account label ("Konto 9876 5432", "Kto.-Nr. 1234 5678 90",
+     * "Account no. 9876 5432"). The label is required: unlabelled digit groups may be return codes ("9050 3076") or
+     * amounts. "konto" has no word boundary so compounds match (Empfängerkonto, Girokonto); "kto" has one, for "Oktober".
+     */
+    private val LABELLED_ACCOUNT = Regex(
+        "((?:konto(?:nummer|nr)?|\\bkto|\\baccount(?: no\\.?| number)?|\\bacct)(?:\\.?-?nr\\.?)?:?\\s+)((?>\\d{1,12}(?: \\d{1,12})*))(?![,.]?\\d)",
+        RegexOption.IGNORE_CASE,
+    )
+
     private val RETURN_CODE = Regex("(?<![\\w…])[39]\\d{3}(?!\\w)")
 
     /**
@@ -47,10 +57,15 @@ object BankingRedactor {
 
     /**
      * Masks account identifiers in bank text before it is stored, keeping the last 4 characters so the user can
-     * still tell accounts apart; return codes, dates and amounts stay readable.
+     * still tell accounts apart; return codes, dates and amounts stay readable. This includes account numbers
+     * printed in digit groups after an account label ("Konto 9876 5432").
      */
     fun maskAccountNumbers(text: String): String {
-        val result = SPACED_IBAN.replace(text) { "…${it.value.replace(" ", "").takeLast(4)}" }
+        var result = SPACED_IBAN.replace(text) { "…${it.value.replace(" ", "").takeLast(4)}" }
+        result = LABELLED_ACCOUNT.replace(result) { m ->
+            val digits = m.groupValues[2].replace(" ", "")
+            if (digits.length >= 6) m.groupValues[1] + "…" + digits.takeLast(4) else m.value
+        }
         return LONG_DIGITS.replace(result) { "…${it.value.takeLast(4)}" }
     }
 
