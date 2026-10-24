@@ -16,3 +16,7 @@ updates:
     groups:
       gradle-minor-and-patch:
         update-types: ["minor", "patch"]
+    # Major versions (Exposed 1.x, JUnit 6, ...) are migrations, done on purpose rather than as update PRs
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
