@@ -23,8 +23,8 @@ object DefaultCategories {
         "#CDDC39", // Lime
     )
 
-    /** Name key and colour, `(StringKey, color hex)`, colours cycling through [colors]. */
-    val entries: List<Pair<StringKey, String>> = listOf(
+    /** Name key, colour and transfer flag, `(StringKey, color hex, isTransfer)`, colours cycling through [colors]. */
+    val entries: List<Triple<StringKey, String, Boolean>> = listOf(
         StringKey.DefaultCategoryGroceries,
         StringKey.DefaultCategoryDrugstore,
         StringKey.DefaultCategoryHousing,
@@ -41,6 +41,8 @@ object DefaultCategories {
         StringKey.DefaultCategoryRestaurants,
         StringKey.DefaultCategoryTaxes,
         StringKey.DefaultCategoryCash,
+        // NOT a transfer: a card statement payment is the only record of card spending while the card's own
+        // bookings come from no import, so counting it would erase the card's spending altogether
         StringKey.DefaultCategoryCreditCard,
         StringKey.DefaultCategoryOwnTransfers,
         StringKey.DefaultCategorySalary,
@@ -49,5 +51,5 @@ object DefaultCategories {
         StringKey.DefaultCategoryFamily,
         StringKey.DefaultCategoryChildrenSchool,
         StringKey.DefaultCategoryOtherIncome,
-    ).mapIndexed { index, key -> key to colors[index % colors.size] }
+    ).mapIndexed { index, key -> Triple(key, colors[index % colors.size], key == StringKey.DefaultCategoryOwnTransfers) }
 }

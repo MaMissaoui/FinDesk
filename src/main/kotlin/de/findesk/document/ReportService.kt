@@ -1,5 +1,6 @@
 package de.findesk.document
 
+import de.findesk.model.CategoryShare
 import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
@@ -63,13 +64,13 @@ class ReportService(
     /** Totals cover bookings in [currency] only; the others are counted so the report can say they're missing. */
     internal fun buildReport(from: LocalDate, to: LocalDate, all: List<TransactionItem>, currency: String = Currencies.DEFAULT): TaxReport {
         val (transactions, otherCurrency) = all.partition { it.currency == currency }
-        val income = transactions.filter { it.amount.signum() > 0 }
-        val expenses = transactions.filter { it.isExpense }
+        val income = transactions.filter { it.countsAsIncome }
+        val expenses = transactions.filter { it.countsAsSpending }
 
         val totalIncome = income.sumOf { it.amount }
         val totalExpenses = expenses.sumOf { it.amount.abs() }
 
-        val taxRelevant = expenses.filter { it.isTaxRelevant }
+        val taxRelevant = transactions.filter { it.isExpense && it.isTaxRelevant }
 
         val months = generateSequence(java.time.YearMonth.from(from)) { it.plusMonths(1) }.takeWhile { !it.isAfter(java.time.YearMonth.from(to)) }.toList()
         val monthlyBreakdown = months.map { ym ->
@@ -77,8 +78,8 @@ class ReportService(
             MonthlyData(
                 year = ym.year,
                 month = ym.monthValue,
-                income = monthTxns.filter { it.amount.signum() > 0 }.sumOf { it.amount },
-                expenses = monthTxns.filter { it.isExpense }.sumOf { it.amount.abs() },
+                income = monthTxns.filter { it.countsAsIncome }.sumOf { it.amount },
+                expenses = monthTxns.filter { it.countsAsSpending }.sumOf { it.amount.abs() },
             )
         }
 
@@ -98,8 +99,25 @@ class ReportService(
             categoriesUsed = transactions.mapNotNull { it.categoryId }.distinct().size,
             currency = currency,
             otherCurrencyBookings = otherCurrency.size,
+            transferTotal = transactions
+                .filter { it.isTransfer && it.amount.signum() < 0 }
+                .sumOf { it.amount.abs() },
+            categoryShares = categoryShares(expenses),
         )
     }
+
+    /** One share per category with the money it accounts for, largest first; null category id = uncategorized. */
+    private fun categoryShares(spending: List<TransactionItem>): List<CategoryShare> = spending
+        .groupBy { it.categoryId }
+        .map { (categoryId, txns) ->
+            CategoryShare(
+                categoryId = categoryId,
+                name = txns.first().categoryName ?: UNCATEGORIZED,
+                amount = txns.sumOf { it.amount.abs() },
+                color = txns.first().categoryColor ?: "",
+            )
+        }
+        .sortedByDescending { it.amount }
 
     /**
      * Generate monthly spending report
@@ -109,8 +127,8 @@ class ReportService(
         val endDate = startDate.plusMonths(1).minusDays(1)
         val transactions = transactionRepository.findItems(TransactionFilter(startDate = startDate, endDate = endDate, currency = Currencies.primary(settingsRepository)))
 
-        val income = transactions.filter { it.amount.signum() > 0 }.sumOf { it.amount }
-        val expenseTxns = transactions.filter { it.isExpense }
+        val income = transactions.filter { it.countsAsIncome }.sumOf { it.amount }
+        val expenseTxns = transactions.filter { it.countsAsSpending }
         val expenses = expenseTxns.sumOf { it.amount.abs() }
 
         val topExpenses = expenseTxns
@@ -276,6 +294,10 @@ class ReportService(
         val currency: String = Currencies.DEFAULT,
         /** Bookings in the period that are in another currency and therefore not included. */
         val otherCurrencyBookings: Int = 0,
+        /** Money moved between the user's own accounts in the period: excluded from every total above. */
+        val transferTotal: BigDecimal = BigDecimal.ZERO,
+        /** The spending split behind [expensesByCategory], per category with its colour (uncategorized = null id). */
+        val categoryShares: List<CategoryShare> = emptyList(),
     ) {
         val taxRelevantTotal: BigDecimal get() = taxRelevantExpenses.values.fold(BigDecimal.ZERO, BigDecimal::add)
 

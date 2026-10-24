@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.ui.components.AppIcons
+import de.findesk.viewmodel.Period
 
 enum class Screen(val icon: ImageVector) {
     DASHBOARD(Icons.Default.Home),
@@ -52,6 +53,10 @@ data class NavigationArgs(
     val uncategorizedOnly: Boolean = false,
     /** Show every booking from this partner (search set to the name, other filters cleared). */
     val partner: String? = null,
+    /** Shows transactions of this category (null id = uncategorized); null keeps the screen's own filter. */
+    val categoryId: Int? = null,
+    /** The period the arriving transactions screen filters by; null keeps the screen's own period. */
+    val period: Period? = null,
     val request: ScreenRequest? = null,
     /** Makes a repeated request a new value, so the screen sees it again. */
     val requestId: Long = 0,

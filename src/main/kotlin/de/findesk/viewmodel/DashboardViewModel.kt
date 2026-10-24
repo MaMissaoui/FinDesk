@@ -20,6 +20,8 @@ data class ChartSlice(
     val label: String,
     val amount: BigDecimal,
     val color: String?,
+    /** The category's id, or null (uncategorized); the dashboard passes it on when a chart row is clicked. */
+    val categoryId: Int? = null,
 )
 
 data class MonthBar(
@@ -60,6 +62,8 @@ data class DashboardState(
     val upcoming: List<de.findesk.document.RecurringDetector.RecurringPayment> = emptyList(),
     /** How far through the month we are (0..1), to judge budget pace. */
     val monthProgress: Float = 0f,
+    /** Money moved between the user's own accounts this month: excluded from income and spending above. */
+    val transfersThisMonth: BigDecimal = BigDecimal.ZERO,
     val hasAccounts: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -97,7 +101,7 @@ class DashboardViewModel(
                 TransactionFilter(startDate = minOf(sixMonthsStart, yearStart), endDate = monthEnd, currency = currency),
             )
             val thisMonth = window.filter { !it.date.isBefore(monthStart) && !it.date.isAfter(monthEnd) }
-            val thisMonthExpenses = thisMonth.filter { it.isExpense }
+            val thisMonthExpenses = thisMonth.filter { it.countsAsSpending }
 
             val lastMonths = (0 until 6).map { i ->
                 val m = sixMonthsStart.plusMonths(i.toLong())
@@ -105,8 +109,8 @@ class DashboardViewModel(
                 MonthBar(
                     year = m.year,
                     month = m.monthValue,
-                    income = txns.filter { it.amount.signum() > 0 }.sumOf { it.amount },
-                    expenses = txns.filter { it.isExpense }.sumOf { it.amount.abs() },
+                    income = txns.filter { it.countsAsIncome }.sumOf { it.amount },
+                    expenses = txns.filter { it.countsAsSpending }.sumOf { it.amount.abs() },
                 )
             }
 
@@ -114,7 +118,7 @@ class DashboardViewModel(
                 currency = currency,
                 totalBalance = balances[currency] ?: BigDecimal.ZERO,
                 otherBalances = balances - currency,
-                monthlyIncome = thisMonth.filter { it.amount.signum() > 0 }.sumOf { it.amount },
+                monthlyIncome = thisMonth.filter { it.countsAsIncome }.sumOf { it.amount },
                 monthlyExpenses = thisMonthExpenses.sumOf { it.amount.abs() },
                 // All currencies: the card opens the uncategorized list, which isn't limited to one currency
                 uncategorizedCount = transactionRepository.findItems(TransactionFilter(startDate = monthStart, endDate = monthEnd, uncategorizedOnly = true)).size,
@@ -127,6 +131,9 @@ class DashboardViewModel(
                     val limit = c.budgetLimit?.takeIf { it.signum() > 0 } ?: return@mapNotNull null
                     BudgetStatus(c.id, c.name, c.color, limit, thisMonthExpenses.filter { it.categoryId == c.id }.sumOf { it.amount.abs() })
                 }.sortedByDescending { it.ratio },
+                transfersThisMonth = thisMonth
+                    .filter { it.isTransfer && it.amount.signum() < 0 }
+                    .sumOf { it.amount.abs() },
                 monthProgress = now.dayOfMonth.toFloat() / now.lengthOfMonth(),
                 upcoming = de.findesk.document.RecurringDetector.upcoming(
                     de.findesk.document.RecurringDetector.detect(transactionRepository.findItems(TransactionFilter(startDate = now.minusDays(400), endDate = now)), now),
@@ -142,7 +149,7 @@ class DashboardViewModel(
         .groupBy { it.categoryName ?: ReportService.UNCATEGORIZED }
         .map { (name, txns) ->
             val color = if (txns.first().categoryId == null) UNCATEGORIZED_COLOR else txns.first().categoryColor
-            ChartSlice(name, txns.sumOf { it.amount.abs() }, color)
+            ChartSlice(name, txns.sumOf { it.amount.abs() }, color, txns.first().categoryId)
         }
         .sortedByDescending { it.amount }
 

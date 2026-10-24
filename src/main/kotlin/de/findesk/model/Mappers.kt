@@ -54,6 +54,7 @@ fun Category.toItem() = CategoryItem(
     color = color,
     budgetLimit = budgetLimit,
     isTaxRelevant = isTaxRelevant,
+    isTransfer = isTransfer,
 )
 
 fun Transaction.toItem(documentCount: Int = 0): TransactionItem {
@@ -74,6 +75,7 @@ fun Transaction.toItem(documentCount: Int = 0): TransactionItem {
         isTaxRelevant = category?.isTaxRelevant ?: false,
         documentCount = documentCount,
         isNew = isNew,
+        isTransfer = category?.isTransfer ?: false,
     )
 }
 

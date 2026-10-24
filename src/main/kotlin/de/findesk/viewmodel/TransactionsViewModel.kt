@@ -210,16 +210,45 @@ class TransactionsViewModel(
     }
 
     /** Applies navigation context (e.g. "transactions of this account") and loads. */
-    fun start(accountId: Int? = null, uncategorizedOnly: Boolean = false, partner: String? = null): Job {
+    fun start(accountId: Int? = null, uncategorizedOnly: Boolean = false, partner: String? = null, categoryId: Int? = null, period: Period? = null): Job {
         if (partner != null) return showPartner(partner)
+        if (categoryId != null) return showCategory(categoryId, period)
         restoreSelection = accountId == null
         _state.update {
+            // A deep link into an account or the uncategorized list shouldn't be limited to this month,
+            // unless the navigation asks for a period itself
+            val effectivePeriod = when {
+                period != null -> period
+                accountId != null || uncategorizedOnly -> Period.ALL
+                else -> it.period
+            }
             it.copy(
                 accountId = accountId,
                 selection = accountId?.let { id -> AccountSelection.Account(id) } ?: it.selection,
                 categoryFilter = if (uncategorizedOnly) CategoryFilter.None else CategoryFilter.Any,
-                // A deep link into an account or the uncategorized list shouldn't be limited to this month
-                period = if (accountId != null || uncategorizedOnly) Period.ALL else it.period,
+                period = effectivePeriod,
+            )
+        }
+        return loadTransactions()
+    }
+
+    /**
+     * Every booking of one category over [period] (default all time); search, direction, amount and account
+     * selection are cleared, like [showPartner] does.
+     */
+    private fun showCategory(categoryId: Int, period: Period?): Job {
+        searchJob?.cancel()
+        restoreSelection = false
+        _state.update {
+            it.copy(
+                searchQuery = "",
+                period = period ?: Period.ALL,
+                direction = Direction.ALL,
+                categoryFilter = CategoryFilter.Only(categoryId),
+                selection = AccountSelection.All,
+                accountId = null,
+                minAmount = null,
+                maxAmount = null,
             )
         }
         return loadTransactions()

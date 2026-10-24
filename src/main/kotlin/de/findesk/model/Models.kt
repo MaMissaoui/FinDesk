@@ -63,6 +63,17 @@ data class CategoryItem(
     val color: String,
     val budgetLimit: BigDecimal?,
     val isTaxRelevant: Boolean,
+    /** Marks transfers between the user's own accounts: they count neither as income nor as spending. */
+    val isTransfer: Boolean = false,
+)
+
+/** One slice of the spending split: a category's share of the total (or the user's total spending). */
+data class CategoryShare(
+    /** The category's id, or null for uncategorized. */
+    val categoryId: Int?,
+    val name: String,
+    val amount: BigDecimal,
+    val color: String,
 )
 
 data class TransactionItem(
@@ -83,9 +94,17 @@ data class TransactionItem(
     val documentCount: Int,
     /** A bank sync brought this booking in and its account has not been opened since. */
     val isNew: Boolean = false,
+    /** True when the booking's category marks a transfer between the user's own accounts. */
+    val isTransfer: Boolean = false,
 ) {
     val description: String get() = partnerName?.takeIf { it.isNotBlank() } ?: purpose?.takeIf { it.isNotBlank() } ?: "—"
     val isExpense: Boolean get() = amount.signum() < 0
+
+    /** Counts as income: money in on a normal category; own-account transfers never do. */
+    val countsAsIncome: Boolean get() = amount.signum() > 0 && !isTransfer
+
+    /** Counts as spending: money out on a normal category; own-account transfers never do. */
+    val countsAsSpending: Boolean get() = amount.signum() < 0 && !isTransfer
 }
 
 data class DocumentItem(

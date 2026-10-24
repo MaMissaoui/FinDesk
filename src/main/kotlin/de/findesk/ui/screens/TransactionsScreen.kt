@@ -71,7 +71,7 @@ fun TransactionsScreen(
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
-    LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly, args.partner) }
+    LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly, args.partner, args.categoryId, args.period) }
 
     var showAdd by remember { mutableStateOf(false) }
     val attachReceipt: (Int) -> Unit = { transactionId ->

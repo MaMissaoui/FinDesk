@@ -163,16 +163,17 @@ class SettingsViewModel(
         color: String,
         budgetLimit: BigDecimal?,
         isTaxRelevant: Boolean,
+        isTransfer: Boolean = false,
     ): Job = launchSafely(onError) {
         validateCategory(name, color, id)?.let { msg ->
             _state.update { it.copy(error = msg) }
             return@launchSafely
         }
         if (id == null) {
-            categoryRepository.create(name.trim(), color, budgetLimit, isTaxRelevant)
+            categoryRepository.create(name.trim(), color, budgetLimit, isTaxRelevant, isTransfer)
             auditLogRepository.log("ADD_CATEGORY", "user", "Added category ${name.trim()}")
         } else {
-            categoryRepository.update(id, name.trim(), color, isTaxRelevant = isTaxRelevant)
+            categoryRepository.update(id, name.trim(), color, isTaxRelevant = isTaxRelevant, isTransfer = isTransfer)
             categoryRepository.setBudget(id, budgetLimit) // update() can't clear a budget
             auditLogRepository.log("UPDATE_CATEGORY", "user", "Updated category ${name.trim()}")
         }
@@ -216,9 +217,9 @@ class SettingsViewModel(
     fun addDefaultCategories(): Job = launchSafely(onError) {
         val existing = categoryRepository.findAllItems().map { it.name.trim().lowercase() }.toSet()
         val current = AppStrings.current
-        val toCreate = DefaultCategories.entries.filter { (key, _) -> current[key].trim().lowercase() !in existing }
+        val toCreate = DefaultCategories.entries.filter { (key, _, _) -> current[key].trim().lowercase() !in existing }
         val added = toCreate.size
-        toCreate.forEach { (key, color) -> categoryRepository.create(current[key].trim(), color) }
+        toCreate.forEach { (key, color, isTransfer) -> categoryRepository.create(current[key].trim(), color, isTransfer = isTransfer) }
         auditLogRepository.log("ADD_DEFAULT_CATEGORIES", "user", "Added $added default categories")
         refresh()
         _state.update {
