@@ -1003,4 +1003,62 @@ enum class StringKey {
 
     /** Status message after a tax override change: %d is the number of bookings. */
     MessageTaxOverrideSet,
+
+    // Reports: the Tax bookings tab
+
+    /** Reports tab next to the Tax summary: every tax-relevant booking of the period by category. */
+    TabTaxBookings,
+
+    /** First stat card: the sum of the income sections' nets. */
+    TaxIncomeTotal,
+
+    /** Second stat card: the sum of the deduction sections' absolute nets. */
+    TaxDeductionTotal,
+
+    /** Fourth stat card title: bookings with a receipt. */
+    TaxReceipts,
+
+    /** Fourth stat card value: "%1$d of %2$d" is "bookings with a receipt of all tax-relevant bookings". */
+    TaxReceiptsOf,
+
+    /** Suggestions card title; %1$d is the count, %2$d repeats it for the plural form. */
+    TaxSuggestionsTitle,
+
+    /** Suggestions card explanation: keyword match, what accept and dismiss do, and where to edit keywords. */
+    TaxSuggestionsHint,
+
+    /** Section header above the income groups. */
+    TaxSectionIncome,
+
+    /** Section header above the deduction groups. */
+    TaxSectionDeductions,
+
+    /** Row indicator for a booking without a receipt. */
+    NoReceipt,
+
+    /** Toggle under the summary: show only the rows without a receipt (totals stay whole-period). */
+    MissingReceiptsOnly,
+
+    /** Button inside the suggestions card that reveals the rows beyond the first twenty. */
+    ShowAllCount,
+
+    /** Empty state title; %s is the selected year or range. */
+    NoTaxBookingsIn,
+
+    /** Empty state hint on how a booking becomes tax relevant. */
+    TaxBookingsHowTo,
+
+    // Settings: the tax suggestion keywords
+
+    /** Small card in the categories section with the keyword list behind the tax suggestions. */
+    TaxSuggestionKeywords,
+
+    /** Card button next to Save that removes the custom keyword list. */
+    ResetToDefaults,
+
+    /** Suggestions card row button that marks the booking tax relevant (accepts the suggestion). */
+    Accept,
+
+    /** Suggestions card row button that rejects the suggestion for good (stores "not tax relevant"). */
+    DismissSuggestion,
 }

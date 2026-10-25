@@ -1,8 +1,11 @@
 package de.findesk.viewmodel
 
 import de.findesk.document.ReportService
+import de.findesk.document.TaxSuggestion
+import de.findesk.document.TaxSuggestions
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.util.Currencies
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,6 +22,12 @@ data class ReportsState(
     /** Non-null: report over this custom range instead of [selectedYear]. */
     val customRange: Pair<LocalDate, LocalDate>? = null,
     val taxReport: ReportService.TaxReport? = null,
+    /** The Tax bookings tab's groups for the selected period. */
+    val taxBookings: ReportService.TaxBookings? = null,
+    /** Keyword suggestions for the selected period; accepting or dismissing one stores a manual override. */
+    val suggestions: List<TaxSuggestion> = emptyList(),
+    /** Whether the tab's rows are filtered to bookings without a receipt (totals stay whole-period). */
+    val missingReceiptsOnly: Boolean = false,
     /** Detected over the last 13 months, independent of the selected period. */
     val recurring: List<de.findesk.document.RecurringDetector.RecurringPayment> = emptyList(),
     val isLoading: Boolean = false,
@@ -30,6 +39,8 @@ data class ReportsState(
 class ReportsViewModel(
     private val reportService: ReportService = ReportService(),
     private val transactionRepository: de.findesk.repository.TransactionRepository = de.findesk.repository.TransactionRepositoryImpl(),
+    private val settingsRepository: de.findesk.repository.SettingsRepository = de.findesk.repository.SettingsRepositoryImpl(),
+    private val auditLogRepository: de.findesk.repository.AuditLogRepository = de.findesk.repository.AuditLogRepositoryImpl(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(ReportsState())
@@ -42,9 +53,19 @@ class ReportsViewModel(
     fun loadTaxReport(year: Int = _state.value.selectedYear): Job {
         _state.update { it.copy(isLoading = true, error = null, selectedYear = year) }
         return launchSafely(onError) {
+            val from = LocalDate.of(year, 1, 1)
+            val to = LocalDate.of(year, 12, 31)
             val report = reportService.generateTaxReport(year)
+            val taxBookings = reportService.generateTaxBookings(from, to)
+            val suggestions = findSuggestions(from, to)
             // Ignore stale results if the year changed meanwhile
-            _state.update { if (it.selectedYear == year && it.customRange == null) it.copy(taxReport = report, isLoading = false) else it }
+            _state.update {
+                if (it.selectedYear == year && it.customRange == null) {
+                    it.copy(taxReport = report, taxBookings = taxBookings, suggestions = suggestions, isLoading = false)
+                } else {
+                    it
+                }
+            }
         }
     }
 
@@ -66,8 +87,88 @@ class ReportsViewModel(
         _state.update { it.copy(customRange = from to to, isLoading = true, error = null) }
         return launchSafely(onError) {
             val report = reportService.generateRangeReport(from, to)
-            _state.update { if (it.customRange == from to to) it.copy(taxReport = report, isLoading = false) else it }
+            val taxBookings = reportService.generateTaxBookings(from, to)
+            val suggestions = findSuggestions(from, to)
+            _state.update {
+                if (it.customRange == from to to) {
+                    it.copy(taxReport = report, taxBookings = taxBookings, suggestions = suggestions, isLoading = false)
+                } else {
+                    it
+                }
+            }
         }
+    }
+
+    /** Marks the booking tax relevant (the suggestion's accept). */
+    fun acceptSuggestion(id: Int): Job = setTaxOverride(listOf(id), true)
+
+    /** Hides the suggestion for good by storing a "not relevant" override. */
+    fun dismissSuggestion(id: Int): Job = setTaxOverride(listOf(id), false)
+
+    /** Row action: marks a booking not tax relevant. */
+    fun markNotTaxRelevant(id: Int): Job = setTaxOverride(listOf(id), false)
+
+    /** Row action: resets a booking's manual override, so rule and category decide again. */
+    fun resetTaxAutomatic(id: Int): Job = setTaxOverride(listOf(id), null)
+
+    /**
+     * One manual override for [ids]: a single `SET_TAX_OVERRIDE` audit entry with the count and the value word
+     * only (no booking text), like [TransactionsViewModel], then the tab's data and the summary reload, whose
+     * tax-relevant total may change.
+     */
+    private fun setTaxOverride(ids: List<Int>, value: Boolean?): Job = launchSafely(onError) {
+        _state.update { it.copy(isLoading = true, error = null) }
+        val changed = transactionRepository.setTaxOverride(ids, value)
+        if (changed > 0) {
+            auditLogRepository.log("SET_TAX_OVERRIDE", "user", "Set tax override for $changed bookings: ${taxOverrideWord(value)}")
+            _state.update { it.copy(message = AppStrings.format(StringKey.MessageTaxOverrideSet, changed)) }
+        }
+        reloadTab()
+    }
+
+    /** The override's word for the `SET_TAX_OVERRIDE` audit entry (records stay English; count only, no booking text). */
+    private fun taxOverrideWord(value: Boolean?): String = when (value) {
+        true -> "relevant"
+        false -> "not relevant"
+        null -> "automatic"
+    }
+
+    /** Reloads the tab's data and the summary for the period the screen shows; stale periods keep their result. */
+    private suspend fun reloadTab() {
+        val range = _state.value.customRange
+        val from: LocalDate
+        val to: LocalDate
+        if (range != null) {
+            from = range.first
+            to = range.second
+        } else {
+            val year = _state.value.selectedYear
+            from = LocalDate.of(year, 1, 1)
+            to = LocalDate.of(year, 12, 31)
+        }
+        val report = reportService.generateRangeReport(from, to)
+        val taxBookings = reportService.generateTaxBookings(from, to)
+        val suggestions = findSuggestions(from, to)
+        _state.update {
+            val stillCurrent = if (range != null) it.customRange == range else it.customRange == null
+            if (stillCurrent) {
+                it.copy(taxReport = report, taxBookings = taxBookings, suggestions = suggestions, isLoading = false)
+            } else {
+                it
+            }
+        }
+    }
+
+    /** Keyword suggestions over the period's bookings of the primary currency. */
+    private suspend fun findSuggestions(from: LocalDate, to: LocalDate): List<TaxSuggestion> {
+        val bookings = transactionRepository.findItems(de.findesk.model.TransactionFilter(startDate = from, endDate = to, currency = Currencies.primary(settingsRepository)))
+        return TaxSuggestions.find(bookings, TaxSuggestions.keywords(settingsRepository))
+    }
+
+    /** Filters the tab's rows only; the totals stay those of the whole period. */
+    fun setMissingReceiptsOnly(only: Boolean): Job {
+        _state.update { it.copy(missingReceiptsOnly = only) }
+        return Job().apply { complete() }
     }
 
     fun exportToPdf(file: File): Job {

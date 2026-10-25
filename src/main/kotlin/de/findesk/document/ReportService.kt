@@ -61,6 +61,22 @@ class ReportService(
 
     internal fun buildTaxReport(year: Int, transactions: List<TransactionItem>, currency: String = Currencies.DEFAULT): TaxReport = buildReport(LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31), transactions, currency)
 
+    /** The Tax bookings view over [from]..[to], with every amount in the primary currency. */
+    suspend fun generateTaxBookings(from: LocalDate, to: LocalDate): TaxBookings = withContext(Dispatchers.IO) {
+        require(!from.isAfter(to)) { de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.InvalidDateRange] }
+        _isLoading.value = true
+        try {
+            buildTaxBookings(
+                from,
+                to,
+                transactionRepository.findItems(TransactionFilter(startDate = from, endDate = to)),
+                Currencies.primary(settingsRepository),
+            )
+        } finally {
+            _isLoading.value = false
+        }
+    }
+
     /** Totals cover bookings in [currency] only; the others are counted so the report can say they're missing. */
     internal fun buildReport(from: LocalDate, to: LocalDate, all: List<TransactionItem>, currency: String = Currencies.DEFAULT): TaxReport {
         val (transactions, otherCurrency) = all.partition { it.currency == currency }
@@ -103,6 +119,37 @@ class ReportService(
                 .filter { it.isTransfer && it.amount.signum() < 0 }
                 .sumOf { it.amount.abs() },
             categoryShares = categoryShares(expenses),
+        )
+    }
+
+    /**
+     * The pure Tax bookings view: effectively tax-relevant bookings of [currency], grouped by category. A group's
+     * net decides its section (net ≥ 0 income, net < 0 deduction — a refund in a deduction category lowers that
+     * category instead of showing up as income); within each section groups sort by absolute net, then name.
+     */
+    internal fun buildTaxBookings(from: LocalDate, to: LocalDate, all: List<TransactionItem>, currency: String = Currencies.DEFAULT): TaxBookings {
+        val relevant = all.filter { it.isTaxRelevant }
+        val (inCurrency, otherCurrency) = relevant.partition { it.currency == currency }
+        val groups = inCurrency
+            .groupBy { it.categoryId }
+            .map { (categoryId, txns) ->
+                TaxGroup(
+                    categoryId = categoryId,
+                    name = txns.first().categoryName ?: de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.Uncategorized],
+                    color = txns.first().categoryColor ?: "",
+                    bookings = txns.sortedWith(compareBy({ it.date }, { it.id })),
+                    income = txns.filter { it.amount.signum() > 0 }.sumOf { it.amount },
+                    expenses = txns.filter { it.amount.signum() < 0 }.sumOf { it.amount.abs() },
+                )
+            }
+        return TaxBookings(
+            from = from,
+            to = to,
+            currency = currency,
+            incomeGroups = groups.filter { it.net.signum() >= 0 }.sortedWith(compareByDescending<TaxGroup> { it.net.abs() }.thenBy { it.name }),
+            deductionGroups = groups.filter { it.net.signum() < 0 }.sortedWith(compareByDescending<TaxGroup> { it.net.abs() }.thenBy { it.name }),
+            bookingCount = inCurrency.size,
+            otherCurrencyBookings = otherCurrency.size,
         )
     }
 
@@ -360,6 +407,57 @@ class ReportService(
         val month: Int,
         val amount: BigDecimal,
     )
+
+    /** One category's tax bookings of a period, split into money in ([income]) and money out ([expenses]). */
+    data class TaxGroup(
+        /** The category's id, or null for the uncategorized group. */
+        val categoryId: Int?,
+        val name: String,
+        val color: String,
+        /** The group's bookings, date ascending, then id. */
+        val bookings: List<TransactionItem>,
+        val income: BigDecimal,
+        val expenses: BigDecimal,
+    ) {
+        val net: BigDecimal get() = income - expenses
+
+        /** How many of the group's bookings carry at least one linked receipt. */
+        val withReceipt: Int get() = bookings.count { it.documentCount > 0 }
+    }
+
+    /**
+     * The Tax bookings view over a period: groups split by net into income and deductions, with the totals of the
+     * whole period. Bookings in another currency are counted ([otherCurrencyBookings]), never summed.
+     */
+    data class TaxBookings(
+        val from: LocalDate,
+        val to: LocalDate,
+        val currency: String,
+        val incomeGroups: List<TaxGroup> = emptyList(),
+        val deductionGroups: List<TaxGroup> = emptyList(),
+        val bookingCount: Int,
+        /** Tax-relevant bookings of the period in another currency; not included in any total. */
+        val otherCurrencyBookings: Int = 0,
+    ) {
+        /** The sum of the income groups' nets. */
+        val incomeTotal: BigDecimal get() = incomeGroups.fold(BigDecimal.ZERO) { acc, group -> acc.add(group.net) }
+
+        /** The sum of the deduction groups' absolute nets. */
+        val deductionTotal: BigDecimal get() = deductionGroups.fold(BigDecimal.ZERO) { acc, group -> acc.add(group.net.abs()) }
+
+        /** Bookings with a receipt, across both sections. */
+        val withReceipt: Int get() = (incomeGroups + deductionGroups).sumOf { it.withReceipt }
+
+        val netTotal: BigDecimal get() = incomeTotal.subtract(deductionTotal)
+
+        /** "2026" for a full calendar year, otherwise the range like [TaxReport.title]. */
+        val title: String
+            get() = if (from == LocalDate.of(from.year, 1, 1) && to == LocalDate.of(from.year, 12, 31)) {
+                from.year.toString()
+            } else {
+                "${de.findesk.util.Formats.date(from)} – ${de.findesk.util.Formats.date(to)}"
+            }
+    }
 }
 
 internal object CsvFormat {
