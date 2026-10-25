@@ -60,6 +60,24 @@ class DashboardFixesTest {
     }
 
     @Test
+    fun `a month selected before the first load is kept, as when Back reopens the dashboard`() = runBlocking {
+        val account = data.account()
+        data.txn(account, LocalDate.of(2026, 5, 4), "-60.00")
+        data.txn(account, LocalDate.of(2026, 8, 2), "-120.00")
+        // A fresh view model, as the dashboard screen creates on arrival: no loadDashboard before selectMonth
+        val vm = DashboardViewModel(today = { today })
+        vm.selectMonth(YearMonth.of(2026, 8)).join()
+
+        assertEquals(YearMonth.of(2026, 8), vm.state.value.selectedMonth, "not clamped to the not-yet-loaded earliest month")
+        assertEquals(BigDecimal("120.00"), vm.state.value.monthlyExpenses, "August's figures are loaded")
+
+        // Before the oldest booking, the load still clamps to the data's first month
+        vm.selectMonth(YearMonth.of(2025, 1)).join()
+        assertEquals(YearMonth.of(2026, 5), vm.state.value.selectedMonth)
+        vm.close()
+    }
+
+    @Test
     fun `account names fall back to the type plus the number's last four`() {
         fun item(type: String, iban: String, accountNumber: String?, name: String?) = AccountItem(
             id = 1,

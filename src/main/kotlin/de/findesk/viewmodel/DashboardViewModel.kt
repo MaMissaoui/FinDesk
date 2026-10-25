@@ -186,11 +186,15 @@ class DashboardViewModel(
         }
     }
 
-    /** Selects the month [selectMonth] style: clamped to the loaded range and then fully reloaded. */
+    /**
+     * Selects [month] and fully reloads. Only the future is cut off here: the oldest month comes from the data,
+     * which [loadDashboard] reads and clamps against. Clamping to the state's [DashboardState.earliestMonth] here
+     * turned a month selected before the first load (the dashboard reopened by Back) into the current month,
+     * because that field still holds its initial value then.
+     */
     fun selectMonth(month: YearMonth): Job {
         val nowMonth = YearMonth.from(today())
-        val s = _state.value
-        _state.update { it.copy(selectedMonth = month.coerceIn(s.earliestMonth, nowMonth)) }
+        _state.update { it.copy(selectedMonth = month.coerceAtMost(nowMonth)) }
         return loadDashboard()
     }
 
