@@ -88,6 +88,10 @@ class ReportService(
 
         val taxRelevant = transactions.filter { it.isExpense && it.isTaxRelevant }
 
+        // One tax total: the summary's figures use the Tax bookings tab's definition — each deduction category at
+        // its absolute net, so a refund lowers its category and money out on a net-income category is no deduction
+        val taxDeductions = buildTaxBookings(from, to, all, currency).deductionGroups.associate { it.name to it.net.abs() }
+
         val months = generateSequence(java.time.YearMonth.from(from)) { it.plusMonths(1) }.takeWhile { !it.isAfter(java.time.YearMonth.from(to)) }.toList()
         val monthlyBreakdown = months.map { ym ->
             val monthTxns = transactions.filter { it.date.monthValue == ym.monthValue && it.date.year == ym.year }
@@ -107,7 +111,7 @@ class ReportService(
             totalExpenses = totalExpenses,
             netIncome = totalIncome - totalExpenses,
             expensesByCategory = sumByCategory(expenses),
-            taxRelevantExpenses = sumByCategory(taxRelevant),
+            taxRelevantExpenses = taxDeductions,
             taxRelevantTransactions = taxRelevant,
             monthlyBreakdown = monthlyBreakdown,
             topVendors = topVendors(expenses),
@@ -331,6 +335,8 @@ class ReportService(
         val totalExpenses: BigDecimal,
         val netIncome: BigDecimal,
         val expensesByCategory: Map<String, BigDecimal>,
+
+        /** The Tax bookings tab's deduction groups: each category name at its absolute net, refunds included. */
         val taxRelevantExpenses: Map<String, BigDecimal>,
         val taxRelevantTransactions: List<TransactionItem> = emptyList(),
         val monthlyBreakdown: List<MonthlyData>,

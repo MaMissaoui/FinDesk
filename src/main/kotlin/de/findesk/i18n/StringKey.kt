@@ -488,7 +488,10 @@ enum class StringKey {
     TotalIncome,
     TotalExpenses,
     NetIncome,
+
+    /** The Tax summary's card for the tax deductions total (the Tax bookings tab's deduction total). */
     TaxRelevantAmount,
+
     TaxRelevantByCategory,
     NoTaxRelevantExpenses,
     QuickStatistics,
@@ -501,6 +504,10 @@ enum class StringKey {
     ColIncome,
     ColExpenses,
     ColNet,
+
+    /** The Monthly breakdown's bold totals row after the months. */
+    ReportTotal,
+
     SpendingByCategory,
     TopVendors,
     FromDate,
