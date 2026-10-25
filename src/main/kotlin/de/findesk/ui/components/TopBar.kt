@@ -1,8 +1,12 @@
 package de.findesk.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,7 +21,9 @@ import androidx.compose.ui.unit.dp
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
+import de.findesk.ui.navigation.Screen
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TopBar(
     title: String,
@@ -32,6 +38,9 @@ fun TopBar(
     languageEnabled: Boolean = true,
     /** The profile switcher; null hides it (e.g. in previews). Disabled together with the language menu. */
     profileMenu: ProfileMenuModel? = null,
+    /** The screen the Back button reopens; null hides the button, e.g. when no link was followed or a screen is locked. */
+    backTarget: Screen? = null,
+    onBack: () -> Unit = {},
 ) {
     val s = strings()
     Row(
@@ -42,13 +51,37 @@ fun TopBar(
             .padding(start = 12.dp, end = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Left side: sidebar toggle and title
+        // Left side: sidebar toggle, back button (only after a link) and title
         IconButton(onClick = onToggleSidebar) {
             Icon(
                 imageVector = if (sidebarCollapsed) Icons.Default.Menu else AppIcons.MenuOpen,
                 contentDescription = s[if (sidebarCollapsed) StringKey.ExpandSidebar else StringKey.CollapseSidebar],
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        // Back to the screen the last link left, between the sidebar toggle and the title
+        backTarget?.let { target ->
+            TooltipArea(
+                tooltip = {
+                    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 2.dp) {
+                        Text(
+                            s.format(StringKey.BackTo, target.title(s)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.inverseOnSurface,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                },
+                delayMillis = 300,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = s.format(StringKey.BackTo, target.title(s)),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Spacer(Modifier.width(8.dp))
         Text(

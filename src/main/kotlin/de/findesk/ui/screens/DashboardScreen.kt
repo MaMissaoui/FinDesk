@@ -39,13 +39,22 @@ import java.time.YearMonth
 
 @Composable
 fun DashboardScreen(
+    args: NavigationArgs = NavigationArgs(),
     onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> },
     createViewModel: () -> DashboardViewModel = { DashboardViewModel() },
 ) {
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
-    LaunchedEffect(Unit) { vm.loadDashboard() }
+    // Arriving via a link (e.g. Back) restores the month the dashboard was left on; otherwise load the default
+    LaunchedEffect(Unit) {
+        if (args.month != null) vm.selectMonth(args.month) else vm.loadDashboard()
+    }
+
+    // Every link out of the dashboard: Back reopens it on the month it left, unless that was the current month
+    val leaveWithBackArgs: (NavigationArgs) -> NavigationArgs = { args ->
+        args.copy(backArgs = state.selectedMonth.takeUnless { state.isCurrentMonth }?.let { NavigationArgs(month = it) })
+    }
 
     // A category row opens the selected month's bookings of that category; uncategorized without a category filter.
     // The current month keeps the plain period (as before); a past month passes the exact month.
@@ -54,11 +63,13 @@ fun DashboardScreen(
         val month = if (state.isCurrentMonth) null else state.selectedMonth
         onNavigate(
             Screen.TRANSACTIONS,
-            NavigationArgs(
-                uncategorizedOnly = categoryId == null,
-                categoryId = categoryId,
-                period = if (month == null) Period.THIS_MONTH else null,
-                month = month,
+            leaveWithBackArgs(
+                NavigationArgs(
+                    uncategorizedOnly = categoryId == null,
+                    categoryId = categoryId,
+                    period = if (month == null) Period.THIS_MONTH else null,
+                    month = month,
+                ),
             ),
         )
     }
@@ -76,8 +87,8 @@ fun DashboardScreen(
         if (!state.isLoading && !state.hasAccounts) {
             item {
                 GettingStartedCard(
-                    onAddBank = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) },
-                    onOpenSettings = { onNavigate(Screen.SETTINGS, NavigationArgs(settingsSection = SettingsSection.CATEGORIES)) },
+                    onAddBank = { onNavigate(Screen.ACCOUNTS, leaveWithBackArgs(NavigationArgs())) },
+                    onOpenSettings = { onNavigate(Screen.SETTINGS, leaveWithBackArgs(NavigationArgs(settingsSection = SettingsSection.CATEGORIES))) },
                 )
             }
             // First run: the setup card is the whole dashboard, so no empty totals or charts suggest false data
@@ -214,7 +225,7 @@ fun DashboardScreen(
                             onClickLabel = s[StringKey.OpenTaxBookings],
                             role = Role.Button,
                         ) {
-                            onNavigate(Screen.REPORTS, NavigationArgs(taxYear = state.selectedMonth.year))
+                            onNavigate(Screen.REPORTS, leaveWithBackArgs(NavigationArgs(taxYear = state.selectedMonth.year)))
                         },
                 ) {
                     if (state.taxDeductionsByCategory.isEmpty()) {
@@ -233,7 +244,7 @@ fun DashboardScreen(
             SectionCard(
                 s[StringKey.RecentTransactions],
                 Modifier.fillMaxWidth(),
-                actions = { TextButton(onClick = { onNavigate(Screen.TRANSACTIONS, NavigationArgs()) }) { Text(s[StringKey.ViewAll]) } },
+                actions = { TextButton(onClick = { onNavigate(Screen.TRANSACTIONS, leaveWithBackArgs(NavigationArgs())) }) { Text(s[StringKey.ViewAll]) } },
             ) {
                 if (state.recentTransactions.isEmpty()) {
                     Text(s[StringKey.NoTransactionsYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -241,7 +252,9 @@ fun DashboardScreen(
                 state.recentTransactions.forEach { txn ->
                     RowContextMenu(
                         txn.partnerName?.let { partner ->
-                            menuItem(s.format(StringKey.ShowAllFromPartner, partner)) { onNavigate(Screen.TRANSACTIONS, NavigationArgs(partner = partner)) }
+                            menuItem(s.format(StringKey.ShowAllFromPartner, partner)) {
+                                onNavigate(Screen.TRANSACTIONS, leaveWithBackArgs(NavigationArgs(partner = partner)))
+                            }
                         },
                     ) {
                         LedgerRow(

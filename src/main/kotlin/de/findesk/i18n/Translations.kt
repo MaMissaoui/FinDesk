@@ -908,6 +908,7 @@ object Translations {
         K.MessagePrintSent to "Sent to the printer",
         K.ErrorTaxExportFailed to "The export of the tax report failed",
         K.ErrorPrintFailed to "Printing failed",
+        K.BackTo to "Back to %s",
     )
 
     val de: Map<K, String> = mapOf(
@@ -1806,6 +1807,7 @@ object Translations {
         K.MessagePrintSent to "An den Drucker gesendet",
         K.ErrorTaxExportFailed to "Der Export des Steuerberichts ist fehlgeschlagen",
         K.ErrorPrintFailed to "Drucken fehlgeschlagen",
+        K.BackTo to "Zurück zu %s",
     )
 
     val fr: Map<K, String> = mapOf(
@@ -2704,5 +2706,6 @@ object Translations {
         K.MessagePrintSent to "Envoyé à l'imprimante",
         K.ErrorTaxExportFailed to "L'export du rapport fiscal a échoué",
         K.ErrorPrintFailed to "L'impression a échoué",
+        K.BackTo to "Retour à %s",
     )
 }

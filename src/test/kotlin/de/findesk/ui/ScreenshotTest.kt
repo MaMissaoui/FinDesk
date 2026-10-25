@@ -232,6 +232,9 @@ class ScreenshotTest {
         render("transactions-balance", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
         render("transactions-balance-hover", 1440, 900, hoverAt = Offset(980f, 760f)) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
         render("transactions-balance-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+        // Arrived through a link: the top bar offers Back to the screen the link left
+        render("transactions-back", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account), backTarget = Screen.DASHBOARD) }
+        render("transactions-back-de-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, language = AppLanguage.DE, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account), backTarget = Screen.DASHBOARD) }
         // The chart folded away: only its header row remains, restored from the stored setting
         SettingsRepositoryImpl().setValue(TransactionsViewModel.KEY_CHART_COLLAPSED, "true")
         render("transactions-chart-collapsed", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
@@ -863,6 +866,7 @@ class ScreenshotTest {
         settingsArgs: NavigationArgs = NavigationArgs(),
         dashboard: (() -> DashboardViewModel)? = null,
         reports: (() -> ReportsViewModel)? = null,
+        backTarget: Screen? = null,
     ) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
@@ -878,6 +882,7 @@ class ScreenshotTest {
                                 sidebarCollapsed = sidebarCollapsed,
                                 language = language,
                                 profileMenu = profiles?.let { list -> ProfileMenuModel(current = list.first().first, load = { list }, onSwitch = {}, onManage = {}) },
+                                backTarget = backTarget,
                             )
                             HorizontalDivider()
                             Box(Modifier.fillMaxSize()) {
