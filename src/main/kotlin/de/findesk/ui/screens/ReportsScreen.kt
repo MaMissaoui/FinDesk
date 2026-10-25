@@ -1,8 +1,12 @@
 package de.findesk.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,11 +18,14 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.document.ReportService
+import de.findesk.document.TaxSuggestion
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.CategoryShare
+import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
@@ -31,6 +38,7 @@ import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.viewmodel.Period
+import de.findesk.viewmodel.ReportsState
 import de.findesk.viewmodel.ReportsViewModel
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -39,15 +47,15 @@ import java.time.Month
 import java.time.format.TextStyle
 
 @Composable
-fun ReportsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
-    val vm = rememberViewModel { ReportsViewModel() }
+fun ReportsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }, createViewModel: () -> ReportsViewModel = { ReportsViewModel() }) {
+    val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
     LaunchedEffect(Unit) {
         vm.loadTaxReport()
         vm.loadRecurring()
     }
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by remember { mutableStateOf(ReportsTab.TAX_SUMMARY) }
     var exportMenu by remember { mutableStateOf(false) }
     val report = state.taxReport
 
@@ -111,14 +119,20 @@ fun ReportsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
         MessageBanner(state.message, state.error, vm::clearMessages)
 
         Spacer(Modifier.height(16.dp))
-        TabRow(selectedTabIndex = selectedTab) {
-            listOf(StringKey.TabTaxSummary, StringKey.TabMonthlyBreakdown, StringKey.TabCategoryAnalysis, StringKey.TabRecurring).forEachIndexed { i, key ->
-                Tab(selected = selectedTab == i, onClick = { selectedTab = i }, text = { Text(s[key]) }, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+        TabRow(selectedTabIndex = selectedTab.ordinal) {
+            listOf(
+                ReportsTab.TAX_SUMMARY to StringKey.TabTaxSummary,
+                ReportsTab.TAX_BOOKINGS to StringKey.TabTaxBookings,
+                ReportsTab.MONTHLY_BREAKDOWN to StringKey.TabMonthlyBreakdown,
+                ReportsTab.CATEGORY_ANALYSIS to StringKey.TabCategoryAnalysis,
+                ReportsTab.RECURRING to StringKey.TabRecurring,
+            ).forEach { (tab, key) ->
+                Tab(selected = selectedTab == tab, onClick = { selectedTab = tab }, text = { Text(s[key]) }, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(24.dp))
 
-        if (selectedTab == 3) {
+        if (selectedTab == ReportsTab.RECURRING) {
             RecurringTab(state.recurring)
             return@Column
         }
@@ -129,11 +143,13 @@ fun ReportsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             return@Column
         }
         when (selectedTab) {
-            0 -> TaxSummaryTab(report)
+            ReportsTab.TAX_SUMMARY -> TaxSummaryTab(report)
 
-            1 -> MonthlyBreakdownTab(report)
+            ReportsTab.TAX_BOOKINGS -> state.taxBookings?.let { TaxBookingsTab(it, state, vm) }
 
-            2 -> CategoryAnalysisTab(report, linkablePeriod(report)) { share ->
+            ReportsTab.MONTHLY_BREAKDOWN -> MonthlyBreakdownTab(report)
+
+            ReportsTab.CATEGORY_ANALYSIS -> CategoryAnalysisTab(report, linkablePeriod(report)) { share ->
                 // A report over exactly a Period deep-links into that period's bookings
                 when (val period = linkablePeriod(report)) {
                     null -> {}
@@ -145,9 +161,14 @@ fun ReportsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     }
                 }
             }
+
+            ReportsTab.RECURRING -> {}
         }
     }
 }
+
+/** The Reports tabs; an enum keeps the `when` branches stable when a tab is inserted. */
+private enum class ReportsTab { TAX_SUMMARY, TAX_BOOKINGS, MONTHLY_BREAKDOWN, CATEGORY_ANALYSIS, RECURRING }
 
 /**
  * The [Period] the report's category rows can deep-link into the transactions screen with, only when the report
@@ -378,5 +399,222 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
                 }
             }
         }
+    }
+}
+
+/** Imports count as money in, cards never for tax: the tax view splits persistence by the category's net instead. */
+@Composable
+private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState, vm: ReportsViewModel) {
+    val s = strings()
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
+                StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(s[StringKey.NetIncome], Formats.money(info.netTotal, info.currency), AppIcons.BarChart, PrimaryBlue, Modifier.weight(1f))
+                StatCard(s[StringKey.TaxReceipts], s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount), Icons.Default.Info, Warning, Modifier.weight(1f))
+            }
+        }
+        if (info.otherCurrencyBookings > 0) {
+            item { TaxOtherCurrenciesHint(info) }
+        }
+        if (state.suggestions.isNotEmpty()) {
+            item { TaxSuggestionsCard(state.suggestions, vm) }
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { vm.setMissingReceiptsOnly(!state.missingReceiptsOnly) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = state.missingReceiptsOnly, onCheckedChange = { vm.setMissingReceiptsOnly(it) })
+                Text(s[StringKey.MissingReceiptsOnly])
+            }
+        }
+        if (info.bookingCount == 0) {
+            item {
+                EmptyState(AppIcons.Description, s.format(StringKey.NoTaxBookingsIn, info.title), s[StringKey.TaxBookingsHowTo])
+            }
+        }
+        // Missing-receipts filter removes only rows, never a group's share of the totals (they stay whole-period)
+        val rowVisible: (TransactionItem) -> Boolean = { !state.missingReceiptsOnly || it.documentCount == 0 }
+        if (info.incomeGroups.any { it.bookings.any(rowVisible) }) {
+            item { TaxSectionHeader(s[StringKey.TaxSectionIncome]) }
+        }
+        info.incomeGroups.forEach { group ->
+            if (group.bookings.any(rowVisible)) {
+                item { TaxGroupCard(group, group.bookings.filter(rowVisible), info.currency, vm) }
+            }
+        }
+        if (info.deductionGroups.any { it.bookings.any(rowVisible) }) {
+            item { TaxSectionHeader(s[StringKey.TaxSectionDeductions]) }
+        }
+        info.deductionGroups.forEach { group ->
+            if (group.bookings.any(rowVisible)) {
+                item { TaxGroupCard(group, group.bookings.filter(rowVisible), info.currency, vm) }
+            }
+        }
+    }
+}
+
+/** The "[Bookings] in another currency are not included" hint, styled like the Tax summary's one. */
+@Composable
+private fun TaxOtherCurrenciesHint(info: ReportService.TaxBookings) {
+    Text(
+        strings().format(StringKey.OtherCurrenciesExcluded, info.currency, info.otherCurrencyBookings),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** A bold, muted section label above the groups of one net sign. */
+@Composable
+private fun TaxSectionHeader(title: String) {
+    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+}
+
+@Composable
+private fun TaxGroupCard(group: ReportService.TaxGroup, rows: List<TransactionItem>, currency: String, vm: ReportsViewModel) {
+    FinDeskCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(12.dp).background(categoryColor(group.color, group.name), CircleShape))
+                Spacer(Modifier.width(12.dp))
+                Text(group.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(rows.size.toString() + " · " + Formats.money(group.net, currency, signed = true), style = MaterialTheme.typography.bodyMedium)
+            }
+            Spacer(Modifier.height(8.dp))
+            rows.forEachIndexed { index, txn ->
+                TaxBookingRow(txn, currency, vm)
+                if (index < rows.lastIndex) HorizontalDivider()
+            }
+        }
+    }
+}
+
+/** One tax booking: date, partner-text display, account, amount, receipt state and the deciding tax source. */
+@Composable
+private fun TaxBookingRow(txn: TransactionItem, currency: String, vm: ReportsViewModel) {
+    val s = strings()
+    RowContextMenu(
+        menuItem(s[StringKey.MarkNotTaxRelevant]) { vm.markNotTaxRelevant(txn.id) },
+        // Only a stored override can be reset; rule- and category-decided rows have nothing to reset
+        if (txn.taxOverride != null) menuItem(s[StringKey.ResetTaxAutomatic]) { vm.resetTaxAutomatic(txn.id) } else null,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(Formats.date(txn.date), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        BankText.displayPartner(txn.description) ?: txn.description,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "…" + txn.accountIban.takeLast(4),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        taxStateLine(txn, s),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (txn.documentCount > 0) {
+                        Icon(AppIcons.AttachFile, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Text(
+                            s[StringKey.NoReceipt],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+            }
+            Text(
+                Formats.money(txn.amount, currency, signed = true),
+                color = amountColor(txn.amount.signum() < 0),
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(110.dp),
+            )
+        }
+    }
+}
+
+/** The keyword suggestions above the booking groups; accepting or dismissing stores a manual override. */
+@Composable
+private fun TaxSuggestionsCard(suggestions: List<TaxSuggestion>, vm: ReportsViewModel) {
+    val s = strings()
+    var showAll by remember { mutableStateOf(false) }
+    SectionCard(s.format(StringKey.TaxSuggestionsTitle, suggestions.size), Modifier.fillMaxWidth()) {
+        Text(
+            s[StringKey.TaxSuggestionsHint],
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        val shown = if (showAll) suggestions else suggestions.take(20)
+        shown.forEachIndexed { index, suggestion ->
+            TaxSuggestionRow(suggestion, vm)
+            if (index < shown.lastIndex) HorizontalDivider()
+        }
+        if (!showAll && suggestions.size > 20) {
+            TextButton(onClick = { showAll = true }) { Text(s.format(StringKey.ShowAllCount, suggestions.size)) }
+        }
+    }
+}
+
+/** One suggestion: date, partner-text display, the matched keyword as a chip, amount and the two actions. */
+@Composable
+private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
+    val s = strings()
+    val txn = suggestion.booking
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(Formats.date(txn.date), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                BankText.displayPartner(txn.description) ?: txn.description,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                taxStateLine(txn, s),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        KeywordChip(suggestion.keyword)
+        Text(
+            Formats.money(txn.amount, txn.currency, signed = true),
+            color = amountColor(txn.amount.signum() < 0),
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(110.dp),
+        )
+        TextButton(onClick = { vm.acceptSuggestion(txn.id) }) { Text(s[StringKey.Accept]) }
+        TextButton(onClick = { vm.dismissSuggestion(txn.id) }) { Text(s[StringKey.DismissSuggestion]) }
+    }
+}
+
+/** The matched keyword as a small badge. */
+@Composable
+private fun KeywordChip(keyword: String) {
+    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.padding(horizontal = 8.dp)) {
+        Text(
+            keyword,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }

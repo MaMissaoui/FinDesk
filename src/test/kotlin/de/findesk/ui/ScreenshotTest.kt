@@ -48,6 +48,7 @@ import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.AccountsViewModel
 import de.findesk.viewmodel.DashboardViewModel
 import de.findesk.viewmodel.PaymentsViewModel
+import de.findesk.viewmodel.ReportsViewModel
 import de.findesk.viewmodel.TransactionsViewModel
 import de.findesk.viewmodel.UnlockMode
 import de.findesk.viewmodel.UnlockViewModel
@@ -236,6 +237,75 @@ class ScreenshotTest {
     fun `render the open transactions overflow menu`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-more-menu").toFile().absolutePath)
         render("transactions-more-menu", 1440, 900, clickAt = Offset(1283f, 108f)) { Frame(Screen.TRANSACTIONS, dark = false) }
+    }
+
+    /**
+     * The Reports "Tax bookings" tab: an income group, two deduction groups, one row without a receipt and two
+     * keyword suggestions. The tab is a compose scene without test tags, so it is opened by clicking its place
+     * in the TabRow (content starts after the 240 dp sidebar; five equal tabs).
+     */
+    @Test
+    fun `render the reports tax bookings tab`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-taxbookings").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COBADEFFXXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val categories = de.findesk.repository.CategoryRepositoryImpl()
+        val salary = categories.create("Gehalt", "#4CAF50", isTaxRelevant = true).id.value
+        val donations = categories.create("Spenden", "#9C27B0", isTaxRelevant = true).id.value
+        val craft = categories.create("Handwerk", "#FF5722", isTaxRelevant = true).id.value
+        val documents = de.findesk.repository.DocumentRepositoryImpl()
+        val transactions = TransactionRepositoryImpl()
+        val today = java.time.LocalDate.now()
+        var seed = 0
+
+        fun booked(date: java.time.LocalDate, amount: String, partner: String, purpose: String, categoryId: Int?): Int = transactions.create(account, date, BigDecimal(amount), currency = "EUR", partnerName = partner, purpose = purpose, categoryId = categoryId, hash = "tax-shot-${seed++}").id.value
+
+        booked(today.minusDays(80), "2600.00", "Beispiel AG", "Gehalt", salary)
+        val receipt1 = booked(today.minusDays(70), "-60.00", "Beispielhilfe e. V.", "Spende Bezirksfest", donations)
+        documents.create("beispielbedank-1.pdf", "documents/beispielbedank-1.pdf", "application/pdf", linkedTransactionId = receipt1)
+        // The "No receipt" row
+        booked(today.minusDays(60), "-45.00", "Beispielhilfe e. V.", "Spendemonat", donations)
+        val receipt2 = booked(today.minusDays(50), "-320.00", "Beispiel Werk GmbH", "Renovierung Bad", craft)
+        documents.create("beispielbedank-2.pdf", "documents/beispielbedank-2.pdf", "application/pdf", linkedTransactionId = receipt2)
+        // Two suggestions: not tax relevant, matched by keyword
+        booked(today.minusDays(40), "-25.50", "Apotheke am Ring", "Medikamente", null)
+        booked(today.minusDays(30), "-98.90", "Beispiel-Krankenkasse", "Beitrag", null)
+        booked(today.minusDays(20), "-4.50", "Bäckerei Beispiel", "Brötchen", null)
+
+        // Second tab in the row of five; 5 tabs over 1200/784 dp content width
+        render("reports-tax-bookings", 1440, 900, clickAt = Offset(600f, 193f)) { Frame(Screen.REPORTS, dark = false) }
+        render("reports-tax-bookings-de", 1440, 900, clickAt = Offset(600f, 193f)) { Frame(Screen.REPORTS, dark = false, language = AppLanguage.DE) }
+        render("reports-tax-bookings-dark", 1440, 900, clickAt = Offset(600f, 193f)) { Frame(Screen.REPORTS, dark = true) }
+        render("reports-tax-bookings-narrow", 1024, 800, clickAt = Offset(475f, 193f)) { Frame(Screen.REPORTS, dark = false) }
+    }
+
+    /** The tab's empty state: bookings exist, none of them tax relevant; no suggestions either. */
+    @Test
+    fun `render the tax bookings empty state`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-tax-empty").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COBADEFFXXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(3), BigDecimal("-20.00"), "EUR", "Bäckerei Beispiel", "Brötchen", null, "tax-empty-1"),
+                NewTransaction(account, today.minusDays(1), BigDecimal("120.00"), "EUR", "Beispiel AG", "Überweisung", null, "tax-empty-2"),
+            ),
+        )
+        render("reports-tax-bookings-empty", 1440, 900, clickAt = Offset(600f, 193f)) { Frame(Screen.REPORTS, dark = false) }
+    }
+
+    /** The Settings keyword card behind the report's suggestions, in the categories section. */
+    @Test
+    fun `render the settings tax suggestion keywords card`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-keywords").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COBADEFFXXX", "demo-user").id.value
+        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        SettingsRepositoryImpl().setValue("tax.suggestionKeywords", "Spende\nHandwerker\nSteuerberater")
+        render("settings-tax-suggestion-keywords", 1440, 900) {
+            Frame(Screen.SETTINGS, dark = false, settingsArgs = NavigationArgs(settingsSection = SettingsSection.CATEGORIES))
+        }
     }
 
     /** Three rows selected for a batch delete: the selection bar with count and per-currency totals. */
@@ -705,6 +775,7 @@ class ScreenshotTest {
         profiles: List<Pair<String?, String>>? = null,
         settingsArgs: NavigationArgs = NavigationArgs(),
         dashboard: (() -> DashboardViewModel)? = null,
+        reports: (() -> ReportsViewModel)? = null,
     ) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
@@ -729,7 +800,7 @@ class ScreenshotTest {
                                     Screen.TRANSACTIONS -> if (transactions != null) TransactionsScreen(transactionArgs, createViewModel = transactions) else TransactionsScreen()
                                     Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
                                     Screen.DOCUMENTS -> DocumentsScreen()
-                                    Screen.REPORTS -> ReportsScreen()
+                                    Screen.REPORTS -> if (reports != null) ReportsScreen(createViewModel = reports) else ReportsScreen()
                                     Screen.SETTINGS -> SettingsScreen(darkTheme = dark, onDarkThemeChange = {}, language = AppLanguage.EN, onLanguageChange = {}, args = settingsArgs)
                                 }
                             }

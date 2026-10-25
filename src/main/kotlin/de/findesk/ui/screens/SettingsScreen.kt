@@ -43,6 +43,7 @@ import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
+import de.findesk.viewmodel.SettingsState
 import de.findesk.viewmodel.SettingsViewModel
 import java.math.BigDecimal
 
@@ -221,6 +222,8 @@ fun SettingsScreen(
                     }
                     HorizontalDivider()
                 }
+                Spacer(Modifier.height(16.dp))
+                TaxSuggestionKeywordsCard(state, vm)
             }
 
             SettingsSection.RULES -> SettingsSectionHeader(
@@ -884,4 +887,24 @@ internal fun ruleTaxMarker(rule: RuleItem, s: Strings): String = when (rule.taxR
     true -> " · ${s[StringKey.RuleTaxMarkerYes]}"
     false -> " · ${s[StringKey.RuleTaxMarkerNo]}"
     null -> ""
+}
+
+/** The keyword list behind the report's tax suggestions: one keyword per line, editable with save and reset. */
+@Composable
+private fun TaxSuggestionKeywordsCard(state: SettingsState, vm: SettingsViewModel) {
+    val s = strings()
+    // Re-seeded when the stored list changes, so a save/reset shows the cleaned or default value
+    var text by remember(state.taxKeywords) { mutableStateOf(state.taxKeywords) }
+    SectionCard(s[StringKey.TaxSuggestionKeywords]) {
+        OutlinedTextField(
+            text,
+            { text = it },
+            minLines = 6,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { vm.saveTaxKeywords(text) }) { Text(s[StringKey.Save]) }
+            TextButton(onClick = { vm.resetTaxKeywords() }) { Text(s[StringKey.ResetToDefaults]) }
+        }
+    }
 }

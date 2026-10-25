@@ -58,6 +58,9 @@ data class SettingsState(
     val nextProfile: String? = null,
     /** Rule file chosen for import, waiting for confirmation in the preview dialog. */
     val ruleImport: de.findesk.importer.RuleImportPreview? = null,
+
+    /** The tax suggestion keywords as one editable multi-line text (one keyword per line). */
+    val taxKeywords: String = "",
     val isBusy: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -114,6 +117,7 @@ class SettingsViewModel(
                 isEncrypted = de.findesk.data.database.DatabaseFactory.isEncrypted,
                 protocolTraceEnabled = settingsRepository.getValue(de.findesk.banking.ProtocolTraceStore.SETTING_KEY) == "true",
                 hasProtocolTrace = de.findesk.banking.ProtocolTraceStore.last() != null,
+                taxKeywords = de.findesk.document.TaxSuggestions.keywords(settingsRepository).joinToString("\n"),
                 profiles = profileStore.list(),
                 openProfile = openProfile,
                 nextProfile = profileStore.active().slug,
@@ -180,6 +184,29 @@ class SettingsViewModel(
             categoryRepository.setBudget(id, budgetLimit) // update() can't clear a budget
             auditLogRepository.log("UPDATE_CATEGORY", "user", "Updated category ${name.trim()}")
         }
+        refresh()
+    }
+
+    /**
+     * Stores the tax suggestion keywords: one per line, trimmed, non-blank and de-duplicated (case-insensitive).
+     * One `SAVE_TAX_KEYWORDS` audit entry with the saved count only (no keyword text).
+     */
+    fun saveTaxKeywords(text: String): Job = launchSafely(onError) {
+        val seen = mutableSetOf<String>()
+        val saved = text.lines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .filter { seen.add(it.lowercase()) }
+        settingsRepository.setValue(de.findesk.document.TaxSuggestions.KEY_KEYWORDS, saved.joinToString("\n"))
+        auditLogRepository.log("SAVE_TAX_KEYWORDS", "user", "Saved ${saved.size} tax suggestion keywords")
+        refresh()
+    }
+
+    /** Removes the custom keyword list, so the built-in defaults apply again; logs the removed count only. */
+    fun resetTaxKeywords(): Job = launchSafely(onError) {
+        val removed = settingsRepository.getValue(de.findesk.document.TaxSuggestions.KEY_KEYWORDS)?.lines()?.count { it.isNotBlank() } ?: 0
+        settingsRepository.delete(de.findesk.document.TaxSuggestions.KEY_KEYWORDS)
+        auditLogRepository.log("RESET_TAX_KEYWORDS", "user", "Reset $removed tax suggestion keywords")
         refresh()
     }
 
