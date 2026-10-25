@@ -9,6 +9,8 @@ import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.viewmodel.DocumentTab
 import de.findesk.viewmodel.Period
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 
 class Strings(
     val language: AppLanguage,
@@ -48,6 +50,16 @@ class Strings(
         Period.THIS_YEAR -> this[StringKey.PeriodThisYear]
         Period.LAST_YEAR -> this[StringKey.PeriodLastYear]
         Period.ALL -> this[StringKey.PeriodAllTime]
+    }
+
+    /**
+     * "September 2026": the full standalone month name (its natural form, lowercase in French) plus the year,
+     * in the [Strings]' language, capitalised like everywhere else in the UI.
+     */
+    fun month(month: YearMonth): String {
+        val locale = language.locale
+        val text = month.atDay(1).format(DateTimeFormatter.ofPattern("LLLL yyyy", locale))
+        return text.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
     }
 
     fun direction(direction: Direction): String = when (direction) {

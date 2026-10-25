@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 
 data class ChartSlice(
     val label: String,
@@ -73,11 +74,18 @@ data class DashboardState(
     val monthProgress: Float = 0f,
     /** Money moved between the user's own accounts this month: excluded from income and spending above. */
     val transfersThisMonth: BigDecimal = BigDecimal.ZERO,
+    /** The month the cards and charts show (never in the future); the balances and the lists below stay "now". */
+    val selectedMonth: YearMonth = YearMonth.now(),
+    /** The month of the oldest booking in the primary currency; the current month when there are none. */
+    val earliestMonth: YearMonth = YearMonth.now(),
+    /** The calendar month of today when the dashboard last loaded ([isCurrentMonth] compares against it). */
+    val currentMonth: YearMonth = YearMonth.now(),
     val hasAccounts: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
 ) {
     val pendingTasks: Int get() = uncategorizedCount + unlinkedDocumentCount
+    val isCurrentMonth: Boolean get() = selectedMonth == currentMonth
 }
 
 class DashboardViewModel(
@@ -89,19 +97,30 @@ class DashboardViewModel(
     private val today: () -> LocalDate = { LocalDate.now() },
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
-    private val _state = MutableStateFlow(DashboardState())
+    private val _state = MutableStateFlow(
+        DashboardState(
+            selectedMonth = YearMonth.from(today()),
+            currentMonth = YearMonth.from(today()),
+            earliestMonth = YearMonth.from(today()),
+        ),
+    )
     val state: StateFlow<DashboardState> = _state.asStateFlow()
 
     fun loadDashboard(): Job {
         _state.update { it.copy(isLoading = true, error = null) }
         return launchSafely({ e -> _state.update { it.copy(isLoading = false, error = e.userMessage()) } }) {
             val now = today()
-            val monthStart = now.withDayOfMonth(1)
-            val monthEnd = monthStart.plusMonths(1).minusDays(1)
-            val sixMonthsStart = monthStart.minusMonths(5)
-            val yearStart = now.withDayOfYear(1)
-
+            val nowMonth = YearMonth.from(now)
             val currency = Currencies.primary(settingsRepository)
+            // Never a future month: the selection is clamped here too, in case data moved between loads
+            // A future-dated oldest booking must not push the range past today (coerceIn would throw)
+            val earliestMonth = transactionRepository.oldestDate(currency)?.let(YearMonth::from)?.coerceAtMost(nowMonth) ?: nowMonth
+            val month = _state.value.selectedMonth.coerceAtMost(nowMonth).coerceAtLeast(earliestMonth)
+            if (month != _state.value.selectedMonth) _state.update { it.copy(selectedMonth = month) }
+            val monthStart = month.atDay(1)
+            val monthEnd = month.atEndOfMonth()
+            val sixMonthsStart = monthStart.minusMonths(5)
+            val yearStart = LocalDate.of(month.year, 1, 1)
             val accounts = accountRepository.findAllItems()
             val balances = Currencies.totals(accounts, currency, { it.currency }, { it.balance })
             // Loans are money owed and depots are neither, so only the other account types are money available to spend
@@ -149,16 +168,33 @@ class DashboardViewModel(
                 transfersThisMonth = thisMonth
                     .filter { it.isTransfer && it.amount.signum() < 0 }
                     .sumOf { it.amount.abs() },
-                monthProgress = now.dayOfMonth.toFloat() / now.lengthOfMonth(),
+                monthProgress = if (month == nowMonth) now.dayOfMonth.toFloat() / now.lengthOfMonth() else 1f,
                 upcoming = de.findesk.document.RecurringDetector.upcoming(
                     de.findesk.document.RecurringDetector.detect(transactionRepository.findItems(TransactionFilter(startDate = now.minusDays(400), endDate = now)), now),
                     now,
                 ),
+                selectedMonth = month,
+                currentMonth = nowMonth,
+                earliestMonth = earliestMonth,
                 hasAccounts = accounts.isNotEmpty(),
                 isLoading = false,
             )
         }
     }
+
+    /** Selects the month [selectMonth] style: clamped to the loaded range and then fully reloaded. */
+    fun selectMonth(month: YearMonth): Job {
+        val nowMonth = YearMonth.from(today())
+        val s = _state.value
+        _state.update { it.copy(selectedMonth = month.coerceIn(s.earliestMonth, nowMonth)) }
+        return loadDashboard()
+    }
+
+    fun previousMonth(): Job = selectMonth(_state.value.selectedMonth.minusMonths(1))
+
+    fun nextMonth(): Job = selectMonth(_state.value.selectedMonth.plusMonths(1))
+
+    fun currentMonth(): Job = selectMonth(YearMonth.from(today()))
 
     private fun slices(expenses: List<TransactionItem>): List<ChartSlice> = expenses
         .groupBy { it.categoryName ?: ReportService.UNCATEGORIZED }

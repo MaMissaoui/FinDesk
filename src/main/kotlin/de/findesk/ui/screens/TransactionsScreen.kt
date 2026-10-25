@@ -74,7 +74,7 @@ fun TransactionsScreen(
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
-    LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly, args.partner, args.categoryId, args.period) }
+    LaunchedEffect(args) { vm.start(args.accountId, args.uncategorizedOnly, args.partner, args.categoryId, args.period, args.month) }
 
     var showAdd by remember { mutableStateOf(false) }
     val attachReceipt: (Int) -> Unit = { transactionId ->
@@ -226,7 +226,14 @@ fun TransactionsScreen(
                         // The pills keep a 48 dp touch area around their 40 dp outline, so centre the field on them
                         modifier = Modifier.weight(1f).widthIn(min = 240.dp).align(Alignment.CenterVertically),
                     )
-                    DropdownSelector(s.period(state.period), Period.entries, { s.period(it) }, { vm.updatePeriod(it) }, leadingIcon = Icons.Default.DateRange)
+                    // While a single month is navigated (from the dashboard), its label wins over the period's
+                    DropdownSelector(
+                        label = state.month?.let { s.month(it) } ?: s.period(state.period),
+                        Period.entries,
+                        { s.period(it) },
+                        { vm.updatePeriod(it) },
+                        leadingIcon = Icons.Default.DateRange,
+                    )
                     DropdownSelector(
                         label = categoryFilterLabel(state.categoryFilter, state.categories, s),
                         options = listOf<CategoryFilter>(CategoryFilter.Any, CategoryFilter.None) + state.categories.map { CategoryFilter.Only(it.id) },

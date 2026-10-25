@@ -109,6 +109,19 @@ enum class StringKey {
     NothingPending,
     NoBookingsSixMonths,
 
+    /** Month navigation on the dashboard: the ◀/▶ arrows' content descriptions and the jump-back button. */
+    PreviousMonth,
+    NextMonth,
+    CurrentMonth,
+
+    /** Stat-card and card titles for a past month, with the month label ([Strings.month]) as the argument. */
+    IncomeInMonth,
+    ExpensesInMonth,
+    BudgetsInMonth,
+    NoExpensesInMonth,
+    ExpensesByCategoryInMonth,
+    NoBookingsSixMonthsTo,
+
     // Accounts
     AccountsTotal,
     AccountCount,

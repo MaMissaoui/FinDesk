@@ -44,6 +44,7 @@ import de.findesk.util.GroupKey
 import de.findesk.viewmodel.AccountPanelSettings
 import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.AccountsViewModel
+import de.findesk.viewmodel.DashboardViewModel
 import de.findesk.viewmodel.PaymentsViewModel
 import de.findesk.viewmodel.TransactionsViewModel
 import de.findesk.viewmodel.UnlockMode
@@ -270,12 +271,31 @@ class ScreenshotTest {
     fun `render the dashboard with an account`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-dashboard").toFile().absolutePath)
         val bank = BankAccessRepositoryImpl().create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
-        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        val accountId = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(accountId, today.minusMonths(1).withDayOfMonth(3), BigDecimal("-120.00"), "EUR", "Supermarket", "Weekly shop", null, "dash-1"),
+                NewTransaction(accountId, today.minusMonths(1).withDayOfMonth(10), BigDecimal("2000.00"), "EUR", "Employer GmbH", "Salary", null, "dash-2"),
+                NewTransaction(accountId, today.minusDays(3), BigDecimal("-20.00"), "EUR", "Bäckerei", "Brötchen", null, "dash-3"),
+            ),
+        )
 
         render("dashboard-with-account", Screen.DASHBOARD, dark = false)
         render("dashboard-with-account-dark", Screen.DASHBOARD, dark = true)
         // The narrowest common window: stat-card subtitles wrap here, so the cards must still line up
         render("dashboard-with-account-narrow", 1024, 900) { Frame(Screen.DASHBOARD, dark = false) }
+
+        // The dashboard at a past month: the header row (arrows, month list, "Current month") and the month titles
+        fun pastMonth(): DashboardViewModel = DashboardViewModel().apply {
+            runBlocking {
+                loadDashboard().join()
+                selectMonth(java.time.YearMonth.from(today).minusMonths(1)).join()
+            }
+        }
+        render("dashboard-past-month", 1440, 900) { Frame(Screen.DASHBOARD, dark = false, dashboard = ::pastMonth) }
+        render("dashboard-past-month-de", 1440, 900) { Frame(Screen.DASHBOARD, dark = false, language = AppLanguage.DE, dashboard = ::pastMonth) }
+        render("dashboard-past-month-dark", 1440, 900) { Frame(Screen.DASHBOARD, dark = true, dashboard = ::pastMonth) }
     }
 
     /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */
@@ -527,7 +547,19 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Frame(screen: Screen, dark: Boolean, language: AppLanguage = AppLanguage.EN, payments: (() -> PaymentsViewModel)? = null, transactions: (() -> TransactionsViewModel)? = null, transactionArgs: NavigationArgs = NavigationArgs(), lockedOn: Screen? = null, sidebarCollapsed: Boolean = false, profiles: List<Pair<String?, String>>? = null, settingsArgs: NavigationArgs = NavigationArgs()) {
+    private fun Frame(
+        screen: Screen,
+        dark: Boolean,
+        language: AppLanguage = AppLanguage.EN,
+        payments: (() -> PaymentsViewModel)? = null,
+        transactions: (() -> TransactionsViewModel)? = null,
+        transactionArgs: NavigationArgs = NavigationArgs(),
+        lockedOn: Screen? = null,
+        sidebarCollapsed: Boolean = false,
+        profiles: List<Pair<String?, String>>? = null,
+        settingsArgs: NavigationArgs = NavigationArgs(),
+        dashboard: (() -> DashboardViewModel)? = null,
+    ) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode
@@ -546,7 +578,7 @@ class ScreenshotTest {
                             HorizontalDivider()
                             Box(Modifier.fillMaxSize()) {
                                 when (screen) {
-                                    Screen.DASHBOARD -> DashboardScreen()
+                                    Screen.DASHBOARD -> if (dashboard != null) DashboardScreen(createViewModel = dashboard) else DashboardScreen()
                                     Screen.ACCOUNTS -> AccountsScreen()
                                     Screen.TRANSACTIONS -> if (transactions != null) TransactionsScreen(transactionArgs, createViewModel = transactions) else TransactionsScreen()
                                     Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
