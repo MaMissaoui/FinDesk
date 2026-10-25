@@ -1,11 +1,15 @@
 package de.findesk.viewmodel
 
 import de.findesk.document.ReportService
+import de.findesk.document.SystemTaxPrinter
+import de.findesk.document.TaxPrinter
+import de.findesk.document.TaxReportExporter
 import de.findesk.document.TaxSuggestion
 import de.findesk.document.TaxSuggestions
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.util.Currencies
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -14,6 +18,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import org.apache.pdfbox.pdmodel.PDDocument
 import java.io.File
 import java.time.LocalDate
 
@@ -38,6 +43,8 @@ data class ReportsState(
 
 class ReportsViewModel(
     private val reportService: ReportService = ReportService(),
+    private val exporter: TaxReportExporter = TaxReportExporter(),
+    private val printer: TaxPrinter = SystemTaxPrinter(),
     private val transactionRepository: de.findesk.repository.TransactionRepository = de.findesk.repository.TransactionRepositoryImpl(),
     private val settingsRepository: de.findesk.repository.SettingsRepository = de.findesk.repository.SettingsRepositoryImpl(),
     private val auditLogRepository: de.findesk.repository.AuditLogRepository = de.findesk.repository.AuditLogRepositoryImpl(),
@@ -191,6 +198,66 @@ class ReportsViewModel(
                 it.copy(isExporting = false, message = if (ok) AppStrings.format(StringKey.MessageSavedTo, file.name) else null, error = if (ok) null else AppStrings[StringKey.ErrorCsvExportFailed])
             }
         }
+    }
+
+    /** Exports the tab's data as an Excel workbook (read-only: no audit entry, like the PDF/CSV exports). */
+    fun exportTaxXlsx(file: File): Job = exportTax({ exporter.exportXlsx(it, file) }, file)
+
+    /** Exports the tab's data as the printable PDF. */
+    fun exportTaxPdf(file: File): Job = exportTax({ exporter.exportPdf(it, file) }, file)
+
+    private fun exportTax(export: (ReportService.TaxBookings) -> Unit, file: File): Job {
+        _state.update { it.copy(isExporting = true, error = null) }
+        return launchSafely(onError) {
+            try {
+                export(currentTaxBookings())
+                _state.update { it.copy(isExporting = false, message = AppStrings.format(StringKey.MessageSavedTo, file.name)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The exception itself can carry bank data, so only the localized error is shown
+                _state.update { it.copy(isExporting = false, error = AppStrings[StringKey.ErrorTaxExportFailed]) }
+            }
+        }
+    }
+
+    /**
+     * Prints the tab's PDF through the system print dialog. The document is built in memory and closed in
+     * all cases; a cancelled dialog shows no message, a failed print only the localized error.
+     */
+    fun printTax(): Job {
+        _state.update { it.copy(isExporting = true, error = null) }
+        return launchSafely(onError) {
+            var document: PDDocument? = null
+            try {
+                val bookings = currentTaxBookings()
+                document = exporter.buildPdf(bookings)
+                val sent = printer.print(document, AppStrings.format(StringKey.TaxExportTitle, bookings.title))
+                _state.update { it.copy(isExporting = false, message = if (sent) AppStrings[StringKey.MessagePrintSent] else null) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The exception itself can carry bank data, so only the localized error is shown
+                _state.update { it.copy(isExporting = false, error = AppStrings[StringKey.ErrorPrintFailed]) }
+            } finally {
+                document?.let { runCatching { it.close() } }
+            }
+        }
+    }
+
+    /** The period the tab shows: the custom range, or the selected calendar year. */
+    private fun currentRange(): Pair<LocalDate, LocalDate> {
+        val range = _state.value.customRange
+        if (range != null) return range
+        val year = _state.value.selectedYear
+        return LocalDate.of(year, 1, 1) to LocalDate.of(year, 12, 31)
+    }
+
+    /** The tab's data, loading it first when the screen has not finished loading yet. */
+    private suspend fun currentTaxBookings(): ReportService.TaxBookings {
+        _state.value.taxBookings?.let { return it }
+        val (from, to) = currentRange()
+        return reportService.generateTaxBookings(from, to)
     }
 
     fun clearMessages() {

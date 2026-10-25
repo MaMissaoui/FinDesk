@@ -18,6 +18,8 @@ import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Density
 import de.findesk.banking.TransferOrder
 import de.findesk.data.database.DatabaseFactory
+import de.findesk.document.ReportService
+import de.findesk.document.TaxReportExporter
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.LocalStrings
@@ -26,6 +28,8 @@ import de.findesk.i18n.Translations
 import de.findesk.model.AccountItem
 import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
+import de.findesk.model.TaxSource
+import de.findesk.model.TransactionItem
 import de.findesk.plaintextDatabase
 import de.findesk.repository.AccountGroupRepositoryImpl
 import de.findesk.repository.AccountRepositoryImpl
@@ -55,6 +59,7 @@ import de.findesk.viewmodel.UnlockViewModel
 import de.findesk.viewmodel.ViewModelWork
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.runBlocking
+import org.apache.pdfbox.rendering.PDFRenderer
 import org.jetbrains.skia.EncodedImageFormat
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty
@@ -305,6 +310,59 @@ class ScreenshotTest {
         SettingsRepositoryImpl().setValue("tax.suggestionKeywords", "Spende\nHandwerker\nSteuerberater")
         render("settings-tax-suggestion-keywords", 1440, 900) {
             Frame(Screen.SETTINGS, dark = false, settingsArgs = NavigationArgs(settingsSection = SettingsSection.CATEGORIES))
+        }
+    }
+
+    /**
+     * Page 1 and the last page of the tax report PDF, rendered straight from the in-memory document, so the
+     * print/export layout can be checked visually next to the screenshots. Synthetic bookings only; runs
+     * only with -Pscreenshots like the rest of this class.
+     */
+    @Test
+    fun `render the tax report pdf pages`() {
+        val day = java.time.LocalDate.of(2026, 6, 1)
+        fun item(id: Int, date: java.time.LocalDate, amount: String, category: String, partner: String): TransactionItem = TransactionItem(
+            id = id,
+            accountId = 1,
+            accountIban = "DE89370400440532013000",
+            date = date,
+            amount = BigDecimal(amount),
+            currency = "EUR",
+            partnerName = partner,
+            purpose = "Buchung $id",
+            categoryId = 1,
+            categoryName = category,
+            categoryColor = "#9C27B0",
+            isTaxRelevant = true,
+            documentCount = if (id % 4 == 0) 1 else 0,
+            taxSource = TaxSource.CATEGORY,
+        )
+        val income = (1..20).map { item(it, day.minusDays(it.toLong()), "1200.00", "Gehalt", "Beispiel AG") }
+        val donations = (1..30).map { item(100 + it, day.minusDays(it.toLong()), "-30.00", "Spenden", "Beispielhilfe e. V.") }
+        fun group(name: String, color: String, list: List<TransactionItem>, isIncome: Boolean) = ReportService.TaxGroup(
+            categoryId = 1,
+            name = name,
+            color = color,
+            bookings = list,
+            income = if (isIncome) list.sumOf { it.amount } else BigDecimal.ZERO,
+            expenses = if (isIncome) BigDecimal.ZERO else list.sumOf { it.amount.abs() },
+        )
+        val bookings = ReportService.TaxBookings(
+            from = java.time.LocalDate.of(2026, 1, 1),
+            to = java.time.LocalDate.of(2026, 12, 31),
+            currency = "EUR",
+            incomeGroups = listOf(group("Gehalt", "#4CAF50", income, isIncome = true)),
+            deductionGroups = listOf(group("Spenden", "#9C27B0", donations, isIncome = false)),
+            bookingCount = 50,
+        )
+        TaxReportExporter().buildPdf(bookings).use { doc ->
+            val renderer = PDFRenderer(doc)
+            listOf(0, doc.numberOfPages - 1).forEach { index ->
+                val image = renderer.renderImage(index, 1.5f)
+                check(javax.imageio.ImageIO.write(image, "png", File(outDir, "tax-report-pdf-page-${index + 1}.png"))) {
+                    "rendering page ${index + 1} of the tax report failed"
+                }
+            }
         }
     }
 

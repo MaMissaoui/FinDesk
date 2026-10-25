@@ -203,7 +203,19 @@ fun DashboardScreen(
                         state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
                     }
                 }
-                SectionCard(s[StringKey.TaxDeductibleYtd], Modifier.weight(1f).fillMaxHeight()) {
+                // The whole card opens the Tax bookings tab for the selected month's year
+                SectionCard(
+                    s[StringKey.TaxDeductibleYtd],
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clickable(
+                            onClickLabel = s[StringKey.OpenTaxBookings],
+                            role = Role.Button,
+                        ) {
+                            onNavigate(Screen.REPORTS, NavigationArgs(taxYear = state.selectedMonth.year))
+                        },
+                ) {
                     if (state.taxDeductionsByCategory.isEmpty()) {
                         Text(
                             s[StringKey.TaxDeductibleHint],

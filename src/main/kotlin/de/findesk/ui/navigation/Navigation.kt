@@ -66,6 +66,8 @@ data class NavigationArgs(
     val requestId: Long = 0,
     /** Settings opens on this section; null starts on Appearance. */
     val settingsSection: SettingsSection? = null,
+    /** Reports opens on the Tax bookings tab for this year; null keeps the screen's own start. */
+    val taxYear: Int? = null,
 )
 
 class NavigationState {
