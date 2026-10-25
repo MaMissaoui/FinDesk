@@ -160,7 +160,9 @@ fun TransactionsScreen(
             Column(modifier = Modifier.weight(1f)) {
                 // The summary shares one line with the actions; it ellipsizes rather than wrapping below them
                 val headerBalance = state.currentBalance
-                val headerBalanceColor = if (headerBalance != null) balanceColor(headerBalance) else MaterialTheme.colorScheme.onSurfaceVariant
+                // The header's and the running column's balances both belong to [state.accountId]'s account,
+                // so a loan's negative balance there never warns red (see currentBalanceIsLoan)
+                val headerBalanceColor = if (headerBalance != null) balanceColor(headerBalance.signum() < 0 && !state.currentBalanceIsLoan) else MaterialTheme.colorScheme.onSurfaceVariant
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -385,6 +387,7 @@ fun TransactionsScreen(
                                         categories = state.categories,
                                         balance = state.balances?.get(txn.id),
                                         balanceCurrency = state.balanceCurrency,
+                                        balanceIsLoan = state.currentBalanceIsLoan,
                                         isNew = txn.id in state.boldIds,
                                         isSelected = txn.id in state.selectedIds,
                                         deleteLabel = deleteLabel,
@@ -823,6 +826,8 @@ private fun TransactionRow(
     categories: List<CategoryItem>,
     balance: de.findesk.util.RunningBalance.Entry?,
     balanceCurrency: String?,
+    /** Whether the running balance belongs to a loan: it is negative by nature, so it never warns red. */
+    balanceIsLoan: Boolean,
     isNew: Boolean,
     isSelected: Boolean,
     deleteLabel: String,
@@ -979,7 +984,7 @@ private fun TransactionRow(
                 Text(
                     Formats.money(balance.balance, currency),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = balanceColor(balance.balance),
+                    color = balanceColor(balance.balance.signum() < 0 && !balanceIsLoan),
                     textAlign = TextAlign.End,
                 )
             }

@@ -24,6 +24,12 @@ val SelectionDark = Color(0xFF26324D)
 /** Text and icons on [SelectionDark], light enough for 4.5:1 contrast. */
 val OnSelectionDark = Color(0xFFDCE5FB)
 
+/** Negative amounts on [SelectionLight], dark enough for 4.5:1 contrast. */
+val ErrorOnSelectionLight = Color(0xFFB91C1C)
+
+/** Negative amounts on [SelectionDark], light enough for 4.5:1 contrast. */
+val ErrorOnSelectionDark = Color(0xFFFCA5A5)
+
 /** Light-theme sidebar: neutral, so the logo is the only saturated blue in the panel. */
 val SidebarLight = Color(0xFFECEFF4)
 
@@ -62,6 +68,14 @@ fun balanceColor(value: BigDecimal): Color = when (value.signum()) {
     -1 -> amountColor(true)
     else -> MaterialTheme.colorScheme.onSurface
 }
+
+/**
+ * The colour for an account balance from the loan rule's warning flag ([de.findesk.util.isWarningBalance]): red when
+ * the balance warns and the theme's text colour otherwise, so a loan's negative balance keeps its minus sign in the
+ * normal colour. [balanceColor] for [BigDecimal] stays the plain sign rule for other screens' non-account amounts.
+ */
+@Composable
+fun balanceColor(warning: Boolean): Color = if (warning) amountColor(true) else MaterialTheme.colorScheme.onSurface
 
 // Category Colors
 // The hex strings (and the one-name-per-line comments) live in `model/DefaultCategories.colors`, because the model

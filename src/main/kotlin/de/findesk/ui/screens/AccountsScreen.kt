@@ -42,6 +42,8 @@ import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AccountIds
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
+import de.findesk.util.LOAN_TYPE
+import de.findesk.util.isWarningBalance
 import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
 import de.findesk.viewmodel.visibleAccounts
@@ -360,9 +362,9 @@ private fun BankCard(
     onForgetDeleted: (AccountItem) -> Unit,
 ) {
     val s = strings()
-    // The collapsed header shows the connection's total, coloured green/red when it is a single currency
+    // The collapsed header shows the connection's total, coloured by the loan rule when it is a single currency
     val totals = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
-    val totalColor = if (totals.size == 1) balanceColor(totals.values.first()) else MaterialTheme.colorScheme.onSurfaceVariant
+    val totalColor = if (totals.size == 1) balanceColor(isWarningBalance(accounts, totals.keys.first())) else MaterialTheme.colorScheme.onSurfaceVariant
     FinDeskCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             RowContextMenu(
@@ -554,7 +556,7 @@ private fun BankCard(
                                 Formats.money(account.balance, account.currency),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = balanceColor(account.balance),
+                                color = balanceColor(isWarningBalance(listOf(account), account.currency)),
                             )
                             Spacer(Modifier.width(8.dp))
                             IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
@@ -937,7 +939,7 @@ internal fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfir
                     isError = parsed == null,
                     supportingText = { if (parsed == null) Text(s[StringKey.EnterValidBalance]) },
                 )
-                if (type == "loan") {
+                if (type == LOAN_TYPE) {
                     Text(
                         s[StringKey.LoanBalanceHint],
                         style = MaterialTheme.typography.bodySmall,
@@ -1167,7 +1169,7 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                             Formats.money(a.balance, a.currency),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = balanceColor(a.balance),
+                            color = balanceColor(isWarningBalance(listOf(a), a.currency)),
                         )
                     }
                     SingleChoiceRow(
