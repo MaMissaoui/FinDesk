@@ -35,23 +35,30 @@ import de.findesk.util.Formats
 import de.findesk.viewmodel.BudgetStatus
 import de.findesk.viewmodel.DashboardViewModel
 import de.findesk.viewmodel.Period
+import java.time.YearMonth
 
 @Composable
-fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
-    val vm = rememberViewModel { DashboardViewModel() }
+fun DashboardScreen(
+    onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> },
+    createViewModel: () -> DashboardViewModel = { DashboardViewModel() },
+) {
+    val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
     LaunchedEffect(Unit) { vm.loadDashboard() }
 
-    // A category row opens this month's bookings of that category; uncategorized without a category filter
+    // A category row opens the selected month's bookings of that category; uncategorized without a category filter.
+    // The current month keeps the plain period (as before); a past month passes the exact month.
     val openTransactionsCategory: (Int?) -> Unit = { categoryId ->
+        val month = if (state.isCurrentMonth) null else state.selectedMonth
         onNavigate(
             Screen.TRANSACTIONS,
-            if (categoryId == null) {
-                NavigationArgs(uncategorizedOnly = true, period = Period.THIS_MONTH)
-            } else {
-                NavigationArgs(categoryId = categoryId, period = Period.THIS_MONTH)
-            },
+            NavigationArgs(
+                uncategorizedOnly = categoryId == null,
+                categoryId = categoryId,
+                period = if (month == null) Period.THIS_MONTH else null,
+                month = month,
+            ),
         )
     }
 
@@ -76,6 +83,11 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             return@LazyColumn
         }
 
+        // Hidden with the other cards on the first-run dashboard (its block above returns early)
+        if (state.hasAccounts) {
+            item { MonthHeader(state.selectedMonth, state.earliestMonth, state.currentMonth, state.isCurrentMonth, vm) }
+        }
+
         item {
             // Equal heights even when a subtitle wraps in a narrow window
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -98,8 +110,20 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                         state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
                     ).joinToString("\n").ifEmpty { null },
                 )
-                StatCard(s[StringKey.IncomeThisMonth], Formats.money(state.monthlyIncome, state.currency), AppIcons.ArrowDownward, Success, Modifier.weight(1f).fillMaxHeight())
-                StatCard(s[StringKey.ExpensesThisMonth], Formats.money(state.monthlyExpenses, state.currency), AppIcons.ArrowUpward, Error, Modifier.weight(1f).fillMaxHeight())
+                StatCard(
+                    if (state.isCurrentMonth) s[StringKey.IncomeThisMonth] else s.format(StringKey.IncomeInMonth, s.month(state.selectedMonth)),
+                    Formats.money(state.monthlyIncome, state.currency),
+                    AppIcons.ArrowDownward,
+                    Success,
+                    Modifier.weight(1f).fillMaxHeight(),
+                )
+                StatCard(
+                    if (state.isCurrentMonth) s[StringKey.ExpensesThisMonth] else s.format(StringKey.ExpensesInMonth, s.month(state.selectedMonth)),
+                    Formats.money(state.monthlyExpenses, state.currency),
+                    AppIcons.ArrowUpward,
+                    Error,
+                    Modifier.weight(1f).fillMaxHeight(),
+                )
                 PendingTasksCard(
                     pendingTasks = state.pendingTasks,
                     uncategorizedCount = state.uncategorizedCount,
@@ -117,9 +141,15 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                 (if (state.expensesByCategory.size > 8) 1 else 0) +
                 (if (state.transfersThisMonth.signum() > 0) 1 else 0)
             Row(modifier = Modifier.fillMaxWidth().height(maxOf(300.dp, 104.dp + 34.dp * splitRows)), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                SectionCard(s[StringKey.ExpensesByCategory], Modifier.weight(1f).fillMaxHeight()) {
+                SectionCard(
+                    if (state.isCurrentMonth) s[StringKey.ExpensesByCategory] else s.format(StringKey.ExpensesByCategoryInMonth, s.month(state.selectedMonth)),
+                    Modifier.weight(1f).fillMaxHeight(),
+                ) {
                     if (state.expensesByCategory.isEmpty()) {
-                        Text(s[StringKey.NoExpensesThisMonth], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (state.isCurrentMonth) s[StringKey.NoExpensesThisMonth] else s.format(StringKey.NoExpensesInMonth, s.month(state.selectedMonth)),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     } else {
                         CategorySplit(
                             slices = state.expensesByCategory.map { CategoryShare(it.categoryId, it.label, it.amount, it.color ?: "") },
@@ -131,7 +161,14 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
                 }
                 SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(1f).fillMaxHeight()) {
                     if (state.lastMonths.all { it.income.signum() == 0 && it.expenses.signum() == 0 }) {
-                        Text(s[StringKey.NoBookingsSixMonths], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (state.isCurrentMonth) {
+                                s[StringKey.NoBookingsSixMonths]
+                            } else {
+                                s.format(StringKey.NoBookingsSixMonthsTo, s.month(state.selectedMonth))
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     } else {
                         IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxSize(), currency = state.currency)
                     }
@@ -159,7 +196,10 @@ fun DashboardScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) 
             // Budgets (when any) and tax-deductible expenses side by side and equal height, like the stat row
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (state.budgets.isNotEmpty()) {
-                    SectionCard(s[StringKey.BudgetsThisMonth], Modifier.weight(1f).fillMaxHeight()) {
+                    SectionCard(
+                        if (state.isCurrentMonth) s[StringKey.BudgetsThisMonth] else s.format(StringKey.BudgetsInMonth, s.month(state.selectedMonth)),
+                        Modifier.weight(1f).fillMaxHeight(),
+                    ) {
                         state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
                     }
                 }
@@ -253,6 +293,41 @@ private fun GettingStartedStep(number: Int, title: String, description: String, 
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
             Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (action != null) action()
+        }
+    }
+}
+
+/** The ◀/month-list/▶ row above the dashboard's stat cards; a past month also offers "Current month". */
+@Composable
+internal fun MonthHeader(
+    selected: YearMonth,
+    earliest: YearMonth,
+    current: YearMonth,
+    isCurrentMonth: Boolean,
+    vm: DashboardViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val s = strings()
+    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { vm.previousMonth() }, enabled = selected > earliest) {
+            Icon(Icons.Default.KeyboardArrowLeft, contentDescription = s[StringKey.PreviousMonth])
+        }
+        // Every month from the current one back to the oldest booking, newest first
+        DropdownSelector(
+            label = s.month(selected),
+            options = generateSequence(current) { it.minusMonths(1) }
+                .takeWhile { it >= earliest }
+                .toList(),
+            optionLabel = { s.month(it) },
+            onSelect = { vm.selectMonth(it) },
+            leadingIcon = Icons.Default.DateRange,
+        )
+        IconButton(onClick = { vm.nextMonth() }, enabled = !isCurrentMonth) {
+            Icon(Icons.Default.KeyboardArrowRight, contentDescription = s[StringKey.NextMonth])
+        }
+        if (!isCurrentMonth) {
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = { vm.currentMonth() }) { Text(s[StringKey.CurrentMonth]) }
         }
     }
 }

@@ -15,6 +15,7 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.count
+import org.jetbrains.exposed.sql.min
 import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -89,6 +90,12 @@ interface TransactionRepository {
 
     /** Number of bookings on [accountId] with this booking date and amount (for cross-source duplicate checks). */
     fun countSameBooking(accountId: Int, date: LocalDate, amount: BigDecimal): Int
+
+    /**
+     * The oldest booking date (in [currency] when given, e.g. the primary one), from a single aggregate query.
+     * Null when there is no booking at all.
+     */
+    fun oldestDate(currency: String? = null): LocalDate?
 }
 
 class TransactionRepositoryImpl : TransactionRepository {
@@ -249,6 +256,14 @@ class TransactionRepositoryImpl : TransactionRepository {
 
     override fun hasBookings(accountId: Int): Boolean = transaction {
         Transaction.find { TransactionsTable.accountId eq accountId }.limit(1).any()
+    }
+
+    override fun oldestDate(currency: String?): LocalDate? = transaction {
+        val oldest = TransactionsTable.date.min()
+        val condition = with(SqlExpressionBuilder) {
+            if (currency != null) TransactionsTable.currency eq currency else Op.TRUE
+        }
+        TransactionsTable.select(oldest).where { condition }.firstOrNull()?.get(oldest)
     }
 
     override fun countNew(): Map<Int, Int> = transaction {

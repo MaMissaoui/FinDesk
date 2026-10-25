@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.update
 import java.io.File
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 
 enum class Period(val label: String) {
     THIS_MONTH("This month"),
@@ -131,6 +132,8 @@ data class TransactionsState(
     val accounts: List<AccountItem> = emptyList(),
     val searchQuery: String = "",
     val period: Period = Period.THIS_MONTH,
+    /** One exact month (e.g. navigated from the dashboard's past-month category): wins over [period]. */
+    val month: YearMonth? = null,
     val direction: Direction = Direction.ALL,
     val categoryFilter: CategoryFilter = CategoryFilter.Any,
     /** Derived from [selection] (the selected single account), kept for the running balance, import and CSV export. */
@@ -221,7 +224,7 @@ class TransactionsViewModel(
     private var lastRefreshedSelection: AccountSelection? = null
 
     fun currentFilter(s: TransactionsState = _state.value): TransactionFilter {
-        val (start, end) = s.period.range(today())
+        val (start, end) = dateRange(s.month, s.period)
         val accountId: Int?
         val accountIds: Set<Int>?
         when (val selection = s.selection) {
@@ -255,10 +258,24 @@ class TransactionsViewModel(
         )
     }
 
+    /**
+     * The inclusive date range behind [month]/[period]: exactly [month] when it is set (the dashboard's past-month
+     * click-through), otherwise what [Period.range] resolves on today. Every filter that turns the period into
+     * dates goes through this one, so list and chart always agree.
+     */
+    private fun dateRange(month: YearMonth?, period: Period): Pair<LocalDate?, LocalDate?> = month?.let { it.atDay(1) to it.atEndOfMonth() } ?: period.range(today())
+
     /** Applies navigation context (e.g. "transactions of this account") and loads. */
-    fun start(accountId: Int? = null, uncategorizedOnly: Boolean = false, partner: String? = null, categoryId: Int? = null, period: Period? = null): Job {
+    fun start(
+        accountId: Int? = null,
+        uncategorizedOnly: Boolean = false,
+        partner: String? = null,
+        categoryId: Int? = null,
+        period: Period? = null,
+        month: YearMonth? = null,
+    ): Job {
         if (partner != null) return showPartner(partner)
-        if (categoryId != null) return showCategory(categoryId, period)
+        if (categoryId != null) return showCategory(categoryId, period, month)
         restoreSelection = accountId == null
         _state.update {
             // A deep link into an account or the uncategorized list shouldn't be limited to this month,
@@ -273,22 +290,25 @@ class TransactionsViewModel(
                 selection = accountId?.let { id -> AccountSelection.Account(id) } ?: it.selection,
                 categoryFilter = if (uncategorizedOnly) CategoryFilter.None else CategoryFilter.Any,
                 period = effectivePeriod,
+                // Only an explicit month navigation keeps one; any other start clears it
+                month = month,
             )
         }
         return loadTransactions()
     }
 
     /**
-     * Every booking of one category over [period] (default all time); search, direction, amount and account
-     * selection are cleared, like [showPartner] does.
+     * Every booking of one category over [period] (default all time) or exactly [month]; search, direction,
+     * amount and account selection are cleared, like [showPartner] does.
      */
-    private fun showCategory(categoryId: Int, period: Period?): Job {
+    private fun showCategory(categoryId: Int, period: Period?, month: YearMonth?): Job {
         searchJob?.cancel()
         restoreSelection = false
         _state.update {
             it.copy(
                 searchQuery = "",
                 period = period ?: Period.ALL,
+                month = month,
                 direction = Direction.ALL,
                 categoryFilter = CategoryFilter.Only(categoryId),
                 selection = AccountSelection.All,
@@ -308,6 +328,7 @@ class TransactionsViewModel(
             it.copy(
                 searchQuery = partner,
                 period = Period.ALL,
+                month = null,
                 direction = Direction.ALL,
                 categoryFilter = CategoryFilter.Any,
                 selection = AccountSelection.All,
@@ -374,7 +395,7 @@ class TransactionsViewModel(
         val accountBookings = balanceAccount?.let { transactionRepository.findItems(TransactionFilter(accountId = it.id)).toList() }
         val balances = if (balanceAccount != null && accountBookings != null) RunningBalance.compute(balanceAccount.balance, accountBookings) else null
         val balanceChart = if (balanceAccount != null && accountBookings != null && balances != null) {
-            balanceChartPoints(accountBookings, balances, _state.value.period, today())
+            balanceChartPoints(accountBookings, balances, _state.value.period, today(), _state.value.month)
         } else {
             null
         }
@@ -412,8 +433,9 @@ class TransactionsViewModel(
         running: Map<Int, RunningBalance.Entry>,
         period: Period,
         now: LocalDate,
+        month: YearMonth?,
     ): List<Pair<LocalDate, BigDecimal>> {
-        val (start, end) = period.range(now)
+        val (start, end) = dateRange(month, period)
         val from = start ?: bookings.minOfOrNull { it.date } ?: return emptyList()
         // The period's end, but never past today: the balance of a future day is not known
         val to = if (end == null || end.isAfter(now)) now else end
@@ -431,7 +453,8 @@ class TransactionsViewModel(
     }
 
     fun updatePeriod(period: Period): Job {
-        _state.update { it.copy(period = period) }
+        // Picking a period from the list ends the exact-month navigation
+        _state.update { it.copy(period = period, month = null) }
         return loadTransactions()
     }
 

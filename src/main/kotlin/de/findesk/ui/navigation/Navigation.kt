@@ -10,6 +10,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.ui.components.AppIcons
 import de.findesk.viewmodel.Period
+import java.time.YearMonth
 
 enum class Screen(val icon: ImageVector) {
     DASHBOARD(Icons.Default.Home),
@@ -57,6 +58,9 @@ data class NavigationArgs(
     val categoryId: Int? = null,
     /** The period the arriving transactions screen filters by; null keeps the screen's own period. */
     val period: Period? = null,
+
+    /** Shows exactly this month; wins over [period]. */
+    val month: YearMonth? = null,
     val request: ScreenRequest? = null,
     /** Makes a repeated request a new value, so the screen sees it again. */
     val requestId: Long = 0,
