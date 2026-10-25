@@ -741,6 +741,42 @@ class TransactionsViewModel(
         refresh()
     }
 
+    /**
+     * Sets the manual tax override of the selected bookings that are still shown (the same intersection idea as
+     * [deleteSelected]); `value = null` resets them to automatic. One `SET_TAX_OVERRIDE` audit entry names the
+     * count and the value word only — no amounts, names or purposes. The selection is kept and the list refreshed.
+     */
+    fun setTaxOverrideForSelection(value: Boolean?): Job = launchSafely(onError) {
+        val s = _state.value
+        val targets = s.selectedIds intersect s.transactions.mapTo(mutableSetOf()) { t -> t.id }
+        val changed = transactionRepository.setTaxOverride(targets, value)
+        if (changed > 0) {
+            auditLogRepository.log("SET_TAX_OVERRIDE", "user", "Set tax override for $changed bookings: ${taxOverrideWord(value)}")
+            _state.update { it.copy(message = AppStrings.format(StringKey.MessageTaxOverrideSet, changed)) }
+        }
+        refresh()
+    }
+
+    /**
+     * Sets the manual tax override of one booking from the details dialog (same audit entry as the selection,
+     * with count 1); `value = null` resets it to automatic. Refreshes so the open details show the new state.
+     */
+    fun setTaxOverride(transactionId: Int, value: Boolean?): Job = launchSafely(onError) {
+        val changed = transactionRepository.setTaxOverride(listOf(transactionId), value)
+        if (changed > 0) {
+            auditLogRepository.log("SET_TAX_OVERRIDE", "user", "Set tax override for $changed bookings: ${taxOverrideWord(value)}")
+            _state.update { it.copy(message = AppStrings.format(StringKey.MessageTaxOverrideSet, changed)) }
+        }
+        refresh()
+    }
+
+    /** The override's word for the `SET_TAX_OVERRIDE` audit entry (records stay English; count only, no booking text). */
+    private fun taxOverrideWord(value: Boolean?): String = when (value) {
+        true -> "relevant"
+        false -> "not relevant"
+        null -> "automatic"
+    }
+
     fun autoCategorizeTransactions(): Job = launchSafely(onError) {
         val uncategorized = transactionRepository.findItems(TransactionFilter(uncategorizedOnly = true))
         var updated = 0

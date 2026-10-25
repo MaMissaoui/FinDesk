@@ -34,6 +34,8 @@ interface RuleRepository {
         autoApply: Boolean = true,
         matchField: RuleField = RuleField.ANY,
         direction: RuleDirection = RuleDirection.ANY,
+        /** Tax relevance the rule decides for matching bookings of its own category; null = "as the category". */
+        taxRelevant: Boolean? = null,
     ): Rule
     fun update(
         id: Int,
@@ -44,6 +46,12 @@ interface RuleRepository {
         matchField: RuleField? = null,
         direction: RuleDirection? = null,
     ): Rule?
+
+    /**
+     * Sets the rule's tax flag; explicit null = "as the category". Separate from [update], because there null
+     * means "keep". The flag applies at read time to every booking of the rule's own category that matches.
+     */
+    fun setTaxRelevant(id: Int, value: Boolean?): Boolean
     fun delete(id: Int): Boolean
 
     /** The category id of the first auto-apply rule matching purpose or partner name; see [RuleMatcher]. */
@@ -80,6 +88,7 @@ class RuleRepositoryImpl : RuleRepository {
         autoApply: Boolean,
         matchField: RuleField,
         direction: RuleDirection,
+        taxRelevant: Boolean?,
     ): Rule = transaction {
         val category = Category.findById(categoryId)
             ?: throw IllegalArgumentException("Category with id $categoryId not found")
@@ -90,6 +99,7 @@ class RuleRepositoryImpl : RuleRepository {
             this.autoApply = autoApply
             this.matchField = matchField.key
             this.direction = direction.key
+            this.taxRelevant = taxRelevant
         }
     }
 
@@ -114,6 +124,10 @@ class RuleRepositoryImpl : RuleRepository {
 
     override fun delete(id: Int): Boolean = transaction {
         Rule.findById(id)?.delete() != null
+    }
+
+    override fun setTaxRelevant(id: Int, value: Boolean?): Boolean = transaction {
+        Rule.findById(id)?.apply { taxRelevant = value } != null
     }
 
     override fun matchCategoryId(purpose: String?, partnerName: String?, amount: BigDecimal?): Int? = matcher().categoryFor(purpose, partnerName, amount)
@@ -151,35 +165,46 @@ class RuleMatcher(val specs: List<RuleSpec>) {
     companion object {
         /** Pairs of pattern to category id, all rules unrestricted (ANY/ANY). */
         fun of(rules: List<Pair<String, Int>>) = RuleMatcher(rules.map { (pattern, categoryId) -> RuleSpec(pattern, categoryId) })
-    }
 
-    private val compiled: List<Triple<RuleField, RuleDirection, (String) -> Boolean>> =
-        specs.map { (pattern, _, field, direction) ->
+        /** Compiles [pattern] the way every rule match works: a case-insensitive regex when it parses, a plain substring test otherwise. */
+        fun compile(pattern: String): (String) -> Boolean {
             val regex = try {
                 pattern.toRegex(RegexOption.IGNORE_CASE)
             } catch (e: java.util.regex.PatternSyntaxException) {
                 null
             }
-            val test: (String) -> Boolean = if (regex != null) regex::containsMatchIn else { text -> text.contains(pattern, ignoreCase = true) }
-            Triple(field, direction, test)
+            return if (regex != null) regex::containsMatchIn else { text -> text.contains(pattern, ignoreCase = true) }
         }
 
-    /** The category id of the first matching rule, or null. */
-    fun categoryFor(purpose: String?, partnerName: String?, amount: BigDecimal? = null): Int? {
-        specs.forEachIndexed { index, spec ->
-            val (_, direction, test) = compiled[index]
-            val directionOk = when (direction) {
+        /**
+         * Whether [spec]'s direction and text scope accept this booking, tested with [test] (see [compile]).
+         * Shared by categorization ([RuleMatcher.categoryFor]) and the tax-rule lookup, so the two can never match
+         * differently. Matching ignores case; a blank text never matches.
+         */
+        fun matches(spec: RuleSpec, test: (String) -> Boolean, purpose: String?, partnerName: String?, amount: BigDecimal?): Boolean {
+            val directionOk = when (spec.direction) {
                 RuleDirection.ANY -> true
                 RuleDirection.EXPENSE -> amount != null && amount < BigDecimal.ZERO
                 RuleDirection.INCOME -> amount != null && amount > BigDecimal.ZERO
             }
-            if (!directionOk) return@forEachIndexed
+            if (!directionOk) return false
             val text = when (spec.field) {
                 RuleField.ANY -> listOfNotNull(purpose, partnerName).joinToString(" ")
                 RuleField.PARTNER -> partnerName.orEmpty()
                 RuleField.PURPOSE -> purpose.orEmpty()
             }
-            if (text.isNotBlank() && test(text)) return spec.categoryId
+            return text.isNotBlank() && test(text)
+        }
+    }
+
+    private val compiled: List<Triple<RuleField, RuleDirection, (String) -> Boolean>> =
+        specs.map { (pattern, _, field, direction) -> Triple(field, direction, compile(pattern)) }
+
+    /** The category id of the first matching rule, or null. */
+    fun categoryFor(purpose: String?, partnerName: String?, amount: BigDecimal? = null): Int? {
+        specs.forEachIndexed { index, spec ->
+            val (_, _, test) = compiled[index]
+            if (matches(spec, test, purpose, partnerName, amount)) return spec.categoryId
         }
         return null
     }

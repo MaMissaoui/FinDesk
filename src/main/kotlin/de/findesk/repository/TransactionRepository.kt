@@ -2,11 +2,14 @@ package de.findesk.repository
 
 import de.findesk.data.entity.Account
 import de.findesk.data.entity.Category
+import de.findesk.data.entity.Rule
 import de.findesk.data.entity.Transaction
-import de.findesk.data.table.CategoriesTable
 import de.findesk.data.table.DocumentsTable
+import de.findesk.data.table.RulesTable
 import de.findesk.data.table.TransactionsTable
 import de.findesk.model.Direction
+import de.findesk.model.RuleDirection
+import de.findesk.model.RuleField
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.model.toItem
@@ -82,6 +85,14 @@ interface TransactionRepository {
      * ever exceeding SQLite's bound-parameter limit.
      */
     fun deleteAll(ids: Collection<Int>): Int
+
+    /**
+     * Sets the manual tax override of every booking in [ids] in one `transaction { }` and returns how many rows
+     * changed; `value = null` resets them to automatic. Unknown ids are ignored and an empty collection does
+     * nothing. The ids are processed in chunks of at most [TransactionRepositoryImpl.TAX_CHUNK] per statement,
+     * like [deleteAll], so a selection can hold the whole history.
+     */
+    fun setTaxOverride(ids: Collection<Int>, value: Boolean?): Int
     fun findByHash(hash: String): Transaction?
 
     /** Whether [accountId] has any booking yet; used to keep a bank's first import from looking all new. */
@@ -221,6 +232,20 @@ class TransactionRepositoryImpl : TransactionRepository {
         Transaction.find { TransactionsTable.hash eq hash }.firstOrNull()
     }
 
+    override fun setTaxOverride(ids: Collection<Int>, value: Boolean?): Int {
+        if (ids.isEmpty()) return 0
+        return transaction {
+            var changed = 0
+            ids.chunked(TAX_CHUNK).forEach { chunk ->
+                with(SqlExpressionBuilder) {
+                    val entityIds = chunk.map { EntityID(it, TransactionsTable) }
+                    changed += TransactionsTable.update({ TransactionsTable.id inList entityIds }) { it[taxOverride] = value }
+                }
+            }
+            changed
+        }
+    }
+
     override fun findItems(filter: TransactionFilter, limit: Int?): List<TransactionItem> = transaction {
         val conditions = with(SqlExpressionBuilder) {
             buildList<Op<Boolean>> {
@@ -234,12 +259,6 @@ class TransactionRepositoryImpl : TransactionRepository {
                 filter.categoryId?.let { add(TransactionsTable.categoryId eq it) }
                 filter.currency?.let { add(TransactionsTable.currency eq it) }
                 if (filter.uncategorizedOnly) add(TransactionsTable.categoryId.isNull())
-                if (filter.taxRelevantOnly) {
-                    add(
-                        TransactionsTable.categoryId inSubQuery
-                            CategoriesTable.select(CategoriesTable.id).where { CategoriesTable.isTaxRelevant eq true },
-                    )
-                }
                 when (filter.direction) {
                     Direction.INCOME -> add(TransactionsTable.amount greater BigDecimal.ZERO)
                     Direction.EXPENSES -> add(TransactionsTable.amount less BigDecimal.ZERO)
@@ -260,7 +279,24 @@ class TransactionRepositoryImpl : TransactionRepository {
         val where = conditions.reduceOrNull { a, b -> a and b }
         val query = (if (where != null) Transaction.find(where) else Transaction.all())
             .orderBy(TransactionsTable.date to SortOrder.DESC, TransactionsTable.id to SortOrder.DESC)
-        val transactions = (if (limit != null) query.limit(limit) else query).toList()
+        // taxRelevantOnly decides on the effective value (override, rule, category) below, so its limit applies
+        // after that filter, not here
+        val taxOnly = filter.taxRelevantOnly
+        val transactions = (if (limit != null && !taxOnly) query.limit(limit) else query).toList()
+
+        // The rule layer of the effective tax relevance: the auto-apply rules with a tax flag, loaded and compiled
+        // once per call (usually few) and matched per booking against its current category, in the matcher's order
+        // and with the same match as categorization. Evaluated at read time; never stored on the bookings.
+        val taxRules = Rule
+            .find { (RulesTable.autoApply eq true) and (RulesTable.taxRelevant.isNotNull()) }
+            .orderBy(RulesTable.priority to SortOrder.DESC, RulesTable.id to SortOrder.ASC)
+            .toList()
+            .map { rule ->
+                TaxRuleSpec(
+                    RuleSpec(rule.pattern, rule.category.id.value, RuleField.fromKey(rule.matchField), RuleDirection.fromKey(rule.direction)),
+                    taxRelevant = rule.taxRelevant == true,
+                )
+            }
 
         val ids = transactions.map { it.id }
         val docCounts = if (ids.isEmpty()) {
@@ -272,7 +308,21 @@ class TransactionRepositoryImpl : TransactionRepository {
                 .groupingBy { it }
                 .eachCount()
         }
-        transactions.map { it.toItem(docCounts[it.id.value] ?: 0) }
+        val items = transactions.map { txn ->
+            // A stored override wins without looking at the rules; a rule must own the booking's current category
+            val ruleTax = if (txn.taxOverride == null) {
+                taxRules.firstOrNull { it.spec.categoryId == txn.category?.id?.value && it.matches(txn.purpose, txn.partnerName, txn.amount) }
+            } else {
+                null
+            }
+            txn.toItem(docCounts[txn.id.value] ?: 0, ruleTax?.taxRelevant, ruleTax?.spec?.pattern)
+        }
+        return@transaction if (taxOnly) {
+            val relevant = items.filter { it.isTaxRelevant }
+            if (limit != null) relevant.take(limit) else relevant
+        } else {
+            items
+        }
     }
 
     override fun countSameBooking(accountId: Int, date: LocalDate, amount: BigDecimal): Int = transaction {
@@ -320,5 +370,19 @@ class TransactionRepositoryImpl : TransactionRepository {
     private companion object {
         /** Batch-delete chunk size: SQLite's bound-parameter limit is at least 999, so 500 ids per statement is safe. */
         const val DELETE_CHUNK = 500
+
+        /** Chunk size for the batch tax override, same limit as [DELETE_CHUNK]. */
+        const val TAX_CHUNK = 500
     }
+}
+
+/**
+ * One auto-apply rule with a tax flag, loaded and compiled once per [TransactionRepositoryImpl.findItems] call:
+ * the rule layer of the effective tax relevance. Matching goes through [RuleMatcher.matches], so the tax lookup
+ * and categorization can never match differently.
+ */
+private class TaxRuleSpec(val spec: RuleSpec, val taxRelevant: Boolean) {
+    private val test: (String) -> Boolean = RuleMatcher.compile(spec.pattern)
+
+    fun matches(purpose: String?, partnerName: String?, amount: BigDecimal?): Boolean = RuleMatcher.matches(spec, test, purpose, partnerName, amount)
 }

@@ -23,4 +23,5 @@ class Transaction(id: EntityID<Int>) : IntEntity(id) {
     var hash by TransactionsTable.hash
     var createdAt by TransactionsTable.createdAt
     var isNew by TransactionsTable.isNew
+    var taxOverride by TransactionsTable.taxOverride
 }
