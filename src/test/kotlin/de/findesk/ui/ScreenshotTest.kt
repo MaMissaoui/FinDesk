@@ -172,6 +172,26 @@ class ScreenshotTest {
         render("payments-sending-locked-sidebar", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, lockedOn = Screen.PAYMENTS) }
     }
 
+    /** The Payments "From" picker open: accounts grouped by bank on two readable lines instead of one long string. */
+    @Test
+    fun `render the open account picker on payments`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-picker").toFile().absolutePath)
+        val banks = BankAccessRepositoryImpl()
+        val spark = banks.create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val dkb = banks.create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        val household = accounts.create(spark, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        accounts.rename(household, "Haushalt")
+        accounts.create(spark, "DE44500105175407324931", balance = BigDecimal("15000.00"), accountType = "savings")
+        accounts.create(dkb, "DE02120300000000202051", balance = BigDecimal("812.40"))
+        // A loan can't send a SEPA transfer, so the view model never offers it in the picker
+        accounts.create(dkb, "DE44500105175407324001", balance = BigDecimal("-12000.00"), accountType = "loan")
+
+        // The "From" pill sits under the From label at the top of the SEPA transfer card
+        render("payments-account-picker", 1440, 900, clickAt = Offset(400f, 192f)) { Frame(Screen.PAYMENTS, dark = false) }
+        render("payments-account-picker-dark", 1440, 900, clickAt = Offset(400f, 192f)) { Frame(Screen.PAYMENTS, dark = true) }
+    }
+
     /** Adding a manual booking identical to one already on that day asks before adding it (two coffees are real). */
     @Test
     fun `render the confirmation for an identical manual entry`() {

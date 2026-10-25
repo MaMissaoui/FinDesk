@@ -97,12 +97,7 @@ fun PaymentsScreen(
             SectionCard(s[StringKey.SepaTransfer]) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(s[StringKey.From], style = MaterialTheme.typography.labelLarge)
-                    DropdownSelector(
-                        label = from?.let { "${accountLabel(it)} (${Formats.money(it.balance, it.currency)})" } ?: s[StringKey.ChooseAccount],
-                        options = state.accounts,
-                        optionLabel = { "${accountLabel(it)} (${Formats.money(it.balance, it.currency)})" },
-                        onSelect = { from = it },
-                    )
+                    AccountPicker(selected = from, accounts = state.accounts, onSelect = { from = it })
                     OutlinedTextField(name, { name = it.take(BankingService.MAX_NAME_LENGTH) }, label = { Text(s[StringKey.RecipientName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(
                         iban,

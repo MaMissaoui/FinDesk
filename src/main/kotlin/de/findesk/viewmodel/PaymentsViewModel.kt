@@ -13,8 +13,10 @@ import de.findesk.model.AccountItem
 import de.findesk.model.PaymentOrderItem
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
+import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AppInfo
 import de.findesk.util.Iban
+import de.findesk.util.LOAN_TYPE
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -77,12 +79,25 @@ class PaymentsViewModel(
         val interrupted = paymentOrderRepository.markInterrupted(AppInfo.startedAt)
         if (interrupted > 0) auditLogRepository.log("PAYMENT_ORDERS_INTERRUPTED", "system", "$interrupted order(s) left pending by an earlier run marked as outcome unknown")
         _state.update {
-            // SEPA is EUR only; accounts of offline banks and card identifiers without an IBAN can never be a source
+            // SEPA is EUR only; accounts of offline banks and card identifiers without an IBAN can never be a source.
+            // Neither can a loan or depot: neither one can send a SEPA transfer either.
             val offlineBanks = bankAccessRepository.findAllItems().filter { it.offline }.map { it.id }.toSet()
+            val typeOrder = ACCOUNT_TYPES.withIndex().associate { (index, type) -> type to index }
             it.copy(
-                accounts = accountRepository.findAllItems().filter { a ->
-                    a.currency == "EUR" && a.bankAccessId !in offlineBanks && Iban.isValid(a.iban)
-                },
+                accounts = accountRepository.findAllItems()
+                    .filter { a ->
+                        a.currency == "EUR" && a.bankAccessId !in offlineBanks && Iban.isValid(a.iban) &&
+                            a.accountType != LOAN_TYPE && a.accountType != "depot"
+                    }
+                    .sortedWith(
+                        compareBy(
+                            { it.bankName.lowercase() },
+                            // Known types in their group order, anything else after them
+                            { typeOrder[it.accountType] ?: typeOrder.size },
+                            { it.name ?: "" },
+                            { it.id },
+                        ),
+                    ),
                 paymentOrders = paymentOrderRepository.findRecentItems(20),
                 bankCapabilities = bankAccessRepository.findAllItems()
                     .mapNotNull { bank -> BankCapabilities.parse(bank.capabilities)?.let { caps -> bank.id to caps } }
