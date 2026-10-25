@@ -758,6 +758,23 @@ class TransactionsViewModel(
     }
 
     /**
+     * Sets the category of the selected bookings that are still shown (the same intersection idea as
+     * [deleteSelected]); `categoryId = null` means "Uncategorized". The batch write skips bookings already on the
+     * target, and one `UPDATE_CATEGORIES` audit entry names the count only — no amounts, names or purposes. The
+     * selection is kept and the list refreshed.
+     */
+    fun setCategoryForSelection(categoryId: Int?): Job = launchSafely(onError) {
+        val s = _state.value
+        val targets = s.selectedIds intersect s.transactions.mapTo(mutableSetOf()) { t -> t.id }
+        val changed = transactionRepository.updateCategories(targets.associateWith { categoryId })
+        if (changed > 0) {
+            auditLogRepository.log("UPDATE_CATEGORIES", "user", "Set category for $changed bookings to category ${categoryId ?: "uncategorized"}")
+            _state.update { it.copy(message = AppStrings.format(StringKey.MessageCategorySet, changed)) }
+        }
+        refresh()
+    }
+
+    /**
      * Sets the manual tax override of one booking from the details dialog (same audit entry as the selection,
      * with count 1); `value = null` resets it to automatic. Refreshes so the open details show the new state.
      */

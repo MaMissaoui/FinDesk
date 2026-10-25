@@ -302,6 +302,8 @@ fun TransactionsScreen(
                             SelectionBar(
                                 count = state.selectedIds.size,
                                 totals = state.selectedTotals,
+                                categories = state.categories,
+                                onCategory = { vm.setCategoryForSelection(it) },
                                 onTax = { vm.setTaxOverrideForSelection(it) },
                                 onDelete = openMultiDelete,
                                 onClear = vm::clearSelection,
@@ -605,12 +607,22 @@ private fun ReapplyRulesDialog(
 
 /**
  * The bar above the list while a multi-selection is active: how many bookings are selected, their totals per
- * currency (currencies are never added together), the Tax menu, the batch delete and the clear action.
+ * currency (currencies are never added together), the Category menu, the Tax menu, the batch delete and the
+ * clear action.
  */
 @Composable
-private fun SelectionBar(count: Int, totals: Map<String, BigDecimal>, onTax: (Boolean?) -> Unit, onDelete: () -> Unit, onClear: () -> Unit) {
+private fun SelectionBar(
+    count: Int,
+    totals: Map<String, BigDecimal>,
+    categories: List<CategoryItem>,
+    onCategory: (Int?) -> Unit,
+    onTax: (Boolean?) -> Unit,
+    onDelete: () -> Unit,
+    onClear: () -> Unit,
+) {
     val s = strings()
     var taxMenu by remember { mutableStateOf(false) }
+    var categoryMenu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -629,6 +641,27 @@ private fun SelectionBar(count: Int, totals: Map<String, BigDecimal>, onTax: (Bo
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick = { categoryMenu = true }) {
+                Text(s[StringKey.CategoryMenu], maxLines = 1, softWrap = false)
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                DropdownMenuItem(text = { Text(s[StringKey.Uncategorized]) }, onClick = {
+                    categoryMenu = false
+                    onCategory(null)
+                })
+                categories.forEach { c ->
+                    DropdownMenuItem(
+                        text = { Text(c.name + if (c.isTaxRelevant) "  (${s[StringKey.Tax]})" else "") },
+                        onClick = {
+                            categoryMenu = false
+                            onCategory(c.id)
+                        },
+                    )
+                }
+            }
+        }
         Box {
             OutlinedButton(onClick = { taxMenu = true }) {
                 Text(s[StringKey.TaxMenu], maxLines = 1, softWrap = false)
