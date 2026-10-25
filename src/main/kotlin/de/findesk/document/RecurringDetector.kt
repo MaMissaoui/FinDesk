@@ -36,6 +36,8 @@ object RecurringDetector {
         val occurrences: Int,
         val categoryName: String?,
         val currency: String = "EUR",
+        /** True when the group's last booking moved between the user's own accounts. */
+        val isTransfer: Boolean = false,
     ) {
         val isIncome: Boolean get() = typicalAmount.signum() > 0
         val yearlyAmount: BigDecimal get() = typicalAmount.multiply(BigDecimal(cadence.perYear))
@@ -87,9 +89,11 @@ object RecurringDetector {
 
         val amounts = group.map { it.amount }.sorted()
         val medianAmount = amounts[amounts.size / 2]
+        // Zero medians are booking artifacts (corrections, rejected debits), not a subscription
+        if (medianAmount.signum() == 0) return null
         val fixed = amounts.all { (it - medianAmount).abs() <= medianAmount.abs().multiply(BigDecimal("0.01")).max(BigDecimal("0.01")) }
         return RecurringPayment(
-            name = last.partnerName ?: last.description,
+            name = (last.partnerName ?: last.description).replace(Regex("\\s+"), " ").trim(),
             cadence = cadence,
             typicalAmount = medianAmount.setScale(2, RoundingMode.HALF_UP),
             fixedAmount = fixed,
@@ -98,6 +102,7 @@ object RecurringDetector {
             occurrences = byDate.size,
             categoryName = last.categoryName,
             currency = last.currency,
+            isTransfer = last.isTransfer,
         )
     }
 }

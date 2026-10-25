@@ -25,6 +25,7 @@ import de.findesk.document.TaxSuggestion
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.CategoryShare
+import de.findesk.model.TaxSource
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
@@ -57,7 +58,7 @@ fun ReportsScreen(
     val s = strings()
     // A navigation arg opens the Tax bookings tab for its year (the dashboard's tax card); the screen is
     // recreated per navigation, so the effect below runs once per arrival
-    var selectedTab by remember { mutableStateOf(if (args.taxYear != null) ReportsTab.TAX_BOOKINGS else ReportsTab.TAX_SUMMARY) }
+    var selectedTab by remember { mutableStateOf(if (args.taxYear != null) ReportsTab.TAX_BOOKINGS else ReportsTab.CATEGORY_ANALYSIS) }
     var exportMenu by remember { mutableStateOf(false) }
     val report = state.taxReport
     LaunchedEffect(Unit) {
@@ -73,28 +74,31 @@ fun ReportsScreen(
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         var customMode by remember { mutableStateOf(state.customRange != null) }
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // The top bar names the screen; this row pairs the period controls with the export actions
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                SingleChoiceRow(
-                    options = listOf(false, true),
-                    selected = customMode,
-                    label = { if (it) s[StringKey.CustomRange] else s[StringKey.TaxYear] },
-                    onSelect = { custom ->
-                        customMode = custom
-                        if (!custom) vm.updateYear(state.selectedYear)
-                    },
-                )
-                if (!customMode) {
-                    IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = s[StringKey.PreviousYear]) }
-                    Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = s[StringKey.NextYear]) }
-                } else {
-                    DateRangeInputs(
-                        initial = state.customRange ?: (LocalDate.now().withDayOfMonth(1).minusMonths(2) to LocalDate.now()),
-                        onApply = { from, to -> vm.setCustomRange(from, to) },
+            // The top bar names the screen; this row pairs the period controls with the export actions. While the
+            // Recurring tab is selected the period controls hide: the tab always covers the last 13 months.
+            if (selectedTab != ReportsTab.RECURRING) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    SingleChoiceRow(
+                        options = listOf(false, true),
+                        selected = customMode,
+                        label = { if (it) s[StringKey.CustomRange] else s[StringKey.TaxYear] },
+                        onSelect = { custom ->
+                            customMode = custom
+                            if (!custom) vm.updateYear(state.selectedYear)
+                        },
                     )
+                    if (!customMode) {
+                        IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = s[StringKey.PreviousYear]) }
+                        Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = s[StringKey.NextYear]) }
+                    } else {
+                        DateRangeInputs(
+                            initial = state.customRange ?: (LocalDate.now().withDayOfMonth(1).minusMonths(2) to LocalDate.now()),
+                            onApply = { from, to -> vm.setCustomRange(from, to) },
+                        )
+                    }
+                    if (state.isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 }
-                if (state.isLoading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
             }
             Spacer(Modifier.weight(1f))
             if (state.isExporting) {
@@ -284,6 +288,22 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
                 }
                 HorizontalDivider()
             }
+            item {
+                // The whole period's totals, bold like a table footer
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Text(s[StringKey.ReportTotal], fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text(Formats.money(report.totalIncome, report.currency), color = amountColor(false), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(Formats.money(report.totalExpenses, report.currency), color = amountColor(true), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(
+                        Formats.money(report.netIncome, report.currency, signed = true),
+                        fontWeight = FontWeight.Bold,
+                        color = amountColor(report.netIncome.signum() < 0),
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.End,
+                    )
+                }
+                HorizontalDivider()
+            }
         }
     }
 }
@@ -373,7 +393,7 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
         return
     }
     val payments = recurring.filter { !it.isIncome }
-    val yearlyCost = Currencies.totals(payments, Currencies.DEFAULT, { it.currency }, { it.yearlyAmount.abs() })
+    val yearlyCost = recurringCost(recurring)
     val s = strings()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -394,7 +414,7 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
                 recurring.sortedByDescending { it.yearlyAmount.abs() }.forEach { r ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(3f)) {
-                            Text(r.name, fontWeight = FontWeight.Medium)
+                            Text(r.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 s.format(StringKey.TimesSeen, r.occurrences) + (r.categoryName?.let { " · $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
@@ -403,7 +423,7 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
                         }
                         Text(s.cadence(r.cadence), modifier = Modifier.weight(1f))
                         Text(Formats.date(r.nextDate), modifier = Modifier.weight(1f))
-                        Text((if (r.fixedAmount) "" else "~") + Formats.money(r.typicalAmount, r.currency, signed = true), color = amountColor(!r.isIncome), modifier = Modifier.weight(1f))
+                        Text((if (r.fixedAmount) "" else "≈ ") + Formats.money(r.typicalAmount, r.currency, signed = true), color = amountColor(!r.isIncome), modifier = Modifier.weight(1f))
                         Text(Formats.money(r.yearlyAmount.abs(), r.currency), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     }
                     HorizontalDivider()
@@ -412,6 +432,12 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
         }
     }
 }
+
+/**
+ * The recurring payments' cost per year for the tab's cards, per currency: no income and no own-account transfers
+ * (the rows still list them).
+ */
+internal fun recurringCost(payments: List<de.findesk.document.RecurringDetector.RecurringPayment>): Map<String, BigDecimal> = Currencies.totals(payments.filter { !it.isIncome && !it.isTransfer }, Currencies.DEFAULT, { it.currency }, { it.yearlyAmount.abs() })
 
 /** Imports count as money in, cards never for tax: the tax view splits persistence by the category's net instead. */
 @Composable
@@ -557,14 +583,19 @@ private fun TaxBookingRow(txn: TransactionItem, currency: String, vm: ReportsVie
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        taxStateLine(txn, s),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (txn.taxSource != TaxSource.CATEGORY) {
+                        Text(
+                            taxStateLine(txn, s),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        // A category-derived reason repeats the group header, so only the receipt state stays
+                        Spacer(Modifier.weight(1f))
+                    }
                     if (txn.documentCount > 0) {
                         Icon(AppIcons.AttachFile, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                     } else {
