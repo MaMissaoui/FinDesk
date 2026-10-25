@@ -156,6 +156,9 @@ enum class StringKey {
     Transactions,
     EditBalance,
     DeleteAccount,
+
+    /** Menu item on an account row: later imports and syncs may bring the account's deleted bookings back. */
+    AllowDeletedAgain,
     BlzDigits,
     BankName,
     BicOptional,
@@ -693,6 +696,12 @@ enum class StringKey {
     MessageAdded,
     MessageAccountAdded,
     MessageAccountDeleted,
+
+    /** Status message after "Allow deleted bookings again"; %d is the number of remembered deletions removed. */
+    MessageDeletedForgotten,
+
+    /** Status message when "Allow deleted bookings again" finds nothing remembered. */
+    MessageNoDeletedRemembered,
     MessageBankRemoved,
     MessageConnectionSaved,
     SyncConnecting,
@@ -821,6 +830,9 @@ enum class StringKey {
     ImportSummaryProbable,
     ImportSummaryWrongCurrency,
     ImportSummaryBalance,
+
+    /** Summary suffix naming bookings the user deleted before; %d is the count. */
+    ImportSummaryDeleted,
     ErrorFileNotFound,
     ErrorFileTooLarge,
     ErrorImportSeveralAccounts,
@@ -954,7 +966,7 @@ enum class StringKey {
     /** Title of the multi-delete confirmation; %d is the number of bookings. */
     DeleteTransactionsTitle,
 
-    /** Warning in the multi-delete confirmation: synced bookings can come back within the bank's sync period. */
+    /** Warning in the delete confirmations: deleted bookings are remembered, so they don't come back. */
     DeleteSyncedHint,
 
     /** Status message after the batch delete: %d is the number of deleted bookings. */

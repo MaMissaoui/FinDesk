@@ -30,6 +30,8 @@ open class StatementImportService(
         /** Bookings in another currency than the account; never mixed in, since amounts can't be converted. */
         val wrongCurrency: Int = 0,
         val currency: String = "EUR",
+        /** Bookings the user deleted before; remembered, so they are skipped instead of coming back. */
+        val previouslyDeleted: Int = 0,
     ) {
         /**
          * Sums two per-file reports. The balance comes from the second report, which is the newer file imported
@@ -43,6 +45,7 @@ open class StatementImportService(
             probableDuplicates = probableDuplicates + other.probableDuplicates,
             wrongCurrency = wrongCurrency + other.wrongCurrency,
             currency = other.currency,
+            previouslyDeleted = previouslyDeleted + other.previouslyDeleted,
         )
 
         /** One file reads exactly as today; several files name the file count first ([StringKey.ImportSummaryFiles]). */
@@ -55,6 +58,7 @@ open class StatementImportService(
             if (categorized > 0) append(AppStrings.format(StringKey.ImportSummaryAuto, categorized))
             if (duplicates > 0) append(AppStrings.format(StringKey.ImportSummaryKnown, duplicates))
             if (probableDuplicates > 0) append(AppStrings.format(StringKey.ImportSummaryProbable, probableDuplicates))
+            if (previouslyDeleted > 0) append(AppStrings.format(StringKey.ImportSummaryDeleted, previouslyDeleted))
             if (wrongCurrency > 0) append(AppStrings.format(StringKey.ImportSummaryWrongCurrency, wrongCurrency))
             balanceUpdated?.let { append(AppStrings.format(StringKey.ImportSummaryBalance, de.findesk.util.Formats.money(it, currency))) }
         }
@@ -179,10 +183,10 @@ open class StatementImportService(
         auditLogRepository.log(
             "IMPORT_STATEMENT",
             "user",
-            "${statement.formatLabel} into …${account.iban.takeLast(4)}: $imported new, ${plan.exactDuplicates} known, ${plan.probableDuplicates} probable duplicates" +
+            "${statement.formatLabel} into …${account.iban.takeLast(4)}: $imported new, ${plan.exactDuplicates} known, ${plan.probableDuplicates} probable duplicates, ${plan.previouslyDeleted} deleted earlier" +
                 if (wrongCurrency.isNotEmpty()) ", ${wrongCurrency.size} in another currency skipped" else "",
         )
-        ImportReport(imported, plan.exactDuplicates, categorized, newBalance, plan.probableDuplicates, wrongCurrency.size, account.currency)
+        ImportReport(imported, plan.exactDuplicates, categorized, newBalance, plan.probableDuplicates, wrongCurrency.size, account.currency, plan.previouslyDeleted)
     }
 
     /**

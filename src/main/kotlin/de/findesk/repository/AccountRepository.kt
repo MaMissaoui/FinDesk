@@ -3,6 +3,7 @@ package de.findesk.repository
 import de.findesk.data.entity.Account
 import de.findesk.data.entity.BankAccess
 import de.findesk.data.table.AccountsTable
+import de.findesk.data.table.DeletedBookingsTable
 import de.findesk.data.table.DocumentsTable
 import de.findesk.data.table.TransactionsTable
 import de.findesk.model.AccountItem
@@ -143,6 +144,8 @@ class AccountRepositoryImpl : AccountRepository {
 
 /** Must run inside a transaction. */
 internal fun deleteAccountCascade(accountId: Int): Boolean {
+    // The account is gone for good, so its remembered deleted bookings have nothing to point at any more
+    DeletedBookingsTable.deleteWhere { DeletedBookingsTable.accountId eq accountId }
     val txnIds = TransactionsTable.select(TransactionsTable.id)
         .where { TransactionsTable.accountId eq accountId }
         .map { it[TransactionsTable.id] }

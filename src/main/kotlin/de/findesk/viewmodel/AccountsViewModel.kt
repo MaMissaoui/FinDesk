@@ -364,6 +364,27 @@ class AccountsViewModel(
         _state.update { it.copy(message = AppStrings[StringKey.MessageAccountDeleted]) }
     }
 
+    /**
+     * "Allow deleted bookings again" from the account's menu: forgets the bookings of [accountId] remembered
+     * as deleted, so a later import or bank sync may bring them back again. Names the count in one audit entry
+     * and in the status message; when nothing is remembered, the message says so and nothing is audited.
+     */
+    fun forgetDeletedBookings(accountId: Int): Job = launchSafely(onError) {
+        val count = transactionRepository.forgetDeleted(accountId)
+        val iban = accountRepository.findAllItems().firstOrNull { it.id == accountId }?.iban.orEmpty()
+        if (count > 0) {
+            auditLogRepository.log(
+                "FORGET_DELETED_BOOKINGS",
+                "user",
+                "Account ${iban.takeLast(4)}: $count deleted bookings may be imported again",
+            )
+            _state.update { it.copy(message = AppStrings.format(StringKey.MessageDeletedForgotten, count)) }
+        } else {
+            _state.update { it.copy(message = AppStrings[StringKey.MessageNoDeletedRemembered]) }
+        }
+        refresh()
+    }
+
     fun deleteBankAccess(bankAccessId: Int): Job = launchSafely(onError) {
         bankingService.removeBankAccess(bankAccessId)
         refresh()
