@@ -30,6 +30,8 @@ data class MonthBar(
     val month: Int,
     val income: BigDecimal,
     val expenses: BigDecimal,
+    /** The month is still running (today's month); its totals are so far, not final. */
+    val partial: Boolean = false,
 )
 
 data class BudgetStatus(
@@ -142,6 +144,8 @@ class DashboardViewModel(
                     month = m.monthValue,
                     income = txns.filter { it.countsAsIncome }.sumOf { it.amount },
                     expenses = txns.filter { it.countsAsSpending }.sumOf { it.amount.abs() },
+                    // Only the running month is so far: a past selected month's window can never include it
+                    partial = m.year == nowMonth.year && m.monthValue == nowMonth.monthValue,
                 )
             }
 

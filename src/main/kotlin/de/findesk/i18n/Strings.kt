@@ -40,8 +40,21 @@ class Strings(
         else -> type
     }
 
-    /** The user's own account name, or the localized account type when none is set. */
-    fun accountName(account: AccountItem): String = account.name ?: accountType(account.accountType)
+    /**
+     * The user's own account name, or the localized type plus "…<last 4>" distinguishing it, when none is set.
+     * The 4 come from the IBAN (whitespace removed), else from the account number, else the type stands alone;
+     * several unnamed accounts of one type therefore never read the same.
+     */
+    fun accountName(account: AccountItem): String = account.name ?: run {
+        val type = accountType(account.accountType)
+        val iban = account.iban.filterNot { it.isWhitespace() }
+        val number = account.accountNumber?.filterNot { it.isWhitespace() }
+        when {
+            iban.isNotBlank() -> "$type …${iban.takeLast(4)}"
+            !number.isNullOrBlank() -> "$type …${number.takeLast(4)}"
+            else -> type
+        }
+    }
 
     fun period(period: Period): String = when (period) {
         Period.THIS_MONTH -> this[StringKey.PeriodThisMonth]
