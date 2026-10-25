@@ -980,6 +980,9 @@ enum class StringKey {
     /** Details dialog: the category's flag decided; %1$s is the state, %2$s the category's name. */
     TaxFromCategory,
 
+    /** Selection bar: the Category menu's button, placed before the Tax menu. */
+    CategoryMenu,
+
     /** The Tax label of the details dialog's tax row, and the selection bar's menu button before "Clear selection". */
     TaxMenu,
 
@@ -1003,6 +1006,9 @@ enum class StringKey {
 
     /** Status message after a tax override change: %d is the number of bookings. */
     MessageTaxOverrideSet,
+
+    /** Status message after a category change on a multi-selection: %d is the number of bookings. */
+    MessageCategorySet,
 
     // Reports: the Tax bookings tab
 

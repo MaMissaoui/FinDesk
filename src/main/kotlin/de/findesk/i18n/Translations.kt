@@ -852,6 +852,7 @@ object Translations {
         K.TaxSetByYou to "%s · set by you",
         K.TaxFromRule to "%1\$s · from rule “%2\$s”",
         K.TaxFromCategory to "%1\$s · from category “%2\$s”",
+        K.CategoryMenu to "Category",
         K.TaxMenu to "Tax",
         K.MarkTaxRelevant to "Mark as tax relevant",
         K.MarkNotTaxRelevant to "Mark as not tax relevant",
@@ -860,6 +861,7 @@ object Translations {
         K.RuleTaxMarkerYes to "Tax",
         K.RuleTaxMarkerNo to "No tax",
         K.MessageTaxOverrideSet to "Tax status changed for %d {1:booking|bookings}",
+        K.MessageCategorySet to "Category changed for %d {1:booking|bookings}",
 
         K.TabTaxBookings to "Tax bookings",
         K.TaxIncomeTotal to "Tax-relevant income",
@@ -1740,6 +1742,7 @@ object Translations {
         K.TaxSetByYou to "%s · von Ihnen gesetzt",
         K.TaxFromRule to "%1\$s · aus Regel „%2\$s“",
         K.TaxFromCategory to "%1\$s · aus Kategorie „%2\$s“",
+        K.CategoryMenu to "Kategorie",
         K.TaxMenu to "Steuer",
         K.MarkTaxRelevant to "Als steuerrelevant markieren",
         K.MarkNotTaxRelevant to "Als nicht steuerrelevant markieren",
@@ -1748,6 +1751,7 @@ object Translations {
         K.RuleTaxMarkerYes to "Steuer",
         K.RuleTaxMarkerNo to "keine Steuer",
         K.MessageTaxOverrideSet to "Steuerstatus geändert für %d {1:Buchung|Buchungen}",
+        K.MessageCategorySet to "Kategorie geändert für %d {1:Buchung|Buchungen}",
 
         K.TabTaxBookings to "Steuerbuchungen",
         K.TaxIncomeTotal to "Steuerrelevante Einnahmen",
@@ -2628,6 +2632,7 @@ object Translations {
         K.TaxSetByYou to "%s · défini par vous",
         K.TaxFromRule to "%1\$s · via la règle « %2\$s »",
         K.TaxFromCategory to "%1\$s · via la catégorie « %2\$s »",
+        K.CategoryMenu to "Catégorie",
         K.TaxMenu to "Impôt",
         K.MarkTaxRelevant to "Marquer comme fiscalement pertinent",
         K.MarkNotTaxRelevant to "Marquer comme non fiscalement pertinent",
@@ -2636,6 +2641,7 @@ object Translations {
         K.RuleTaxMarkerYes to "impôt",
         K.RuleTaxMarkerNo to "sans impôt",
         K.MessageTaxOverrideSet to "Statut fiscal modifié pour %d {1:opération|opérations}",
+        K.MessageCategorySet to "Catégorie modifiée pour %d {1:opération|opérations}",
 
         K.TabTaxBookings to "Écritures fiscales",
         K.TaxIncomeTotal to "Revenus fiscalement pertinents",
