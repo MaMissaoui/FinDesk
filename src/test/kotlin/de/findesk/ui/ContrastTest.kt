@@ -7,7 +7,11 @@ import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.DarkColorScheme
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.ErrorDark
+import de.findesk.ui.theme.ErrorOnSelectionDark
+import de.findesk.ui.theme.ErrorOnSelectionLight
 import de.findesk.ui.theme.LightColorScheme
+import de.findesk.ui.theme.SelectionDark
+import de.findesk.ui.theme.SelectionLight
 import de.findesk.ui.theme.SidebarDark
 import de.findesk.ui.theme.SidebarLight
 import de.findesk.ui.theme.Success
@@ -99,6 +103,11 @@ class ContrastTest {
 
             // A secondary line could be drawn on a selected row without the helper's content colour
             assertContrast(scheme.onSurfaceVariant, scheme.secondaryContainer, "onSurfaceVariant on selected row ($name)")
+
+            // A negative balance stays red on a selected row (see panelAmountColor), in the selection-safe red
+            val selection = if (name == "light") SelectionLight else SelectionDark
+            val selectionError = if (name == "light") ErrorOnSelectionLight else ErrorOnSelectionDark
+            assertContrast(selectionError, selection, "negative balance on selected row ($name)")
         }
     }
 

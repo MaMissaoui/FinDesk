@@ -214,8 +214,8 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
-                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f))
+                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f))
                 StatCard(s[StringKey.NetIncome], Formats.money(report.netIncome, report.currency), AppIcons.BarChart, PrimaryBlue, Modifier.weight(1f))
                 StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), Icons.Default.Info, Warning, Modifier.weight(1f))
             }
@@ -399,7 +399,7 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.RecurringPayments], payments.size.toString(), Icons.Default.Refresh, PrimaryBlue, Modifier.weight(1f))
-                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, Currencies.DEFAULT), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, Currencies.DEFAULT), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f))
                 StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, Currencies.DEFAULT), Icons.Default.DateRange, Warning, Modifier.weight(1f))
             }
         }
@@ -474,8 +474,8 @@ private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState,
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
-                StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), Icons.Default.KeyboardArrowDown, Error, Modifier.weight(1f))
+                StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f))
+                StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f))
                 StatCard(s[StringKey.NetIncome], Formats.money(info.netTotal, info.currency), AppIcons.BarChart, PrimaryBlue, Modifier.weight(1f))
                 StatCard(s[StringKey.TaxReceipts], s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount), Icons.Default.Info, Warning, Modifier.weight(1f))
             }

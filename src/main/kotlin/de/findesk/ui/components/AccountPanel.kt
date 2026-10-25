@@ -24,6 +24,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -50,12 +51,15 @@ import de.findesk.i18n.strings
 import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
 import de.findesk.repository.MAX_ACCOUNT_GROUP_NAME_LENGTH
+import de.findesk.ui.theme.ErrorOnSelectionDark
+import de.findesk.ui.theme.ErrorOnSelectionLight
 import de.findesk.ui.theme.balanceColor
 import de.findesk.util.AccountGroupView
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
 import de.findesk.util.dropTarget
 import de.findesk.util.groupIdFor
+import de.findesk.util.isWarningBalance
 import de.findesk.viewmodel.AccountSelection
 import java.math.BigDecimal
 import kotlin.math.roundToInt
@@ -148,7 +152,7 @@ fun AccountPanel(
                             Spacer(Modifier.width(8.dp))
                             Column(horizontalAlignment = Alignment.End) {
                                 grandTotal.forEach { (currency, amount) ->
-                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(amount, selection == AccountSelection.All))
+                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(isWarningBalance(accounts, currency), selection == AccountSelection.All))
                                 }
                             }
                         }
@@ -296,11 +300,15 @@ fun AccountPanel(
 }
 
 /**
- * Red when negative (see [balanceColor]), except on the selection highlight: red on the container colour falls below
- * 4.5:1, so a selected row keeps the container's own content colour (see ContrastTest).
+ * Red when the loan rule warns (see [balanceColor]), even on the selection highlight: there the selection-safe red
+ * keeps 4.5:1 where the plain one falls below (see ContrastTest), so a checking account's red stays red everywhere.
  */
 @Composable
-private fun panelAmountColor(value: java.math.BigDecimal, selected: Boolean): Color = if (selected) LocalContentColor.current else balanceColor(value)
+private fun panelAmountColor(warning: Boolean, selected: Boolean): Color = when {
+    !selected -> balanceColor(warning)
+    warning -> if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) ErrorOnSelectionLight else ErrorOnSelectionDark
+    else -> LocalContentColor.current
+}
 
 /** The grey of secondary lines, except on the selection highlight, where the row keeps the container's content colour. */
 @Composable
@@ -398,7 +406,7 @@ private fun GroupHeaderRow(
         Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         NewCountBadge(view.newCount, selected = selected)
         Spacer(Modifier.width(8.dp))
-        // One line per currency, each coloured by its own sign
+        // One line per currency, each coloured by its own currency's loan rule
         Column(horizontalAlignment = Alignment.End) {
             view.totals.ifEmpty { mapOf(primaryCurrency to BigDecimal.ZERO) }.forEach { (currency, amount) ->
                 Text(
@@ -406,7 +414,8 @@ private fun GroupHeaderRow(
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.End,
-                    color = panelAmountColor(amount, selected),
+                    // Each currency's own loan rule, so a negative-only-because-of-loans total stays plain
+                    color = panelAmountColor(isWarningBalance(view.accounts, currency), selected),
                 )
             }
         }
@@ -483,7 +492,7 @@ private fun AccountRow(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.End,
-            color = panelAmountColor(account.balance, selected),
+            color = panelAmountColor(isWarningBalance(listOf(account), account.currency), selected),
         )
     }
 }

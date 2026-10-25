@@ -44,11 +44,19 @@ object AppIcons {
 
     val BarChart: ImageVector = icon("BarChart", "M5,9.2h3V19H5zM10.6,5h2.8v14h-2.8zM16.2,13H19v6h-2.8z")
 
-    /** Money coming in: an arrow pointing down towards the account. */
-    val ArrowDownward: ImageVector = icon("ArrowDownward", "M20,12l-1.41,-1.41L13,16.17V4h-2v12.17l-5.58,-5.59L4,12l8,8 8,-8z")
+    /** Money coming in: a plus in a circle, so no arrow can read as a trend. */
+    val AddCircleOutline: ImageVector = icon(
+        "AddCircleOutline",
+        "M13,7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zM12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" +
+            "M12,20c-4.41,0 -8,-3.59 -8,-8s3.59,-8 8,-8 8,3.59 8,8 -3.59,8 -8,8z",
+    )
 
-    /** Money going out: an arrow pointing up away from the account. */
-    val ArrowUpward: ImageVector = icon("ArrowUpward", "M4,12l1.41,1.41L11,7.83V20h2V7.83l5.58,5.59L20,12l-8,-8 -8,8z")
+    /** Money going out: a minus in a circle, so no arrow can read as a trend. */
+    val RemoveCircleOutline: ImageVector = icon(
+        "RemoveCircleOutline",
+        "M7,11v2h10v-2H7zM12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" +
+            "M12,20c-4.41,0 -8,-3.59 -8,-8s3.59,-8 8,-8 8,3.59 8,8 -3.59,8 -8,8z",
+    )
 
     val FileDownload: ImageVector = icon("FileDownload", "M5,20h14v-2H5V20zM19,9h-4V3H9v6H5l7,7L19,9z")
 

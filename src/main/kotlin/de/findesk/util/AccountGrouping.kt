@@ -33,8 +33,11 @@ data class AccountGroupView(
     val newCount: Int = 0,
 )
 
+/** The account type of a loan, whose balance is negative by nature (see [isWarningBalance]). */
+const val LOAN_TYPE = "loan"
+
 /** The account types FinDesk offers, in the order their groups are shown. */
-val ACCOUNT_TYPES = listOf("checking", "savings", "credit_card", "loan", "depot")
+val ACCOUNT_TYPES = listOf("checking", "savings", "credit_card", LOAN_TYPE, "depot")
 
 /** Type groups are ordered by these first; any other type follows, alphabetically. */
 private val FIXED_TYPE_ORDER = ACCOUNT_TYPES
@@ -76,6 +79,20 @@ fun group(accounts: List<AccountItem>, groups: List<AccountGroupItem>, primary: 
 
 /** Balances per currency, primary first; different currencies are never added up. */
 fun grandTotal(accounts: List<AccountItem>, primary: String): Map<String, BigDecimal> = totals(accounts, primary)
+
+/**
+ * Whether a total of [accounts]' balances in [currency] warns red: the total is below zero **and** the same total
+ * without the loan accounts is also below zero. A loan is negative by nature, so red there is noise and a total
+ * negative only because of loans (e.g. "All accounts" over a checking account in the black plus loans) stays in the
+ * plain text colour; red is kept for overdrawn checking accounts and credit cards that are due. One account reduces
+ * to the one-account rule: red unless it is a loan's.
+ */
+fun isWarningBalance(accounts: List<AccountItem>, currency: String): Boolean {
+    val inCurrency = accounts.filter { it.currency == currency }
+    if (inCurrency.sumOf { it.balance }.signum() >= 0) return false
+    val withoutLoans = inCurrency.sumOf { if (it.accountType == LOAN_TYPE) BigDecimal.ZERO else it.balance }
+    return withoutLoans.signum() < 0
+}
 
 private fun totals(accounts: List<AccountItem>, primary: String): Map<String, BigDecimal> = Currencies.totals(accounts, primary, { it.currency }, { it.balance })
 

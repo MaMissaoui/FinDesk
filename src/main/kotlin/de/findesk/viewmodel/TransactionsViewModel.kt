@@ -19,6 +19,7 @@ import de.findesk.util.BalanceHistory
 import de.findesk.util.Currencies
 import de.findesk.util.GroupKey
 import de.findesk.util.Iban
+import de.findesk.util.LOAN_TYPE
 import de.findesk.util.RunningBalance
 import de.findesk.util.grandTotal
 import de.findesk.util.group
@@ -163,6 +164,8 @@ data class TransactionsState(
     /** The selected account's balance and currency, for the header. */
     val currentBalance: BigDecimal? = null,
     val balanceCurrency: String? = null,
+    /** Whether [currentBalance] belongs to a loan: a loan's balance is negative by nature, so it never warns red. */
+    val currentBalanceIsLoan: Boolean = false,
     /** Per currency: the list may mix accounts in different currencies, whose amounts can't be added. */
     val totalIncome: Map<String, BigDecimal> = emptyMap(),
     val totalExpenses: Map<String, BigDecimal> = emptyMap(),
@@ -451,6 +454,7 @@ class TransactionsViewModel(
                 balanceChart = balanceChart,
                 currentBalance = balanceAccount?.balance,
                 balanceCurrency = balanceAccount?.currency,
+                currentBalanceIsLoan = balanceAccount?.accountType == LOAN_TYPE,
                 totalIncome = Currencies.totals(transactions.filter { t -> t.amount.signum() > 0 }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount }),
                 totalExpenses = Currencies.totals(transactions.filter { t -> t.isExpense }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount.abs() }),
                 // A booking deleted elsewhere (e.g. by a sync re-run or an import) falls out of the selection

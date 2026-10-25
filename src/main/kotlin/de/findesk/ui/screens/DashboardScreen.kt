@@ -114,14 +114,14 @@ fun DashboardScreen(
                 StatCard(
                     if (state.isCurrentMonth) s[StringKey.IncomeThisMonth] else s.format(StringKey.IncomeInMonth, s.month(state.selectedMonth)),
                     Formats.money(state.monthlyIncome, state.currency),
-                    AppIcons.ArrowDownward,
+                    AppIcons.AddCircleOutline,
                     Success,
                     Modifier.weight(1f).fillMaxHeight(),
                 )
                 StatCard(
                     if (state.isCurrentMonth) s[StringKey.ExpensesThisMonth] else s.format(StringKey.ExpensesInMonth, s.month(state.selectedMonth)),
                     Formats.money(state.monthlyExpenses, state.currency),
-                    AppIcons.ArrowUpward,
+                    AppIcons.RemoveCircleOutline,
                     Error,
                     Modifier.weight(1f).fillMaxHeight(),
                 )
