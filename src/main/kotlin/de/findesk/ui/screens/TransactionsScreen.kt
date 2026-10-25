@@ -52,6 +52,7 @@ import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
+import de.findesk.util.Iban
 import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.CategoryFilter
 import de.findesk.viewmodel.ImportPreview
@@ -81,7 +82,7 @@ fun TransactionsScreen(
         if (files.isNotEmpty()) vm.attachDocuments(transactionId, files)
     }
     val openImport = {
-        FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).firstOrNull()?.let { vm.openImport(it) }
+        FileDialogs.openFiles(s[StringKey.ImportBankStatement], StatementImportService.EXTENSIONS).takeIf { it.isNotEmpty() }?.let { vm.openImport(it) }
     }
     // A menu request (File → New Transaction / Import) runs once the accounts it needs have loaded
     var pendingRequest by remember(args) { mutableStateOf(args.request) }
@@ -731,7 +732,7 @@ private fun AddTransactionDialog(
 }
 
 @Composable
-private fun ImportDialog(
+internal fun ImportDialog(
     preview: ImportPreview,
     accounts: List<AccountItem>,
     importing: Boolean,
@@ -740,142 +741,251 @@ private fun ImportDialog(
     onCancel: () -> Unit,
     onImport: (Boolean) -> Unit,
 ) {
-    val st = preview.statement
-    val account = accounts.firstOrNull { it.id == preview.accountId }
-    // Closing balances only apply to the selected account when their currencies match, or the file doesn't say
-    val closingBalance = st.closingBalance?.takeIf { account == null || it.currency == null || it.currency == account.currency }
-    val hasBalances = st.bookings.any { it.balanceAfter != null } || closingBalance != null
-    var updateBalance by remember(preview.file, preview.accountId, preview.balanceUpdateAllowed) { mutableStateOf(preview.balanceUpdateAllowed) }
+    var updateBalance by remember(preview.files, preview.accountId, preview.balanceUpdateAllowed) { mutableStateOf(preview.balanceUpdateAllowed) }
     val s = strings()
 
     AlertDialog(
         onDismissRequest = { if (!importing) onCancel() },
-        title = { Text(s.format(StringKey.ImportFile, preview.file.name)) },
-        text = {
-            Column(Modifier.width(720.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                val csv = st.csv
-                val delimLabel = csv?.let { if (it.delimiter == '\t') s[StringKey.TabDelimiter] else "'${it.delimiter}'" } ?: ""
-                Text(
-                    "${st.formatLabel}" +
-                        (if (st.format == StatementFormat.XLSX) "" else csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
-                        " · ${s.format(StringKey.BookingCount, st.bookings.size)}" +
-                        (if (st.pendingSkipped > 0) " · ${s.format(StringKey.PendingLeftOut, st.pendingSkipped)}" else "") +
-                        (if (st.skipped.isNotEmpty()) " · ${s.format(StringKey.UnreadableCount, st.skipped.size)}" else ""),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.IntoAccount], fontWeight = FontWeight.Medium)
-                    DropdownSelector(
-                        label = account?.let { accountLabel(it) } ?: s[StringKey.ChooseAccount],
-                        options = accounts,
-                        optionLabel = { accountLabel(it) },
-                        onSelect = { onAccount(it.id) },
-                    )
-                }
-                if (st.accountIban != null && account != null && st.accountIban != account.iban) {
-                    Text(
-                        s.format(StringKey.FileBelongsTo, Formats.iban(st.accountIban)),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                val wrongCurrency = account?.let { a -> st.bookings.count { it.currency != null && it.currency != a.currency } } ?: 0
-                if (wrongCurrency > 0) {
-                    Text(
-                        s.format(StringKey.WrongCurrencySkipped, wrongCurrency, account!!.currency),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-
-                if (csv != null) {
-                    Text(s[StringKey.Columns], style = MaterialTheme.typography.labelLarge)
-                    val m = csv.mapping
-                    val fields: List<Triple<StringKey, Int?, (Int?) -> CsvMapping>> = listOf(
-                        Triple(StringKey.ColDate, m.date) { i -> m.copy(date = i) },
-                        Triple(StringKey.ColAmount, m.amount) { i -> m.copy(amount = i, debit = if (i != null) null else m.debit, credit = if (i != null) null else m.credit) },
-                        Triple(StringKey.ColDebit, m.debit) { i -> m.copy(debit = i, amount = if (i != null) null else m.amount) },
-                        Triple(StringKey.ColCredit, m.credit) { i -> m.copy(credit = i, amount = if (i != null) null else m.amount) },
-                        Triple(StringKey.ColPartner, m.partner) { i -> m.copy(partner = i) },
-                        Triple(StringKey.ColPurpose, m.purpose) { i -> m.copy(purpose = i) },
-                        Triple(StringKey.ColBalance, m.balance) { i -> m.copy(balance = i) },
-                    )
-                    fields.chunked(4).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            row.forEach { (labelKey, index, update) ->
-                                DropdownSelector(
-                                    label = "${s[labelKey]}: ${index?.let { csv.headers.getOrNull(it) } ?: "—"}",
-                                    options = listOf<Int?>(null) + csv.headers.indices.toList(),
-                                    optionLabel = { i -> i?.let { csv.headers[it].ifBlank { s.format(StringKey.ColumnN, it + 1) } } ?: s[StringKey.NoneDash] },
-                                    onSelect = { onRemap(update(it)) },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (st.bookings.isNotEmpty()) {
-                    Text(s[StringKey.Preview], style = MaterialTheme.typography.labelLarge)
-                    st.bookings.take(8).forEach { b ->
-                        Row(Modifier.fillMaxWidth()) {
-                            Text(Formats.date(b.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
-                            Text(
-                                listOfNotNull(b.partnerName, b.purpose).joinToString(" · "),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                Formats.money(b.amount, b.currency ?: account?.currency ?: "EUR", signed = true),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = amountColor(b.amount.signum() < 0),
-                            )
-                        }
-                    }
-                    if (st.bookings.size > 8) Text(s.format(StringKey.AndMore, st.bookings.size - 8), style = MaterialTheme.typography.bodySmall)
-                }
-                st.skipped.take(5).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-
-                if (hasBalances && preview.balanceUpdateAllowed) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = updateBalance, onCheckedChange = { updateBalance = it })
-                        val runningBalances = st.bookings.any { it.balanceAfter != null }
-                        val closing = closingBalance
-                        Text(
-                            if (runningBalances) {
-                                s[StringKey.SetAccountBalance]
-                            } else {
-                                val money = Formats.money(closing!!.amount, closing.currency ?: account?.currency ?: "EUR")
-                                if (closing.pendingExcluded > 0) {
-                                    s.format(StringKey.SetAccountBalanceClosingPending, money, closing.pendingExcluded)
-                                } else {
-                                    s.format(StringKey.SetAccountBalanceClosing, money)
-                                }
-                            },
-                        )
-                    }
-                } else if (hasBalances && account != null) {
-                    Text(
-                        s[StringKey.NewerBookingsUnchanged],
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    s[StringKey.BookingsSkippedHint],
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        title = {
+            Text(
+                if (preview.files.size == 1) {
+                    s.format(StringKey.ImportFile, preview.files.single().name)
+                } else {
+                    s.format(StringKey.ImportFiles, preview.files.size)
+                },
+            )
         },
+        text = { ImportDialogContent(preview, accounts, updateBalance, onUpdateBalance = { updateBalance = it }, onAccount = onAccount, onRemap = onRemap) },
         confirmButton = {
-            Button(enabled = !importing && account != null && st.bookings.isNotEmpty(), onClick = { onImport(updateBalance) }) {
-                Text(if (importing) s[StringKey.Importing] else s.format(StringKey.ImportCount, st.bookings.size))
+            Button(enabled = !importing && preview.accountId != null && preview.bookingCount > 0, onClick = { onImport(updateBalance) }) {
+                Text(if (importing) s[StringKey.Importing] else s.format(StringKey.ImportCount, preview.bookingCount))
             }
         },
         dismissButton = { TextButton(enabled = !importing, onClick = onCancel) { Text(s[StringKey.Cancel]) } },
     )
+}
+
+/**
+ * The import dialog's body, extracted so the screenshot test can render it without a platform [AlertDialog]
+ * window. [updateBalance] lives in [ImportDialog]; the composable renders and changes it.
+ */
+@Composable
+internal fun ImportDialogContent(
+    preview: ImportPreview,
+    accounts: List<AccountItem>,
+    updateBalance: Boolean,
+    onUpdateBalance: (Boolean) -> Unit,
+    onAccount: (Int) -> Unit,
+    onRemap: (CsvMapping) -> Unit,
+) {
+    val multi = preview.files.size > 1
+    val account = accounts.firstOrNull { it.id == preview.accountId }
+    val newest = preview.newest.statement
+    // Closing balances only apply to the selected account when their currencies match, or the file doesn't say
+    val closingBalance = newest.closingBalance?.takeIf { account == null || it.currency == null || it.currency == account.currency }
+    val hasBalances = newest.bookings.any { it.balanceAfter != null } || closingBalance != null
+    val s = strings()
+
+    Column(Modifier.width(720.dp).heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (!multi) {
+            // One file: exactly as before
+            val st = newest
+            val csv = st.csv
+            val delimLabel = csv?.let { if (it.delimiter == '\t') s[StringKey.TabDelimiter] else "'${it.delimiter}'" } ?: ""
+            Text(
+                "${st.formatLabel}" +
+                    (if (st.format == StatementFormat.XLSX) "" else csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
+                    " · ${s.format(StringKey.BookingCount, st.bookings.size)}" +
+                    (if (st.pendingSkipped > 0) " · ${s.format(StringKey.PendingLeftOut, st.pendingSkipped)}" else "") +
+                    (if (st.skipped.isNotEmpty()) " · ${s.format(StringKey.UnreadableCount, st.skipped.size)}" else ""),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        } else {
+            // In the summary line the total count only
+            Text(s.format(StringKey.BookingCount, preview.bookingCount), style = MaterialTheme.typography.bodyMedium)
+            preview.entries.forEach { entry ->
+                val bookings = entry.statement.bookings
+                val from = bookings.minOfOrNull { it.date }
+                val to = bookings.maxOfOrNull { it.date }
+                val range = if (from != null && to != null) {
+                    "${Formats.date(from)}–${Formats.date(to)}"
+                } else {
+                    null
+                }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        entry.file.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(2f),
+                    )
+                    Text(
+                        s.format(StringKey.BookingCount, bookings.size),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.End,
+                    )
+                    Text(
+                        range ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1.4f),
+                        textAlign = TextAlign.End,
+                    )
+                    listOfNotNull(
+                        entry.statement.pendingSkipped.takeIf { it > 0 }?.let { s.format(StringKey.PendingLeftOut, it) },
+                        entry.statement.skipped.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.UnreadableCount, it.size) },
+                    ).joinToString(" · ").takeIf { it.isNotEmpty() }?.let { message ->
+                        Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+            preview.failures.forEach { failure ->
+                Text(
+                    "${failure.fileName}: ${failure.message}",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (preview.failures.isNotEmpty()) {
+                Text(
+                    s.format(StringKey.ImportFilesSkipped, preview.failures.size),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(s[StringKey.IntoAccount], fontWeight = FontWeight.Medium)
+            DropdownSelector(
+                label = account?.let { accountLabel(it) } ?: s[StringKey.ChooseAccount],
+                options = accounts,
+                optionLabel = { accountLabel(it) },
+                onSelect = { onAccount(it.id) },
+            )
+        }
+        if (multi) {
+            preview.entries.forEach { entry ->
+                val iban = entry.statement.accountIban
+                if (iban != null && account != null && Iban.normalize(iban) != account.iban) {
+                    Text(
+                        s.format(StringKey.FileBelongsToNamed, entry.file.name, Formats.iban(iban)),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        } else if (newest.accountIban != null && account != null && newest.accountIban != account.iban) {
+            Text(
+                s.format(StringKey.FileBelongsTo, Formats.iban(newest.accountIban)),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        val wrongCurrency = account?.let { a -> preview.entries.sumOf { e -> e.statement.bookings.count { it.currency != null && it.currency != a.currency } } } ?: 0
+        if (wrongCurrency > 0) {
+            Text(
+                s.format(StringKey.WrongCurrencySkipped, wrongCurrency, account!!.currency),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
+        val firstCsvEntry = preview.entries.firstOrNull { it.statement.csv != null }
+        val csv = firstCsvEntry?.statement?.csv
+        if (csv != null) {
+            Text(s[StringKey.Columns], style = MaterialTheme.typography.labelLarge)
+            if (multi) {
+                // Column indexes only mean something for files with the same header row; the hint says how many are covered
+                val same = preview.entries.count { it.statement.csv?.headers == csv.headers }
+                Text(
+                    s.format(StringKey.ColumnsApplyToSame, same),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            val m = csv.mapping
+            val fields: List<Triple<StringKey, Int?, (Int?) -> CsvMapping>> = listOf(
+                Triple(StringKey.ColDate, m.date) { i -> m.copy(date = i) },
+                Triple(StringKey.ColAmount, m.amount) { i -> m.copy(amount = i, debit = if (i != null) null else m.debit, credit = if (i != null) null else m.credit) },
+                Triple(StringKey.ColDebit, m.debit) { i -> m.copy(debit = i, amount = if (i != null) null else m.amount) },
+                Triple(StringKey.ColCredit, m.credit) { i -> m.copy(credit = i, amount = if (i != null) null else m.amount) },
+                Triple(StringKey.ColPartner, m.partner) { i -> m.copy(partner = i) },
+                Triple(StringKey.ColPurpose, m.purpose) { i -> m.copy(purpose = i) },
+                Triple(StringKey.ColBalance, m.balance) { i -> m.copy(balance = i) },
+            )
+            fields.chunked(4).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { (labelKey, index, update) ->
+                        DropdownSelector(
+                            label = "${s[labelKey]}: ${index?.let { csv.headers.getOrNull(it) } ?: "—"}",
+                            options = listOf<Int?>(null) + csv.headers.indices.toList(),
+                            optionLabel = { i -> i?.let { csv.headers[it].ifBlank { s.format(StringKey.ColumnN, it + 1) } } ?: s[StringKey.NoneDash] },
+                            onSelect = { onRemap(update(it)) },
+                        )
+                    }
+                }
+            }
+        }
+
+        val allBookings = preview.entries.flatMap { it.statement.bookings }
+        if (allBookings.isNotEmpty()) {
+            Text(s[StringKey.Preview], style = MaterialTheme.typography.labelLarge)
+            allBookings.take(8).forEach { b ->
+                Row(Modifier.fillMaxWidth()) {
+                    Text(Formats.date(b.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
+                    Text(
+                        listOfNotNull(b.partnerName, b.purpose).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        Formats.money(b.amount, b.currency ?: account?.currency ?: "EUR", signed = true),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = amountColor(b.amount.signum() < 0),
+                    )
+                }
+            }
+            if (allBookings.size > 8) Text(s.format(StringKey.AndMore, allBookings.size - 8), style = MaterialTheme.typography.bodySmall)
+        }
+        preview.entries.flatMap { it.statement.skipped }.take(5).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+
+        if (hasBalances && preview.balanceUpdateAllowed) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = updateBalance, onCheckedChange = onUpdateBalance)
+                val runningBalances = newest.bookings.any { it.balanceAfter != null }
+                val closing = closingBalance
+                Text(
+                    if (runningBalances) {
+                        s[StringKey.SetAccountBalance]
+                    } else {
+                        val money = Formats.money(closing!!.amount, closing.currency ?: account?.currency ?: "EUR")
+                        if (closing.pendingExcluded > 0) {
+                            s.format(StringKey.SetAccountBalanceClosingPending, money, closing.pendingExcluded)
+                        } else {
+                            s.format(StringKey.SetAccountBalanceClosing, money)
+                        }
+                    },
+                )
+            }
+        } else if (hasBalances && account != null) {
+            Text(
+                s[StringKey.NewerBookingsUnchanged],
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            s[StringKey.BookingsSkippedHint],
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 /**

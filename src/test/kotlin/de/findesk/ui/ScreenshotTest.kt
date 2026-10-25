@@ -407,6 +407,55 @@ class ScreenshotTest {
         render("accounts-offline-dark", Screen.ACCOUNTS, dark = true)
     }
 
+    /** Three synthetic CSV files at once (one without bookings) plus one unreadable file, in the import dialog. */
+    @Test
+    fun `render the multi-file import dialog`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-import").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        val dir = Files.createTempDirectory("findesk-import-files").toFile()
+        val header = "Buchung;Valuta;Auftraggeber/Empfänger;Buchungstext;Verwendungszweck;Saldo;Währung;Betrag;Währung\n"
+        fun csv(name: String, rows: String) = File(dir, name).apply { writeText("IBAN;DE89 3704 0044 0532 0130 00\n\n$header$rows") }
+        val october = csv("oktober.csv", "02.10.2025;02.10.2025;Stadtwerke;Lastschrift;Strom;2430,37;EUR;-20,00;EUR\n15.10.2025;15.10.2025;Obststand;Kartenzahlung;Obst;2400,37;EUR;-30,00;EUR\n")
+        val november = csv("november.csv", "05.11.2025;05.11.2025;Arbeitgeber GmbH;Gutschrift;Gehalt;2500,37;EUR;100,00;EUR\n20.11.2025;20.11.2025;Kino;Kartenzahlung;Tickets;2490,37;EUR;-10,00;EUR\n")
+        val empty = csv("empty.csv", "")
+        val junk = File(dir, "statement.zip").apply { writeText("this is not a CAMT.053 ZIP file") }
+
+        fun importing(): TransactionsViewModel = TransactionsViewModel().apply {
+            runBlocking {
+                start().join()
+                openImport(listOf(november, october, empty, junk)).join()
+            }
+            check(state.value.importPreview != null) { "the preview should open for the readable files" }
+        }
+        render("import-multi-file", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::importing) }
+        render("import-multi-file-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::importing) }
+        render("import-multi-file-de", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, language = AppLanguage.DE, transactions = ::importing) }
+    }
+
+    /** The add-account dialog of an offline bank, with the new optional account-name field first. */
+    @Test
+    fun `render the add-account dialog with the name field`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-add-account").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().createOffline("Cards Bank").let { BankAccessRepositoryImpl().findItem(it.id.value)!! }
+        render("add-account-named", 1440, 900) {
+            CompositionLocalProvider(LocalStrings provides Translations.of(AppLanguage.DE)) {
+                FinDeskTheme(darkTheme = false) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        AddAccountDialog(
+                            bank = bank,
+                            validate = { identifier ->
+                                de.findesk.viewmodel.AccountsViewModel().validateAccount(identifier, offline = true)
+                            },
+                            onDismiss = {},
+                            onConfirm = { _, _, _, _, _ -> },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, content: @Composable () -> Unit) {

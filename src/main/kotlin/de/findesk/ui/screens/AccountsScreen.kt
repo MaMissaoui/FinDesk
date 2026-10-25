@@ -297,8 +297,8 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             bank = bank,
             validate = { identifier -> vm.validateAccount(identifier, bank.offline) },
             onDismiss = { addAccountFor = null },
-            onConfirm = { iban, type, balance, currency ->
-                vm.addAccount(bank.id, iban, type, balance, currency)
+            onConfirm = { iban, type, balance, currency, name ->
+                vm.addAccount(bank.id, iban, type, balance, currency, name)
                 addAccountFor = null
             },
         )
@@ -816,58 +816,86 @@ private fun ConnectionProposal(bank: BankDirectory.Entry?, blz: String) {
 }
 
 @Composable
-private fun AddAccountDialog(
+internal fun AddAccountDialog(
     bank: BankAccessItem,
     validate: (String) -> String?,
     onDismiss: () -> Unit,
-    onConfirm: (String, String, BigDecimal, String) -> Unit,
+    onConfirm: (iban: String, type: String, balance: BigDecimal, currency: String, name: String?) -> Unit,
 ) {
-    var iban by remember { mutableStateOf("") }
-    // A card account is the common case for an offline bank (e.g. a credit card imported from statements)
-    var type by remember { mutableStateOf(if (bank.offline) "credit_card" else ACCOUNT_TYPES.first()) }
-    var currency by remember { mutableStateOf(Currencies.DEFAULT) }
-    var balance by remember { mutableStateOf("0,00") }
-    var touched by remember { mutableStateOf(false) }
-    val parsedBalance = Formats.parseAmount(balance)
+    val form = remember(bank.id) { AddAccountForm(bank.offline) }
     val s = strings()
-    val error = validate(iban) ?: if (parsedBalance == null) s[StringKey.BalanceNotANumber] else null
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(s.format(StringKey.AddAccountAt, bank.bankName)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    iban,
-                    { iban = it.uppercase() },
-                    label = { Text(if (bank.offline) s[StringKey.IbanOrCardLast4] else s[StringKey.Iban]) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                DropdownSelector(
-                    label = s.accountType(type),
-                    options = ACCOUNT_TYPES,
-                    optionLabel = { s.accountType(it) },
-                    onSelect = { type = it },
-                )
-                DropdownSelector(
-                    label = s.format(StringKey.CurrencyIs, currency),
-                    options = Currencies.COMMON,
-                    optionLabel = { it },
-                    onSelect = { currency = it },
-                )
-                OutlinedTextField(balance, { balance = it }, label = { Text(s.format(StringKey.CurrentBalanceIn, currency)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-        },
+        text = { AddAccountDialogContent(form, validate) },
         confirmButton = {
             Button(onClick = {
-                touched = true
-                if (error == null) onConfirm(iban, type, parsedBalance!!, currency)
+                form.touched = true
+                val parsed = form.parsedBalance
+                if (validate(form.iban) == null && parsed != null) {
+                    onConfirm(form.iban, form.type, parsed, form.currency, form.name.trim().takeIf { it.isNotBlank() })
+                }
             }) { Text(s[StringKey.Add]) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
+}
+
+/** The add-account dialog's fields, hoisted so the extracted content can be rendered by the screenshot test. */
+internal class AddAccountForm(val offline: Boolean) {
+    /** Optional display name; blank keeps the account unnamed. */
+    var name by mutableStateOf("")
+
+    var iban by mutableStateOf("")
+
+    /** A card account is the common case for an offline bank (e.g. a credit card imported from statements). */
+    var type by mutableStateOf(if (offline) "credit_card" else ACCOUNT_TYPES.first())
+
+    var currency by mutableStateOf(Currencies.DEFAULT)
+
+    var balance by mutableStateOf("0,00")
+
+    var touched by mutableStateOf(false)
+
+    val parsedBalance: BigDecimal? get() = Formats.parseAmount(balance)
+}
+
+/** The add-account dialog's body, extracted so the screenshot test can render it without a dialog window. */
+@Composable
+internal fun AddAccountDialogContent(form: AddAccountForm, validate: (String) -> String?) {
+    val s = strings()
+    val error = validate(form.iban) ?: if (form.parsedBalance == null) s[StringKey.BalanceNotANumber] else null
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            form.name,
+            { form.name = it.take(de.findesk.repository.MAX_ACCOUNT_NAME_LENGTH) },
+            label = { Text(s[StringKey.AccountName]) },
+            supportingText = { Text(s.format(StringKey.AccountNameHint, s.accountType(form.type))) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            form.iban,
+            { form.iban = it.uppercase() },
+            label = { Text(if (form.offline) s[StringKey.IbanOrCardLast4] else s[StringKey.Iban]) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        DropdownSelector(
+            label = s.accountType(form.type),
+            options = ACCOUNT_TYPES,
+            optionLabel = { s.accountType(it) },
+            onSelect = { form.type = it },
+        )
+        DropdownSelector(
+            label = s.format(StringKey.CurrencyIs, form.currency),
+            options = Currencies.COMMON,
+            optionLabel = { it },
+            onSelect = { form.currency = it },
+        )
+        OutlinedTextField(form.balance, { form.balance = it }, label = { Text(s.format(StringKey.CurrentBalanceIn, form.currency)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        if (form.touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 @Composable

@@ -283,12 +283,14 @@ class AccountsViewModel(
         }
     }
 
+    /** Creates the account; [name] is an optional display name set right after the create (blank keeps the default). */
     fun addAccount(
         bankAccessId: Int,
         iban: String,
         accountType: String,
         balance: BigDecimal,
         currency: String = "EUR",
+        name: String? = null,
     ): Job = launchSafely(onError) {
         val offline = _state.value.bankAccesses.firstOrNull { it.id == bankAccessId }?.offline == true
         validateAccount(iban, offline)?.let { msg ->
@@ -298,13 +300,15 @@ class AccountsViewModel(
         val normalized = Iban.normalize(iban)
         // An offline bank stores what was validated: the IBAN, or the synthetic card id of the last 4 digits
         val id = if (offline && !Iban.isValid(normalized)) AccountIds.card(iban.trim()) else normalized
-        accountRepository.create(
+        val created = accountRepository.create(
             bankAccessId = bankAccessId,
             iban = id,
             balance = balance,
             currency = currency,
             accountType = accountType,
         )
+        // rename trims and caps the length; a blank name leaves the account without one, exactly as before
+        if (!name.isNullOrBlank()) accountRepository.rename(created.id.value, name)
         auditLogRepository.log("ADD_ACCOUNT", "user", "Added account ${id.takeLast(4)}")
         refresh()
         _state.update { it.copy(message = AppStrings[StringKey.MessageAccountAdded], error = null) }
