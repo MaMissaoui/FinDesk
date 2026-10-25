@@ -924,7 +924,7 @@ class ViewModelsTest {
     fun `account name and label fall back to the localized type`() {
         val s = Translations.of(AppLanguage.EN)
         val plain = data.accountRepo.findAllItems().first { it.id == account }
-        assertEquals("Checking", s.accountName(plain), "no name -> the localized type")
+        assertEquals("Checking …${plain.iban.takeLast(4)}", s.accountName(plain), "no name -> the localized type and the IBAN's last 4")
         assertEquals("Test Bank ${Formats.iban(plain.iban)}", accountLabel(plain))
 
         data.accountRepo.rename(account, "Haushalt")

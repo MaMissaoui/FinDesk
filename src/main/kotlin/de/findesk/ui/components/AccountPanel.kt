@@ -464,7 +464,10 @@ private fun AccountRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text("…${account.iban.takeLast(4)}", style = MaterialTheme.typography.bodySmall, color = panelSecondaryColor(selected))
+            // Only with a user-set name: the default name already ends in the same 4 characters
+            if (account.name != null) {
+                Text("…${account.iban.takeLast(4)}", style = MaterialTheme.typography.bodySmall, color = panelSecondaryColor(selected))
+            }
             account.lastUpdate?.let {
                 Text(
                     s.format(StringKey.LastFetched, Formats.date(it.toLocalDate())),

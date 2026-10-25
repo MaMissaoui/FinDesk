@@ -49,6 +49,7 @@ fun DashboardScreen(
 
     // A category row opens the selected month's bookings of that category; uncategorized without a category filter.
     // The current month keeps the plain period (as before); a past month passes the exact month.
+    // The pending-tasks card uses this too (with a null category), so it opens the bookings its count counts.
     val openTransactionsCategory: (Int?) -> Unit = { categoryId ->
         val month = if (state.isCurrentMonth) null else state.selectedMonth
         onNavigate(
@@ -128,7 +129,7 @@ fun DashboardScreen(
                     pendingTasks = state.pendingTasks,
                     uncategorizedCount = state.uncategorizedCount,
                     unlinkedDocumentCount = state.unlinkedDocumentCount,
-                    onOpenTasks = { onNavigate(Screen.TRANSACTIONS, NavigationArgs(uncategorizedOnly = true)) },
+                    onOpenTasks = { openTransactionsCategory(null) },
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }

@@ -220,15 +220,22 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
                         val x = i * groupWidth + groupWidth * 0.18f
                         val incomeH = (m.income.toDouble() / top).toFloat() * size.height
                         val expenseH = (m.expenses.toDouble() / top).toFloat() * size.height
-                        drawRoundedTopBar(Success, x, barWidth, incomeH)
-                        drawRoundedTopBar(Error, x + barWidth + 2f, barWidth, expenseH)
+                        // Pale bars mark a still-running month: its totals are so far, not final
+                        if (m.partial) {
+                            drawRoundedTopBar(Success.copy(alpha = 0.45f), x, barWidth, incomeH)
+                            drawRoundedTopBar(Error.copy(alpha = 0.45f), x + barWidth + 2f, barWidth, expenseH)
+                        } else {
+                            drawRoundedTopBar(Success, x, barWidth, incomeH)
+                            drawRoundedTopBar(Error, x + barWidth + 2f, barWidth, expenseH)
+                        }
                     }
                     drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
                 }
                 val hover = hovered
                 if (hover != null && hover in months.indices) {
                     val month = months[hover]
-                    val titleText = "${Month.of(month.month).getDisplayName(TextStyle.SHORT, s.language.locale)} ${month.year}"
+                    val titleText = "${Month.of(month.month).getDisplayName(TextStyle.SHORT, s.language.locale)} ${month.year}" +
+                        if (month.partial) " · ${s[StringKey.ChartSoFar]}" else ""
                     val incomeText = Formats.money(month.income, currency, signed = true)
                     val expenseText = Formats.money(month.expenses.negate(), currency, signed = true)
                     val lines = listOf(titleText, incomeText, expenseText)
@@ -272,6 +279,14 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 4.dp)) {
             Legend(Success, s[StringKey.ChartIncome])
             Legend(Error, s[StringKey.ChartExpenses])
+            // No colour swatch: paleness is not a colour of its own but these two at reduced alpha
+            if (months.any { it.partial }) {
+                Text(
+                    s[StringKey.ChartPartialMonthNote],
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -526,7 +541,8 @@ private fun ChartYAxis(labels: List<String>, modifier: Modifier, inset: Dp) {
 private fun buildBarsDescription(title: String, months: List<MonthBar>, currency: String, s: Strings): String {
     if (months.isEmpty()) return "$title: ${s[StringKey.NotEnoughData]}"
     val parts = months.take(5).map {
-        "${Month.of(it.month).getDisplayName(TextStyle.SHORT, s.language.locale)} ${Formats.money(it.income, currency)} / ${Formats.money(it.expenses, currency)}"
+        val soFar = if (it.partial) " (${s[StringKey.ChartSoFar]})" else ""
+        "${Month.of(it.month).getDisplayName(TextStyle.SHORT, s.language.locale)} ${Formats.money(it.income, currency)} / ${Formats.money(it.expenses, currency)}$soFar"
     }
     val more = months.size - 5
     val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""

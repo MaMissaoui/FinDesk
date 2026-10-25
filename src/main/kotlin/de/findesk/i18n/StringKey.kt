@@ -880,6 +880,8 @@ enum class StringKey {
     ChartOther,
     ChartIncome,
     ChartExpenses,
+    ChartSoFar,
+    ChartPartialMonthNote,
     FlickerSpeed,
     FlickerSize,
     FlickerHint,
