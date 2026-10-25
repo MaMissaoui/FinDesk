@@ -837,6 +837,14 @@ object Translations {
         K.MessageReapplied to "%d {1:booking|bookings} recategorized",
         K.MessageReapplyUndone to "%d {1:booking|bookings} restored",
         K.HintNothingShown to "No bookings shown",
+
+        K.SelectedCount to "%d selected",
+        K.DeleteSelected to "Delete…",
+        K.ClearSelection to "Clear selection",
+        K.DeleteSelectedCount to "Delete %d selected",
+        K.DeleteTransactionsTitle to "Delete %d {1:transaction|transactions}?",
+        K.DeleteSyncedHint to "Bookings from a bank sync can come back with a later sync while they are still within the bank's sync period. Linked receipts are kept and only unlinked.",
+        K.MessageTransactionsDeleted to "Deleted %d {1:transaction|transactions}",
     )
 
     val de: Map<K, String> = mapOf(
@@ -1664,6 +1672,14 @@ object Translations {
         K.MessageReapplied to "%d {1:Buchung|Buchungen} neu kategorisiert",
         K.MessageReapplyUndone to "%d {1:Buchung|Buchungen} wiederhergestellt",
         K.HintNothingShown to "Keine Umsätze angezeigt",
+
+        K.SelectedCount to "%d ausgewählt",
+        K.DeleteSelected to "Löschen…",
+        K.ClearSelection to "Auswahl aufheben",
+        K.DeleteSelectedCount to "%d ausgewählte löschen",
+        K.DeleteTransactionsTitle to "%d {1:Buchung|Buchungen} löschen?",
+        K.DeleteSyncedHint to "Buchungen aus einem Bankabgleich können mit einem späteren Abruf zurückkommen, solange sie noch innerhalb des Abrufzeitraums der Bank liegen. Verknüpfte Belege bleiben erhalten und werden nur entknüpft.",
+        K.MessageTransactionsDeleted to "%d {1:Buchung|Buchungen} gelöscht",
     )
 
     val fr: Map<K, String> = mapOf(
@@ -2491,5 +2507,13 @@ object Translations {
         K.MessageReapplied to "%d {1:opération recatégorisée|opérations recatégorisées}",
         K.MessageReapplyUndone to "%d {1:opération restaurée|opérations restaurées}",
         K.HintNothingShown to "Aucune opération affichée",
+
+        K.SelectedCount to "%d {1:sélectionné|sélectionnés}",
+        K.DeleteSelected to "Supprimer…",
+        K.ClearSelection to "Effacer la sélection",
+        K.DeleteSelectedCount to "Supprimer %d {1:sélectionnée|sélectionnées}",
+        K.DeleteTransactionsTitle to "Supprimer %d {1:opération|opérations} ?",
+        K.DeleteSyncedHint to "Les opérations issues d'une synchronisation bancaire peuvent revenir lors d'une synchronisation ultérieure tant qu'elles restent dans la période de synchronisation de la banque. Les justificatifs liés sont conservés et seulement déliés.",
+        K.MessageTransactionsDeleted to "%d {1:opération supprimée|opérations supprimées}",
     )
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,10 +20,28 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -45,6 +64,7 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.ScreenRequest
+import de.findesk.ui.platform.Platform
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceColor
 import de.findesk.util.AccountGroupView
@@ -96,6 +116,16 @@ fun TransactionsScreen(
         }
     }
     var confirmDelete by remember { mutableStateOf<TransactionItem?>(null) }
+    // The batch-delete confirmation, captured with the exact id set and bookings it showed when it opened
+    var confirmMultiDelete by remember { mutableStateOf<MultiDeleteConfirmation?>(null) }
+    // A row click focuses the list, so Cmd/Ctrl+A, Delete and Escape reach its key handler afterwards
+    val listFocus = remember { FocusRequester() }
+    val focusList: () -> Unit = { runCatching { listFocus.requestFocus() } }
+    val openMultiDelete: () -> Unit = {
+        if (state.selectedIds.isNotEmpty()) {
+            confirmMultiDelete = MultiDeleteConfirmation(state.selectedIds, state.selectedShown)
+        }
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         // The panel needs the room; below this the screen falls back to the compact account selector
@@ -267,6 +297,14 @@ fun TransactionsScreen(
                 // the card wraps its rows as before
                 FinDeskCard(modifier = if (state.balanceChart != null) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth()) {
                     Column {
+                        if (state.selectedIds.isNotEmpty()) {
+                            SelectionBar(
+                                count = state.selectedIds.size,
+                                totals = state.selectedTotals,
+                                onDelete = openMultiDelete,
+                                onClear = vm::clearSelection,
+                            )
+                        }
                         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
                             HeaderCell(s[StringKey.ColDate], 1f)
                             HeaderCell(s[StringKey.ColDescription], 3f)
@@ -288,13 +326,50 @@ fun TransactionsScreen(
                                 },
                             )
                         }
-                        LazyColumn {
+                        LazyColumn(
+                            // The keys act only while the list itself has focus: this wrapper holds the list only,
+                            // never the search field or the filter pills, so their keys are always their own
+                            modifier = Modifier
+                                .focusRequester(listFocus)
+                                .focusable()
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown) {
+                                        return@onPreviewKeyEvent false
+                                    }
+                                    when {
+                                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.A -> {
+                                            vm.selectAllShown()
+                                            true
+                                        }
+
+                                        event.key == Key.Delete || event.key == Key.Backspace -> {
+                                            if (state.selectedIds.isNotEmpty()) {
+                                                openMultiDelete()
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }
+
+                                        event.key == Key.Escape && state.selectedIds.isNotEmpty() -> {
+                                            vm.clearSelection()
+                                            true
+                                        }
+
+                                        else -> false
+                                    }
+                                },
+                        ) {
                             items(state.transactions, key = { it.id }) { txn ->
+                                val inMultiSelection = state.selectedIds.size >= 2 && txn.id in state.selectedIds
+                                val deleteLabel = if (inMultiSelection) s.format(StringKey.DeleteSelectedCount, state.selectedIds.size) else s[StringKey.Delete]
                                 RowContextMenu(
                                     menuItem(s[StringKey.OpenDetails]) { vm.selectTransaction(txn) },
                                     menuItem(s[StringKey.AttachReceipt]) { attachReceipt(txn.id) },
                                     txn.partnerName?.let { partner -> menuItem(s.format(StringKey.ShowAllFromPartner, partner)) { vm.showPartner(partner) } },
-                                    menuItem(s[StringKey.Delete]) { confirmDelete = txn },
+                                    menuItem(deleteLabel) {
+                                        if (inMultiSelection) openMultiDelete() else confirmDelete = txn
+                                    },
                                 ) {
                                     TransactionRow(
                                         txn = txn,
@@ -302,9 +377,22 @@ fun TransactionsScreen(
                                         balance = state.balances?.get(txn.id),
                                         balanceCurrency = state.balanceCurrency,
                                         isNew = txn.id in state.boldIds,
+                                        isSelected = txn.id in state.selectedIds,
+                                        deleteLabel = deleteLabel,
                                         onCategory = { vm.updateTransactionCategory(txn.id, it) },
-                                        onDelete = { confirmDelete = txn },
-                                        onOpen = { vm.selectTransaction(txn) },
+                                        onDelete = { if (inMultiSelection) openMultiDelete() else confirmDelete = txn },
+                                        onOpen = {
+                                            vm.selectTransaction(txn)
+                                            vm.clearSelection()
+                                        },
+                                        onToggleSelect = {
+                                            vm.toggleSelection(txn.id)
+                                            focusList()
+                                        },
+                                        onSelectRange = {
+                                            vm.selectRange(txn.id)
+                                            focusList()
+                                        },
                                     )
                                 }
                                 HorizontalDivider()
@@ -387,6 +475,69 @@ fun TransactionsScreen(
             onDismiss = { confirmDelete = null },
         )
     }
+    confirmMultiDelete?.let { confirmation ->
+        MultiDeleteDialog(
+            confirmation = confirmation,
+            onConfirm = {
+                vm.deleteSelected(confirmation.ids)
+                confirmMultiDelete = null
+            },
+            onDismiss = { confirmMultiDelete = null },
+        )
+    }
+}
+
+/** The batch-delete confirmation as captured when it opened: its id set never changes afterwards. */
+internal data class MultiDeleteConfirmation(val ids: Set<Int>, val bookings: List<TransactionItem>)
+
+/**
+ * Confirmation of a batch delete: date range, per-currency total, the first bookings like the single delete's
+ * text, and the warning about bookings a later bank sync can bring back. The initial focus is on Cancel, so a
+ * reflexive Enter cannot confirm; the confirm button keeps the destructive style of [ConfirmDialog].
+ */
+@Composable
+internal fun MultiDeleteDialog(confirmation: MultiDeleteConfirmation, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val s = strings()
+    val cancelFocus = remember { FocusRequester() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s.format(StringKey.DeleteTransactionsTitle, confirmation.ids.size)) },
+        text = { MultiDeleteDialogContent(confirmation.bookings) },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+            ) { Text(s[StringKey.Delete]) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text(s[StringKey.Cancel]) }
+        },
+    )
+    LaunchedEffect(confirmation) { runCatching { cancelFocus.requestFocus() } }
+}
+
+/** The multi-delete dialog's body, extracted so the screenshot test can render the confirmation offscreen. */
+@Composable
+internal fun MultiDeleteDialogContent(bookings: List<TransactionItem>) {
+    val s = strings()
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val from = bookings.minOf { it.date }
+        val to = bookings.maxOf { it.date }
+        Text(if (from == to) Formats.date(from) else "${Formats.date(from)}–${Formats.date(to)}")
+        Text(
+            Currencies.totals(bookings, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount })
+                .entries.joinToString(" · ") { (currency, value) -> Formats.money(value, currency, signed = true) },
+        )
+        bookings.take(5).forEach { txn ->
+            Text("${Formats.date(txn.date)} ${txn.description} ${Formats.money(txn.amount, txn.currency)}")
+        }
+        if (bookings.size > 5) Text(s.format(StringKey.AndMore, bookings.size - 5))
+        Text(
+            s[StringKey.DeleteSyncedHint],
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 /**
@@ -447,6 +598,36 @@ private fun ReapplyRulesDialog(
         },
         dismissButton = { TextButton(onClick = onCancel) { Text(s[StringKey.Cancel]) } },
     )
+}
+
+/**
+ * The bar above the list while a multi-selection is active: how many bookings are selected, their totals per
+ * currency (currencies are never added together), the batch delete and the clear action.
+ */
+@Composable
+private fun SelectionBar(count: Int, totals: Map<String, BigDecimal>, onDelete: () -> Unit, onClear: () -> Unit) {
+    val s = strings()
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            s.format(StringKey.SelectedCount, count),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            totals.entries.joinToString(" · ") { (currency, value) -> Formats.money(value, currency, signed = true) },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.weight(1f))
+        OutlinedButton(onClick = onClear) { Text(s[StringKey.ClearSelection]) }
+        Button(onClick = onDelete) { Text(s[StringKey.DeleteSelected]) }
+    }
 }
 
 private fun categoryFilterLabel(filter: CategoryFilter, categories: List<CategoryItem>, s: Strings): String = when (filter) {
@@ -515,12 +696,22 @@ private fun TransactionRow(
     balance: de.findesk.util.RunningBalance.Entry?,
     balanceCurrency: String?,
     isNew: Boolean,
+    isSelected: Boolean,
+    deleteLabel: String,
     onCategory: (Int?) -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
+    onToggleSelect: () -> Unit,
+    onSelectRange: () -> Unit,
 ) {
     var categoryMenu by remember { mutableStateOf(false) }
     var rowMenu by remember { mutableStateOf(false) }
+    // Not state: only the click handler reads it, so a press must not recompose the row
+    val pressModifiers = remember {
+        object {
+            var value: PointerKeyboardModifiers? = null
+        }
+    }
     val s = strings()
     // Display only: the list shows cleaned bank text, the stored purpose and partner stay raw (see BankText)
     val title = BankText.displayDescription(txn)
@@ -529,9 +720,33 @@ private fun TransactionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .semantics { contentDescription = listOfNotNull(title, secondary).joinToString(" · ") }
+            .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .semantics {
+                contentDescription = listOfNotNull(title, secondary).joinToString(" · ")
+                selected = isSelected
+            }
+            // Remembers the keyboard modifiers of the press without consuming it, so the one `clickable` below
+            // decides: Cmd/Ctrl-click (Platform decides which) toggles, Shift-click extends, a plain click opens.
+            // Separate `onClick(keyboardModifiers = …)` handlers never saw the click: `clickable` took it first.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (event.type == PointerEventType.Press) pressModifiers.value = event.keyboardModifiers
+                    }
+                }
+            }
             .clickable(
-                onClick = onOpen,
+                onClick = {
+                    val mods = pressModifiers.value
+                    // A keyboard activation (Enter) has no press of its own, so it never reuses an old one
+                    pressModifiers.value = null
+                    when {
+                        mods != null && (if (Platform.isMac) mods.isMetaPressed else mods.isCtrlPressed) -> onToggleSelect()
+                        mods != null && mods.isShiftPressed -> onSelectRange()
+                        else -> onOpen()
+                    }
+                },
                 onClickLabel = s[StringKey.OpenDetails],
                 role = Role.Button,
             )
@@ -646,7 +861,7 @@ private fun TransactionRow(
                 Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(18.dp))
             }
             DropdownMenu(expanded = rowMenu, onDismissRequest = { rowMenu = false }) {
-                DropdownMenuItem(text = { Text(s[StringKey.Delete]) }, onClick = {
+                DropdownMenuItem(text = { Text(deleteLabel) }, onClick = {
                     rowMenu = false
                     onDelete()
                 })
