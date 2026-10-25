@@ -879,6 +879,25 @@ object Translations {
         K.ResetToDefaults to "Reset to defaults",
         K.Accept to "Accept",
         K.DismissSuggestion to "Dismiss",
+
+        // Exporting and printing the Tax bookings tab
+        K.ExportExcel to "Export Excel",
+        K.Print to "Print…",
+        K.OpenTaxBookings to "Open tax bookings",
+        K.XlsxSheetOverview to "Overview",
+        K.XlsxSheetBookings to "Bookings",
+        K.TaxExportTitle to "Tax-relevant bookings %s",
+        K.TaxColSection to "Section",
+        K.TaxColBookings to "Bookings",
+        K.TaxColWithReceipt to "With receipt",
+        K.TaxColReceipt to "Receipt",
+        K.TaxColSource to "Source",
+        K.Yes to "Yes",
+        K.No to "No",
+        K.PdfPageOf to "Page %1\$d of %2\$d",
+        K.MessagePrintSent to "Sent to the printer",
+        K.ErrorTaxExportFailed to "The export of the tax report failed",
+        K.ErrorPrintFailed to "Printing failed",
     )
 
     val de: Map<K, String> = mapOf(
@@ -1748,6 +1767,25 @@ object Translations {
         K.ResetToDefaults to "Auf Standard zurücksetzen",
         K.Accept to "Übernehmen",
         K.DismissSuggestion to "Ablehnen",
+
+        // Export und Druck der Steuerbuchungen
+        K.ExportExcel to "Excel exportieren",
+        K.Print to "Drucken…",
+        K.OpenTaxBookings to "Steuerbuchungen öffnen",
+        K.XlsxSheetOverview to "Übersicht",
+        K.XlsxSheetBookings to "Buchungen",
+        K.TaxExportTitle to "Steuerrelevante Buchungen %s",
+        K.TaxColSection to "Bereich",
+        K.TaxColBookings to "Buchungen",
+        K.TaxColWithReceipt to "Mit Beleg",
+        K.TaxColReceipt to "Beleg",
+        K.TaxColSource to "Quelle",
+        K.Yes to "Ja",
+        K.No to "Nein",
+        K.PdfPageOf to "Seite %1\$d von %2\$d",
+        K.MessagePrintSent to "An den Drucker gesendet",
+        K.ErrorTaxExportFailed to "Der Export des Steuerberichts ist fehlgeschlagen",
+        K.ErrorPrintFailed to "Drucken fehlgeschlagen",
     )
 
     val fr: Map<K, String> = mapOf(
@@ -2617,5 +2655,24 @@ object Translations {
         K.ResetToDefaults to "Rétablir les valeurs par défaut",
         K.Accept to "Accepter",
         K.DismissSuggestion to "Ignorer",
+
+        // Export et impression des écritures fiscales
+        K.ExportExcel to "Exporter Excel",
+        K.Print to "Imprimer…",
+        K.OpenTaxBookings to "Ouvrir les écritures fiscales",
+        K.XlsxSheetOverview to "Aperçu",
+        K.XlsxSheetBookings to "Écritures",
+        K.TaxExportTitle to "Écritures fiscalement pertinentes %s",
+        K.TaxColSection to "Section",
+        K.TaxColBookings to "Opérations",
+        K.TaxColWithReceipt to "Avec justificatif",
+        K.TaxColReceipt to "Justificatif",
+        K.TaxColSource to "Source",
+        K.Yes to "Oui",
+        K.No to "Non",
+        K.PdfPageOf to "Page %1\$d sur %2\$d",
+        K.MessagePrintSent to "Envoyé à l'imprimante",
+        K.ErrorTaxExportFailed to "L'export du rapport fiscal a échoué",
+        K.ErrorPrintFailed to "L'impression a échoué",
     )
 }

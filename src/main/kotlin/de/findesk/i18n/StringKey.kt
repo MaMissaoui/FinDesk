@@ -1061,4 +1061,57 @@ enum class StringKey {
 
     /** Suggestions card row button that rejects the suggestion for good (stores "not tax relevant"). */
     DismissSuggestion,
+
+    // Reports: exporting and printing the Tax bookings tab
+
+    /** Tax tab action button: exports the tab as an Excel workbook. */
+    ExportExcel,
+
+    /** Tax tab action button: prints the report through the system print dialog. */
+    Print,
+
+    /** Accessibility click label of the dashboard's tax-deductible card, which opens the Tax bookings tab. */
+    OpenTaxBookings,
+
+    /** First Excel sheet's tab name. */
+    XlsxSheetOverview,
+
+    /** Second Excel sheet's tab name. */
+    XlsxSheetBookings,
+
+    /** First line of the exports and the print job's name; %s is the year or the "from – to" range. */
+    TaxExportTitle,
+
+    /** Overview and bookings column: which of the two sections a row belongs to. */
+    TaxColSection,
+
+    /** Overview column: how many bookings a group has. */
+    TaxColBookings,
+
+    /** Overview column: how many of a group's bookings carry a receipt. */
+    TaxColWithReceipt,
+
+    /** Bookings table column header for the receipt state. */
+    TaxColReceipt,
+
+    /** Bookings table column header: which layer decided the booking's tax relevance. */
+    TaxColSource,
+
+    /** Receipt column value for a booking with a receipt. */
+    Yes,
+
+    /** Receipt column value for a booking without a receipt. */
+    No,
+
+    /** Footer on every report page: %1$d is the page number, %2$d the page count. */
+    PdfPageOf,
+
+    /** Status message once the print job was handed to the printer. */
+    MessagePrintSent,
+
+    /** Error when the tax export (Excel or PDF) failed; never carries exception or bank data. */
+    ErrorTaxExportFailed,
+
+    /** Error when printing failed; never carries exception or bank data. */
+    ErrorPrintFailed,
 }

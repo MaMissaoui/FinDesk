@@ -47,17 +47,28 @@ import java.time.Month
 import java.time.format.TextStyle
 
 @Composable
-fun ReportsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }, createViewModel: () -> ReportsViewModel = { ReportsViewModel() }) {
+fun ReportsScreen(
+    args: NavigationArgs = NavigationArgs(),
+    onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> },
+    createViewModel: () -> ReportsViewModel = { ReportsViewModel() },
+) {
     val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
     val s = strings()
-    LaunchedEffect(Unit) {
-        vm.loadTaxReport()
-        vm.loadRecurring()
-    }
-    var selectedTab by remember { mutableStateOf(ReportsTab.TAX_SUMMARY) }
+    // A navigation arg opens the Tax bookings tab for its year (the dashboard's tax card); the screen is
+    // recreated per navigation, so the effect below runs once per arrival
+    var selectedTab by remember { mutableStateOf(if (args.taxYear != null) ReportsTab.TAX_BOOKINGS else ReportsTab.TAX_SUMMARY) }
     var exportMenu by remember { mutableStateOf(false) }
     val report = state.taxReport
+    LaunchedEffect(Unit) {
+        val taxYear = args.taxYear
+        if (taxYear == null) {
+            vm.loadTaxReport()
+        } else {
+            vm.updateYear(taxYear)
+        }
+        vm.loadRecurring()
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         var customMode by remember { mutableStateOf(state.customRange != null) }
@@ -407,6 +418,34 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
 private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState, vm: ReportsViewModel) {
     val s = strings()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            // The tab's actions, right-aligned above its cards; disabled while exporting or without bookings
+            val enabled = !state.isExporting && info.bookingCount > 0
+            val suffix = fileSuffix(state.customRange, state.selectedYear)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                if (state.isExporting) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(12.dp))
+                }
+                OutlinedButton(
+                    enabled = enabled,
+                    onClick = { FileDialogs.saveFile(s[StringKey.ExportExcel], "tax-bookings-$suffix.xlsx")?.let(vm::exportTaxXlsx) },
+                ) {
+                    Text(s[StringKey.ExportExcel])
+                }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(
+                    enabled = enabled,
+                    onClick = { FileDialogs.saveFile(s[StringKey.ExportPdf], "tax-bookings-$suffix.pdf")?.let(vm::exportTaxPdf) },
+                ) {
+                    Text(s[StringKey.ExportPdf])
+                }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(enabled = enabled, onClick = { vm.printTax() }) {
+                    Text(s[StringKey.Print])
+                }
+            }
+        }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), Icons.Default.KeyboardArrowUp, Success, Modifier.weight(1f))
