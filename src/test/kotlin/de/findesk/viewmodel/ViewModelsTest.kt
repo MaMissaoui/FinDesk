@@ -193,7 +193,7 @@ class ViewModelsTest {
 
         val preview = vm.state.value.importPreview!!
         assertEquals(other, preview.accountId, "matched by the IBAN in the file")
-        assertEquals(1, preview.statement.bookings.size)
+        assertEquals(1, preview.entries.single().statement.bookings.size)
         assertEquals(0, data.transactionRepo.findItems().count { it.partnerName == "Stadtwerke" }, "nothing stored before confirming")
 
         vm.confirmImport(updateBalance = true).join()

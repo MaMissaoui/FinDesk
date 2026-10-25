@@ -18,6 +18,7 @@ import de.findesk.util.AccountGroupView
 import de.findesk.util.BalanceHistory
 import de.findesk.util.Currencies
 import de.findesk.util.GroupKey
+import de.findesk.util.Iban
 import de.findesk.util.RunningBalance
 import de.findesk.util.grandTotal
 import de.findesk.util.group
@@ -74,14 +75,26 @@ sealed interface AccountSelection {
     data class Account(val id: Int) : AccountSelection
 }
 
-/** A statement file read and waiting for the user to pick the account and confirm. */
+/** One selected statement file that was read successfully. */
+data class ImportEntry(val file: File, val statement: ParsedStatement)
+
+/** A selected file that could not be read, with the reason shown to the user. */
+data class ImportFailure(val fileName: String, val message: String)
+
+/** The selected statement files, read and waiting for the user to pick the account and confirm. */
 data class ImportPreview(
-    val file: File,
-    val statement: ParsedStatement,
+    /** Every selected file, in selection order: a column remap re-reads all of them. */
+    val files: List<File>,
+    /** The readable files in import order (see [TransactionsViewModel.openImport]). Never empty. */
+    val entries: List<ImportEntry>,
+    val failures: List<ImportFailure> = emptyList(),
     val accountId: Int?,
-    /** The file's balance may replace the account balance (file not older than the account's newest booking). */
+    /** The newest entry's balance may replace the account balance (same rule as before, for that entry). */
     val balanceUpdateAllowed: Boolean = false,
-)
+) {
+    val newest: ImportEntry get() = entries.last()
+    val bookingCount: Int get() = entries.sumOf { it.statement.bookings.size }
+}
 
 /** One booking the rules would recategorize (see [TransactionsViewModel.previewReapplyRules]). */
 data class ReapplyChange(
@@ -731,23 +744,106 @@ class TransactionsViewModel(
         }
     }
 
-    /** Reads a statement file and opens the import preview (nothing is stored yet). */
-    fun openImport(file: File, mapping: CsvMapping? = null): Job = launchSafely(onError) {
-        val statement = importService.read(file, mapping)
+    /**
+     * Reads the selected statement files and opens the import preview (nothing is stored yet). All files must
+     * belong to one account; the readable files are read one after another, unreadable ones become failures and
+     * the rest is still offered. The `entries` order is the import order: files without bookings first, then by
+     * each file's latest booking date ascending (ties by earliest date, then selection order), so the newest
+     * entry — [ImportPreview.newest] — is the file with the greatest latest-booking date; only it may set the
+     * balance, and it is imported last.
+     */
+    fun openImport(files: List<File>, mapping: CsvMapping? = null): Job = readImportFiles(files) { mapping }
+
+    /** Reads one statement file and opens the import preview. */
+    fun openImport(file: File, mapping: CsvMapping? = null): Job = openImport(listOf(file), mapping)
+
+    /**
+     * The shared body of [openImport] and [remapImport]: the limits are checked before any file is read, then
+     * each file is read with [mappingFor]'s mapping for that file.
+     */
+    private fun readImportFiles(files: List<File>, mappingFor: (File) -> CsvMapping?): Job = launchSafely(onError) {
+        if (files.isEmpty()) return@launchSafely
+        // Limits before reading anything, so a bad selection fails fast and cheap
+        if (files.size > StatementImportService.MAX_FILES) {
+            _state.update { it.copy(error = AppStrings.format(StringKey.ErrorImportTooManyFiles, StatementImportService.MAX_FILES)) }
+            return@launchSafely
+        }
+        val totalBytes = files.sumOf { f -> runCatching { f.length() }.getOrDefault(0L) }
+        if (totalBytes > StatementImportService.MAX_TOTAL_BYTES) {
+            _state.update { it.copy(error = AppStrings.format(StringKey.ErrorImportFilesTooLarge, StatementImportService.MAX_TOTAL_MB)) }
+            return@launchSafely
+        }
+        val entries = mutableListOf<ImportEntry>()
+        val failures = mutableListOf<ImportFailure>()
+        files.forEach { file ->
+            try {
+                entries += ImportEntry(file, importService.read(file, mappingFor(file)))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failures += ImportFailure(file.name, e.userMessage())
+            }
+        }
+        if (entries.isEmpty()) {
+            // One unreadable file reports its own message, as before; several name every one
+            _state.update {
+                it.copy(
+                    importPreview = null,
+                    error = if (failures.size == 1) {
+                        failures[0].message
+                    } else {
+                        AppStrings.format(StringKey.ErrorImportNoReadableFile, failures.joinToString(", ") { f -> "${f.fileName}: ${f.message}" })
+                    },
+                )
+            }
+            return@launchSafely
+        }
+        val ordered = entries
+            .mapIndexed { index, entry -> Triple(entry, index, entry.statement.bookings) }
+            .sortedWith(
+                compareBy(
+                    { t: Triple<ImportEntry, Int, List<de.findesk.importer.ImportedBooking>> -> t.third.isNotEmpty() }, // empty files first: they import nothing
+                    { t: Triple<ImportEntry, Int, List<de.findesk.importer.ImportedBooking>> -> t.third.maxOfOrNull { it.date } ?: LocalDate.MIN },
+                    { t: Triple<ImportEntry, Int, List<de.findesk.importer.ImportedBooking>> -> t.third.minOfOrNull { it.date } ?: LocalDate.MIN },
+                    { t: Triple<ImportEntry, Int, List<de.findesk.importer.ImportedBooking>> -> t.second },
+                ),
+            )
+            .map { it.first }
+        // One account only: several IBANs among the files are refused instead of guessing
+        val ibans = ordered.mapNotNull { it.statement.accountIban?.let(Iban::normalize) }.distinct()
+        if (ibans.size > 1) {
+            _state.update {
+                it.copy(error = AppStrings.format(StringKey.ErrorImportDifferentAccounts, ibans.joinToString(", ") { "…${it.takeLast(4)}" }))
+            }
+            return@launchSafely
+        }
+        val statement = ordered.firstOrNull { it.statement.accountIban != null }?.statement ?: ordered.last().statement
         val accountId = importService.matchAccount(statement) ?: _state.value.importPreview?.accountId
             ?: _state.value.accountId ?: _state.value.accounts.singleOrNull()?.id
-        val allowed = accountId?.let { importService.balanceUpdateAllowed(it, statement) } ?: false
-        _state.update { it.copy(importPreview = ImportPreview(file, statement, accountId, allowed), error = null) }
+        val newest = ordered.last().statement
+        val allowed = accountId?.let { importService.balanceUpdateAllowed(it, newest) } ?: false
+        _state.update { it.copy(importPreview = ImportPreview(files, ordered, failures, accountId, allowed), error = null) }
     }
 
-    /** Re-reads the CSV with a user-adjusted column mapping. */
-    fun remapImport(mapping: CsvMapping): Job = _state.value.importPreview?.let { openImport(it.file, mapping) } ?: Job().apply { complete() }
+    /**
+     * Re-reads the CSV with a user-adjusted column mapping. Column indexes only make sense for files with the
+     * same header row: the new mapping goes to the CSV/XLSX files whose headers match the first CSV/XLSX entry's
+     * headers; every other file keeps its auto-detected mapping.
+     */
+    fun remapImport(mapping: CsvMapping): Job {
+        val preview = _state.value.importPreview ?: return Job().apply { complete() }
+        val firstCsv = preview.entries.firstOrNull { it.statement.csv != null }?.statement?.csv
+        return readImportFiles(preview.files) { file ->
+            val entry = preview.entries.firstOrNull { it.file === file }
+            if (firstCsv != null && entry?.statement?.csv?.headers == firstCsv.headers) mapping else null
+        }
+    }
 
     fun selectImportAccount(accountId: Int): Job {
         _state.update { s -> s.copy(importPreview = s.importPreview?.copy(accountId = accountId, balanceUpdateAllowed = false)) }
         return launchSafely(onError) {
             val preview = _state.value.importPreview ?: return@launchSafely
-            val allowed = importService.balanceUpdateAllowed(accountId, preview.statement)
+            val allowed = importService.balanceUpdateAllowed(accountId, preview.newest.statement)
             _state.update { s -> s.copy(importPreview = s.importPreview?.takeIf { it.accountId == accountId }?.copy(balanceUpdateAllowed = allowed) ?: s.importPreview) }
         }
     }
@@ -756,14 +852,52 @@ class TransactionsViewModel(
         _state.update { it.copy(importPreview = null) }
     }
 
+    /**
+     * Imports the previewed entries in order, each with its own dedup hashing and audit-log entry — the per-file
+     * occurrence counter would differ from importing the files one by one if the bookings were merged. Only the
+     * newest file may set the balance. The first failure stops the import; files before it stay stored and the
+     * list refreshes to show them.
+     */
     fun confirmImport(updateBalance: Boolean): Job {
         val preview = _state.value.importPreview ?: return Job().apply { complete() }
         val accountId = preview.accountId ?: return Job().apply { complete() }
         _state.update { it.copy(isImporting = true) }
         return launchSafely({ e -> _state.update { it.copy(isImporting = false, error = e.userMessage()) } }) {
-            val report = Busy.track { importService.import(accountId, preview.statement, updateBalance) }
+            var report: StatementImportService.ImportReport? = null
+            var importedFiles = 0
+            var failedName: String? = null
+            var failedMessage: String? = null
+            for (entry in preview.entries) {
+                try {
+                    val fileReport = Busy.track {
+                        importService.import(accountId, entry.statement, updateBalance = updateBalance && entry === preview.newest)
+                    }
+                    report = report?.plus(fileReport) ?: fileReport
+                    importedFiles++
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    failedName = entry.file.name
+                    failedMessage = e.userMessage()
+                    break
+                }
+            }
+            if (failedName != null) {
+                _state.update {
+                    it.copy(
+                        importPreview = null,
+                        isImporting = false,
+                        error = AppStrings.format(StringKey.ErrorImportStopped, failedName, failedMessage, importedFiles),
+                    )
+                }
+                refresh()
+                return@launchSafely
+            }
+            val finalReport = report!!
             // Show everything that was imported, not just this month; select the imported account.
-            _state.update { it.copy(importPreview = null, isImporting = false, period = Period.ALL, selection = AccountSelection.Account(accountId), accountId = accountId, message = report.summary()) }
+            _state.update {
+                it.copy(importPreview = null, isImporting = false, period = Period.ALL, selection = AccountSelection.Account(accountId), accountId = accountId, message = finalReport.summary(importedFiles))
+            }
             refresh()
         }
     }

@@ -12,8 +12,9 @@ import java.math.BigDecimal
 
 /**
  * Imports statement files (CSV, CAMT.052/053/054 XML or ZIP) into an account, skipping bookings imported before.
+ * Subclassable for tests that need a deterministic import failure.
  */
-class StatementImportService(
+open class StatementImportService(
     private val transactionRepository: TransactionRepository = TransactionRepositoryImpl(),
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
@@ -30,8 +31,27 @@ class StatementImportService(
         val wrongCurrency: Int = 0,
         val currency: String = "EUR",
     ) {
-        fun summary(): String = buildString {
-            append(AppStrings.format(StringKey.ImportSummary, imported))
+        /**
+         * Sums two per-file reports. The balance comes from the second report, which is the newer file imported
+         * later, so only the newest file can set the balance.
+         */
+        operator fun plus(other: ImportReport): ImportReport = ImportReport(
+            imported = imported + other.imported,
+            duplicates = duplicates + other.duplicates,
+            categorized = categorized + other.categorized,
+            balanceUpdated = other.balanceUpdated,
+            probableDuplicates = probableDuplicates + other.probableDuplicates,
+            wrongCurrency = wrongCurrency + other.wrongCurrency,
+            currency = other.currency,
+        )
+
+        /** One file reads exactly as today; several files name the file count first ([StringKey.ImportSummaryFiles]). */
+        fun summary(files: Int = 1): String = buildString {
+            if (files <= 1) {
+                append(AppStrings.format(StringKey.ImportSummary, imported))
+            } else {
+                append(AppStrings.format(StringKey.ImportSummaryFiles, imported, files))
+            }
             if (categorized > 0) append(AppStrings.format(StringKey.ImportSummaryAuto, categorized))
             if (duplicates > 0) append(AppStrings.format(StringKey.ImportSummaryKnown, duplicates))
             if (probableDuplicates > 0) append(AppStrings.format(StringKey.ImportSummaryProbable, probableDuplicates))
@@ -42,6 +62,16 @@ class StatementImportService(
 
     companion object {
         const val MAX_FILE_BYTES = 100L * 1024 * 1024
+
+        /** How many statement files may be imported at once ([TransactionsViewModel.openImport]). */
+        const val MAX_FILES = 240
+
+        /** The total size of the files selected at once. */
+        const val MAX_TOTAL_BYTES = 200L * 1024 * 1024
+
+        /** MB the total-size limit names in the user message. */
+        const val MAX_TOTAL_MB = MAX_TOTAL_BYTES / (1024L * 1024L)
+
         val EXTENSIONS = setOf("csv", "txt", "xml", "zip", "sta", "mt940", "ofx", "qfx", "qif", "xlsx")
     }
 
@@ -89,9 +119,9 @@ class StatementImportService(
     /**
      * Stores the bookings. If [updateBalance] and the file reports running balances, the account balance is set
      * to the balance after the newest booking. A CAMT file without running balances but with a reconciled closing
-     * balance sets the balance from it instead.
+     * balance sets the balance from it instead. Open for tests: a subclass can fail one statement deterministically.
      */
-    suspend fun import(accountId: Int, statement: ParsedStatement, updateBalance: Boolean = true): ImportReport = withContext(Dispatchers.IO) {
+    open suspend fun import(accountId: Int, statement: ParsedStatement, updateBalance: Boolean = true): ImportReport = withContext(Dispatchers.IO) {
         requireSingleAccount(statement)
         val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: throw IllegalArgumentException(AppStrings[StringKey.ErrorAccountNotFound])
         // Decided before inserting anything, so the balance check and dedup see the account as it was
