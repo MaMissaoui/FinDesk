@@ -94,7 +94,7 @@ builds — read the [disclaimer](#disclaimer) first.
 Packages are built for the operating system you run the build on.
 
 ```bash
-./gradlew packageDmg    # macOS  -> build/compose/binaries/main/dmg/FinDesk-1.16.0.dmg
+./gradlew packageDmg    # macOS  -> build/compose/binaries/main/dmg/FinDesk-1.17.0.dmg
 ./gradlew packageMsi    # Windows (MSI)
 ./gradlew packageExe    # Windows (portable EXE)
 ./gradlew packageDeb    # Debian/Ubuntu
