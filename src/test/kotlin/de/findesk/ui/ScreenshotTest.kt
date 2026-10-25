@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.Density
 import de.findesk.banking.TransferOrder
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.i18n.AppLanguage
+import de.findesk.i18n.AppStrings
 import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
@@ -234,6 +236,79 @@ class ScreenshotTest {
     fun `render the open transactions overflow menu`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-more-menu").toFile().absolutePath)
         render("transactions-more-menu", 1440, 900, clickAt = Offset(1283f, 108f)) { Frame(Screen.TRANSACTIONS, dark = false) }
+    }
+
+    /** Three rows selected for a batch delete: the selection bar with count and per-currency totals. */
+    @Test
+    fun `render the transactions screen with three rows selected`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-select").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(4), BigDecimal("-20.00"), "EUR", "Bäckerei", "Brötchen", null, "sel-1"),
+                NewTransaction(account, today.minusDays(3), BigDecimal("-80.00"), "EUR", "Stadtwerke", "Abschlag", null, "sel-2"),
+                NewTransaction(account, today.minusDays(2), BigDecimal("120.00"), "EUR", "Employer GmbH", "Gehalt", null, "sel-3"),
+                NewTransaction(account, today.minusDays(1), BigDecimal("-49.63"), "EUR", "Kiosk", "Wasser", null, "sel-4"),
+            ),
+        )
+
+        // The screen's own start() clears a selection, so the three rows are selected after the screen settled
+        val created = arrayOfNulls<TransactionsViewModel>(1)
+        fun selecting(): TransactionsViewModel = TransactionsViewModel().also { created[0] = it }
+        fun selectFirstThree() {
+            val model = created[0] ?: error("the view model should exist once the screen settled")
+            val rows = model.state.value.transactions
+            check(rows.size == 4) { "the list should show the four bookings" }
+            rows.take(3).forEach { model.toggleSelection(it.id) }
+        }
+
+        render("transactions-selection", 1440, 900, afterStable = ::selectFirstThree) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::selecting) }
+        render("transactions-selection-dark", 1440, 900, afterStable = ::selectFirstThree) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::selecting) }
+        render("transactions-selection-narrow", 1024, 800, afterStable = ::selectFirstThree) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::selecting) }
+        render("transactions-selection-narrow-dark", 1024, 800, afterStable = ::selectFirstThree) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::selecting) }
+    }
+
+    /** The multi-delete confirmation: date range, per-currency total, the first bookings and the sync warning. */
+    @Test
+    fun `render the multi-delete confirmation`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-multi-delete").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(8), BigDecimal("-20.00"), "EUR", "Bäckerei", "Brötchen", null, "md-1"),
+                NewTransaction(account, today.minusDays(7), BigDecimal("-80.00"), "EUR", "Stadtwerke", "Abschlag", null, "md-2"),
+                NewTransaction(account, today.minusDays(6), BigDecimal("1200.00"), "EUR", "Employer GmbH", "Gehalt", null, "md-3"),
+                NewTransaction(account, today.minusDays(5), BigDecimal("-49.63"), "EUR", "Kiosk", "Wasser", null, "md-4"),
+                NewTransaction(account, today.minusDays(4), BigDecimal("-14.50"), "EUR", "Pflegekasse", "Getränke", null, "md-5"),
+                NewTransaction(account, today.minusDays(3), BigDecimal("-32.20"), "EUR", "Buchhandlung", "Roman", null, "md-6"),
+            ),
+        )
+        // More bookings than the five lines shown, so the confirmation renders its "and N more" line
+        val bookings = TransactionRepositoryImpl().findItems().take(6)
+        val confirmation = MultiDeleteConfirmation(bookings.map { it.id }.toSet(), bookings)
+
+        fun dialog(name: String, language: AppLanguage) {
+            AppStrings.set(language)
+            render(name, 720, 760) {
+                CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
+                    FinDeskTheme(darkTheme = false) {
+                        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                            Box(contentAlignment = Alignment.Center) {
+                                MultiDeleteDialog(confirmation, onConfirm = {}, onDismiss = {})
+                            }
+                        }
+                    }
+                }
+            }
+            AppStrings.set(AppLanguage.EN)
+        }
+        dialog("transactions-multi-delete-confirm", AppLanguage.EN)
+        dialog("transactions-multi-delete-confirm-de", AppLanguage.DE)
     }
 
     @Test
@@ -478,7 +553,7 @@ class ScreenshotTest {
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
-    private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, content: @Composable () -> Unit) {
+    private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, afterStable: (() -> Unit)? = null, content: @Composable () -> Unit) {
         // ImageComposeScene runs effects on Dispatchers.Unconfined by default, so collectAsState resumed on the view model's IO
         // thread and wrote state from there while this thread rendered; some of those writes never reached the picture.
         // Effects are queued instead and run here, on the rendering thread, around every frame.
@@ -526,6 +601,12 @@ class ScreenshotTest {
                 return currentPng
             }
             var png = settle(next())
+            if (afterStable != null) {
+                // A view-model change applied by the test after the screen settled (e.g. a multi-selection the
+                // screen's own start() would clear); let the next frames render it before saving
+                afterStable()
+                png = settle(png)
+            }
             if (clickAt != null) {
                 // Overlay menus are separate popup layers in the scene, so click the button and let the menu open
                 scene.sendPointerEvent(PointerEventType.Press, clickAt)

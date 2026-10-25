@@ -9,6 +9,7 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import java.io.File
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -125,5 +126,52 @@ class TransactionRepositoryTest {
 
         // This class shares one database across its tests, so leave the extra account out of it again
         accountRepo.deleteWithTransactions(second)
+    }
+
+    @Test
+    fun `deleteAll deletes exactly the given ids, unlinks their documents and ignores unknown ids`() {
+        val bank = bankAccessRepo.create("Fourth Bank", "11111111", "FOURDEFF", "user4")
+        val account = accountRepo.create(bank.id.value, "DE44500105175407324931").id.value
+        val keepId = transactionRepo.create(account, LocalDate.now(), BigDecimal("-1.00"), hash = "batch-keep").id.value
+        val goneId = transactionRepo.create(account, LocalDate.now(), BigDecimal("-2.00"), hash = "batch-gone").id.value
+        val otherGoneId = transactionRepo.create(account, LocalDate.now(), BigDecimal("-3.00"), hash = "batch-gone-2").id.value
+        val docRepo = DocumentRepositoryImpl()
+        // One receipt on a deleted booking and one on the kept one: the delete unlinks, it never deletes receipts
+        val receiptGone = docRepo.create("gone-receipt.pdf", "gone-receipt.pdf", "application/pdf", linkedTransactionId = goneId)
+        val receiptKeep = docRepo.create("kept-receipt.pdf", "kept-receipt.pdf", "application/pdf", linkedTransactionId = keepId)
+
+        val deleted = transactionRepo.deleteAll(listOf(goneId, otherGoneId, 999_999))
+
+        assertEquals(2, deleted, "the unknown id is ignored, the other two are deleted")
+        assertNull(transactionRepo.findById(goneId))
+        assertNull(transactionRepo.findById(otherGoneId))
+        assertNotNull(transactionRepo.findById(keepId))
+        assertNull(docRepo.findItem(receiptGone.id.value)?.linkedTransactionId, "the deleted booking's receipt is unlinked, not gone")
+        assertEquals(keepId, docRepo.findItem(receiptKeep.id.value)?.linkedTransactionId, "the kept booking's receipt stays linked")
+
+        assertEquals(0, transactionRepo.deleteAll(emptyList()), "an empty list does nothing")
+        assertEquals(0, transactionRepo.deleteAll(emptySet()), "an empty set does nothing")
+
+        // This class shares one database across its tests, so leave the extra account out of it again
+        accountRepo.deleteWithTransactions(account)
+    }
+
+    @Test
+    fun `deleteAll chunks more than the parameter limit in one call and keeps the other bookings`() {
+        val bank = bankAccessRepo.create("Fifth Bank", "22222222", "FIVEDEFF", "user5")
+        val account = accountRepo.create(bank.id.value, "DE02120300000000202052").id.value
+        // More ids than one statement may carry, over three chunks of at most 500
+        val ids = (0 until 1250).map { n ->
+            transactionRepo.create(account, LocalDate.of(2026, 1, 1).plusDays((n % 300).toLong()), BigDecimal("-1.00"), hash = "chunk-$n").id.value
+        }
+        val survivor = transactionRepo.create(account, LocalDate.now(), BigDecimal("-5.00"), hash = "chunk-survivor").id.value
+
+        val deleted = transactionRepo.deleteAll(ids + 4_242_424)
+
+        assertEquals(1250, deleted)
+        assertEquals(listOf(survivor), transactionRepo.findItems(TransactionFilter(accountId = account)).map { it.id })
+
+        // This class shares one database across its tests, so leave the extra account out of it again
+        accountRepo.deleteWithTransactions(account)
     }
 }

@@ -10,11 +10,13 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.model.toItem
+import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.count
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.min
 import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
@@ -71,6 +73,15 @@ interface TransactionRepository {
      */
     fun updateCategories(changes: Map<Int, Int?>): Int
     fun delete(id: Int): Boolean
+
+    /**
+     * Deletes every booking of [ids] in one `transaction { }` (all or nothing) and unlinks their documents first,
+     * like [delete] does (SQLite doesn't enforce the foreign key). Returns how many rows were deleted; unknown
+     * ids are ignored and an empty collection does nothing. The ids are processed in chunks of at most
+     * [TransactionRepositoryImpl.DELETE_CHUNK] per statement, so a selection can hold the whole history without
+     * ever exceeding SQLite's bound-parameter limit.
+     */
+    fun deleteAll(ids: Collection<Int>): Int
     fun findByHash(hash: String): Transaction?
 
     /** Whether [accountId] has any booking yet; used to keep a bank's first import from looking all new. */
@@ -190,6 +201,22 @@ class TransactionRepositoryImpl : TransactionRepository {
         Transaction.findById(id)?.delete() != null
     }
 
+    override fun deleteAll(ids: Collection<Int>): Int {
+        if (ids.isEmpty()) return 0
+        return transaction {
+            var deleted = 0
+            ids.chunked(DELETE_CHUNK).forEach { chunk ->
+                with(SqlExpressionBuilder) {
+                    val entityIds = chunk.map { EntityID(it, TransactionsTable) }
+                    // Documents linked to the bookings would dangle otherwise; SQLite doesn't enforce the FK.
+                    DocumentsTable.update({ DocumentsTable.linkedTransactionId inList entityIds }) { it[linkedTransactionId] = null }
+                    deleted += TransactionsTable.deleteWhere { TransactionsTable.id inList entityIds }
+                }
+            }
+            deleted
+        }
+    }
+
     override fun findByHash(hash: String): Transaction? = transaction {
         Transaction.find { TransactionsTable.hash eq hash }.firstOrNull()
     }
@@ -288,5 +315,10 @@ class TransactionRepositoryImpl : TransactionRepository {
                 TransactionsTable.update({ condition }) { it[isNew] = false }
             }
         }
+    }
+
+    private companion object {
+        /** Batch-delete chunk size: SQLite's bound-parameter limit is at least 999, so 500 ids per statement is safe. */
+        const val DELETE_CHUNK = 500
     }
 }

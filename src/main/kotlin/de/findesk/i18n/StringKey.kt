@@ -936,4 +936,27 @@ enum class StringKey {
 
     /** Disabled hint on the re-apply action when the filters hide every booking. */
     HintNothingShown,
+
+    // Transactions: select several bookings in the list and delete them together
+
+    /** Selection bar: how many bookings the multi-selection holds. */
+    SelectedCount,
+
+    /** Selection bar button that opens the multi-delete confirmation. */
+    DeleteSelected,
+
+    /** Selection bar button that empties the multi-selection. */
+    ClearSelection,
+
+    /** Row context menu on a row inside a selection of two or more; %d is the selection's size. */
+    DeleteSelectedCount,
+
+    /** Title of the multi-delete confirmation; %d is the number of bookings. */
+    DeleteTransactionsTitle,
+
+    /** Warning in the multi-delete confirmation: synced bookings can come back within the bank's sync period. */
+    DeleteSyncedHint,
+
+    /** Status message after the batch delete: %d is the number of deleted bookings. */
+    MessageTransactionsDeleted,
 }

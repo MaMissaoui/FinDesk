@@ -176,10 +176,20 @@ data class TransactionsState(
     val reapplyPreview: ReapplyPreview? = null,
     /** Whether [TransactionsViewModel.undoReapplyRules] still has the last re-apply's previous categories (memory only). */
     val canUndoReapply: Boolean = false,
+    /** Ids of the bookings the user selected for a batch delete; only bookings the shown list can hold. */
+    val selectedIds: Set<Int> = emptySet(),
+    /** The last row toggled or clicked with a modifier: the start of the next Shift range. */
+    val selectionAnchorId: Int? = null,
     val isLoading: Boolean = false,
     val error: String? = null,
     val message: String? = null,
-)
+) {
+    /** The selected bookings among the currently shown list, in list order. */
+    val selectedShown: List<TransactionItem> get() = transactions.filter { it.id in selectedIds }
+
+    /** Totals of the selected bookings per currency; currencies are never added together. */
+    val selectedTotals: Map<String, BigDecimal> get() = Currencies.totals(selectedShown, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount })
+}
 
 data class ManualEntry(
     val accountId: Int,
@@ -265,6 +275,15 @@ class TransactionsViewModel(
      */
     private fun dateRange(month: YearMonth?, period: Period): Pair<LocalDate?, LocalDate?> = month?.let { it.atDay(1) to it.atEndOfMonth() } ?: period.range(today())
 
+    /** The selection only ever covers what the list shows, so a change of the filters starts over with an empty one. */
+    private fun TransactionsState.clearingSelection(): TransactionsState = copy(selectedIds = emptySet(), selectionAnchorId = null)
+
+    /** Adds or removes [id] from the selection and makes it the new anchor. */
+    private fun TransactionsState.toggled(id: Int): TransactionsState = copy(
+        selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id,
+        selectionAnchorId = id,
+    )
+
     /** Applies navigation context (e.g. "transactions of this account") and loads. */
     fun start(
         accountId: Int? = null,
@@ -292,7 +311,7 @@ class TransactionsViewModel(
                 period = effectivePeriod,
                 // Only an explicit month navigation keeps one; any other start clears it
                 month = month,
-            )
+            ).clearingSelection()
         }
         return loadTransactions()
     }
@@ -315,7 +334,7 @@ class TransactionsViewModel(
                 accountId = null,
                 minAmount = null,
                 maxAmount = null,
-            )
+            ).clearingSelection()
         }
         return loadTransactions()
     }
@@ -335,7 +354,7 @@ class TransactionsViewModel(
                 accountId = null,
                 minAmount = null,
                 maxAmount = null,
-            )
+            ).clearingSelection()
         }
         return loadTransactions()
     }
@@ -384,8 +403,16 @@ class TransactionsViewModel(
             groups = group(accounts, customGroups, primary)
         }
 
-        // Keep the open detail panel in sync with edits
-        _state.value.selected?.let { sel -> _state.update { it.copy(selected = transactions.firstOrNull { t -> t.id == sel.id } ?: sel) } }
+        // Keep the open detail panel in sync with edits; a booking deleted elsewhere (e.g. with the account)
+        // closes it, while one merely hidden by the filters keeps the stale snapshot as before
+        _state.value.selected?.let { sel ->
+            val stillShown = transactions.firstOrNull { t -> t.id == sel.id }
+            if (stillShown != null) {
+                _state.update { if (it.selected?.id == sel.id) it.copy(selected = stillShown) else it }
+            } else if (transactionRepository.findById(sel.id) == null) {
+                _state.update { if (it.selected?.id == sel.id) it.copy(selected = null, selectedDocuments = emptyList()) else it }
+            }
+        }
         val categories = categoryRepository.findAllItems()
         // The running balance needs every booking of the account, not just the filtered list, so a text or period
         // filter hides rows but never changes their balances. A depot's balance is a market value, not the sum of
@@ -413,6 +440,8 @@ class TransactionsViewModel(
                 balanceCurrency = balanceAccount?.currency,
                 totalIncome = Currencies.totals(transactions.filter { t -> t.amount.signum() > 0 }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount }),
                 totalExpenses = Currencies.totals(transactions.filter { t -> t.isExpense }, Currencies.DEFAULT, { t -> t.currency }, { t -> t.amount.abs() }),
+                // A booking deleted elsewhere (e.g. by a sync re-run or an import) falls out of the selection
+                selectedIds = it.selectedIds intersect transactions.mapTo(mutableSetOf()) { t -> t.id },
                 isLoading = false,
             )
         }
@@ -444,7 +473,7 @@ class TransactionsViewModel(
 
     /** Debounced so typing doesn't fire a query per keystroke. */
     fun updateSearchQuery(query: String): Job {
-        _state.update { it.copy(searchQuery = query) }
+        _state.update { it.copy(searchQuery = query).clearingSelection() }
         searchJob?.cancel()
         return launchSafely(onError) {
             delay(SEARCH_DEBOUNCE_MS)
@@ -454,23 +483,23 @@ class TransactionsViewModel(
 
     fun updatePeriod(period: Period): Job {
         // Picking a period from the list ends the exact-month navigation
-        _state.update { it.copy(period = period, month = null) }
+        _state.update { it.copy(period = period, month = null).clearingSelection() }
         return loadTransactions()
     }
 
     fun updateDirection(direction: Direction): Job {
-        _state.update { it.copy(direction = direction) }
+        _state.update { it.copy(direction = direction).clearingSelection() }
         return loadTransactions()
     }
 
     fun updateCategoryFilter(filter: CategoryFilter): Job {
-        _state.update { it.copy(categoryFilter = filter) }
+        _state.update { it.copy(categoryFilter = filter).clearingSelection() }
         return loadTransactions()
     }
 
     /** Selects an account, group or all accounts, persists the choice for this profile and reloads. */
     fun selectAccounts(selection: AccountSelection): Job {
-        _state.update { it.copy(selection = selection, accountId = (selection as? AccountSelection.Account)?.id) }
+        _state.update { it.copy(selection = selection, accountId = (selection as? AccountSelection.Account)?.id).clearingSelection() }
         _state.update { it.copy(isLoading = true, error = null) }
         // The write runs in the same job as the reload, off the UI thread, so stored and shown selection can't diverge
         return launchSafely(onError) {
@@ -537,7 +566,7 @@ class TransactionsViewModel(
     }
 
     fun updateAmountRange(min: BigDecimal?, max: BigDecimal?): Job {
-        _state.update { it.copy(minAmount = min, maxAmount = max) }
+        _state.update { it.copy(minAmount = min, maxAmount = max).clearingSelection() }
         return loadTransactions()
     }
 
@@ -656,6 +685,59 @@ class TransactionsViewModel(
     fun deleteTransaction(transactionId: Int): Job = launchSafely(onError) {
         transactionRepository.delete(transactionId)
         auditLogRepository.log("DELETE_TRANSACTION", "user", "Deleted transaction $transactionId")
+        refresh()
+    }
+
+    /** Toggles [id] in the multi-selection (Cmd/Ctrl-click) and makes it the anchor for the next Shift range. */
+    fun toggleSelection(id: Int) {
+        _state.update { it.toggled(id) }
+    }
+
+    /**
+     * Shift-click: selects every booking between the anchor and [id] (both inclusive, in list order) in addition
+     * to the existing selection, and moves the anchor to [id]. Without an anchor — or when either row is no
+     * longer shown — it behaves like [toggleSelection].
+     */
+    fun selectRange(id: Int) {
+        _state.update { s ->
+            val anchor = s.selectionAnchorId ?: return@update s.toggled(id)
+            val shown = s.transactions
+            val from = shown.indexOfFirst { it.id == anchor }
+            val to = shown.indexOfFirst { it.id == id }
+            if (from < 0 || to < 0) return@update s.toggled(id)
+            val range = shown.subList(minOf(from, to), maxOf(from, to) + 1).mapTo(mutableSetOf()) { it.id }
+            s.copy(selectedIds = s.selectedIds + range, selectionAnchorId = id)
+        }
+    }
+
+    /** Selects every booking the current filters show. */
+    fun selectAllShown() {
+        _state.update { s -> s.copy(selectedIds = s.transactions.mapTo(mutableSetOf()) { t -> t.id }) }
+    }
+
+    /** Empties the multi-selection. */
+    fun clearSelection() {
+        _state.update { it.copy(selectedIds = emptySet(), selectionAnchorId = null) }
+    }
+
+    /**
+     * Deletes exactly the bookings of [ids] — the set the confirmation dialog displayed — that are still part
+     * of the selection and still shown, so it can delete fewer than shown but never more, and never a booking
+     * the list does not show. One audit entry names the count only (no amounts, names or purposes). The
+     * selection is cleared and the list refreshed afterwards.
+     */
+    fun deleteSelected(ids: Set<Int>): Job = launchSafely(onError) {
+        if (ids.isEmpty()) return@launchSafely
+        val s = _state.value
+        val targets = ids intersect s.selectedIds intersect s.transactions.mapTo(mutableSetOf()) { t -> t.id }
+        if (targets.isNotEmpty()) {
+            val deleted = transactionRepository.deleteAll(targets)
+            if (deleted > 0) {
+                auditLogRepository.log("DELETE_TRANSACTIONS", "user", "Deleted $deleted transactions")
+                _state.update { it.copy(message = AppStrings.format(StringKey.MessageTransactionsDeleted, deleted)) }
+            }
+        }
+        _state.update { it.copy(selectedIds = emptySet(), selectionAnchorId = null) }
         refresh()
     }
 
@@ -919,7 +1001,7 @@ class TransactionsViewModel(
             val finalReport = report!!
             // Show everything that was imported, not just this month; select the imported account.
             _state.update {
-                it.copy(importPreview = null, isImporting = false, period = Period.ALL, selection = AccountSelection.Account(accountId), accountId = accountId, message = finalReport.summary(importedFiles))
+                it.copy(importPreview = null, isImporting = false, period = Period.ALL, selection = AccountSelection.Account(accountId), accountId = accountId, message = finalReport.summary(importedFiles)).clearingSelection()
             }
             refresh()
         }
