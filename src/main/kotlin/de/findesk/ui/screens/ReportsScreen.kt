@@ -58,7 +58,7 @@ fun ReportsScreen(
     val s = strings()
     // A navigation arg opens the Tax bookings tab for its year (the dashboard's tax card); the screen is
     // recreated per navigation, so the effect below runs once per arrival
-    var selectedTab by remember { mutableStateOf(if (args.taxYear != null) ReportsTab.TAX_BOOKINGS else ReportsTab.CATEGORY_ANALYSIS) }
+    var selectedTab by remember { mutableStateOf(if (args.taxYear != null) ReportsTab.TAX_BOOKINGS else ReportsTab.TAX_SUMMARY) }
     var exportMenu by remember { mutableStateOf(false) }
     val report = state.taxReport
     LaunchedEffect(Unit) {
