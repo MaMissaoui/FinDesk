@@ -4,6 +4,8 @@ import de.findesk.data.entity.Account
 import de.findesk.data.entity.Category
 import de.findesk.data.entity.Rule
 import de.findesk.data.entity.Transaction
+import de.findesk.data.table.AccountsTable
+import de.findesk.data.table.DeletedBookingsTable
 import de.findesk.data.table.DocumentsTable
 import de.findesk.data.table.RulesTable
 import de.findesk.data.table.TransactionsTable
@@ -17,9 +19,11 @@ import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.count
 import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.min
 import org.jetbrains.exposed.sql.or
 import org.jetbrains.exposed.sql.selectAll
@@ -75,12 +79,22 @@ interface TransactionRepository {
      * not overwritten.
      */
     fun updateCategories(changes: Map<Int, Int?>): Int
+
+    /**
+     * Deletes one booking and remembers it as deleted, so a later import or sync cannot bring the same booking
+     * back: the booking's account and dedup hash go into [DeletedBookingsTable] in the same `transaction { }`,
+     * before the row goes, so both happen or neither. Returns whether the booking existed. A booking whose hash
+     * is already a deleted one never writes a second row. A linked document is unlinked (SQLite doesn't enforce
+     * the foreign key), and since the booking is gone for good, remembering it survives the delete.
+     */
     fun delete(id: Int): Boolean
 
     /**
      * Deletes every booking of [ids] in one `transaction { }` (all or nothing) and unlinks their documents first,
-     * like [delete] does (SQLite doesn't enforce the foreign key). Returns how many rows were deleted; unknown
-     * ids are ignored and an empty collection does nothing. The ids are processed in chunks of at most
+     * like [delete] does (SQLite doesn't enforce the foreign key). Each deleted booking is remembered as deleted
+     * (account and hash, same `transaction { }`) so a later import or sync cannot bring it back; an (account, hash)
+     * pair already remembered is not recorded twice. Returns how many rows were deleted; unknown ids are ignored
+     * and an empty collection does nothing. The ids are processed in chunks of at most
      * [TransactionRepositoryImpl.DELETE_CHUNK] per statement, so a selection can hold the whole history without
      * ever exceeding SQLite's bound-parameter limit.
      */
@@ -94,6 +108,18 @@ interface TransactionRepository {
      */
     fun setTaxOverride(ids: Collection<Int>, value: Boolean?): Int
     fun findByHash(hash: String): Transaction?
+
+    /**
+     * The dedup hashes remembered as deleted for [accountId] (see [deleteAll]): the bookings a later import or
+     * sync of this account must not bring back again.
+     */
+    fun deletedHashes(accountId: Int): Set<String>
+
+    /**
+     * Lets the bookings deleted in [accountId] be imported again: removes every remembered deletion of the
+     * account and returns how many pairs were remembered.
+     */
+    fun forgetDeleted(accountId: Int): Int
 
     /** Whether [accountId] has any booking yet; used to keep a bank's first import from looking all new. */
     fun hasBookings(accountId: Int): Boolean
@@ -207,6 +233,8 @@ class TransactionRepositoryImpl : TransactionRepository {
     }
 
     override fun delete(id: Int): Boolean = transaction {
+        // The booking's account and hash are read before the row goes, so the deletion is remembered for dedup
+        rememberDeleted(chunk = listOf(id))
         // Documents linked to the booking would dangle otherwise; SQLite doesn't enforce the FK.
         DocumentsTable.update({ DocumentsTable.linkedTransactionId eq id }) { it[linkedTransactionId] = null }
         Transaction.findById(id)?.delete() != null
@@ -219,6 +247,8 @@ class TransactionRepositoryImpl : TransactionRepository {
             ids.chunked(DELETE_CHUNK).forEach { chunk ->
                 with(SqlExpressionBuilder) {
                     val entityIds = chunk.map { EntityID(it, TransactionsTable) }
+                    // Read before the rows go, so the deletion is remembered for dedup
+                    rememberDeleted(chunk)
                     // Documents linked to the bookings would dangle otherwise; SQLite doesn't enforce the FK.
                     DocumentsTable.update({ DocumentsTable.linkedTransactionId inList entityIds }) { it[linkedTransactionId] = null }
                     deleted += TransactionsTable.deleteWhere { TransactionsTable.id inList entityIds }
@@ -228,8 +258,53 @@ class TransactionRepositoryImpl : TransactionRepository {
         }
     }
 
+    /**
+     * Must run inside a transaction. Reads the (account, hash) pairs of the bookings [chunk] names and records
+     * each pair in [DeletedBookingsTable] that isn't remembered yet, so a later import or sync skips those
+     * bookings instead of bringing them back.
+     */
+    private fun rememberDeleted(chunk: Collection<Int>) {
+        if (chunk.isEmpty()) return
+        val entityIds = chunk.map { EntityID(it, TransactionsTable) }
+        val pairs = TransactionsTable
+            .select(TransactionsTable.accountId, TransactionsTable.hash)
+            .where { TransactionsTable.id inList entityIds }
+            .map { it[TransactionsTable.accountId].value to it[TransactionsTable.hash] }
+            .distinct()
+            .toSet()
+        if (pairs.isEmpty()) return
+        val accountIds = pairs.map { it.first }
+        val hashes = pairs.map { it.second }
+        val already = DeletedBookingsTable
+            .select(DeletedBookingsTable.accountId, DeletedBookingsTable.hash)
+            .where { (DeletedBookingsTable.accountId inList accountIds.map { EntityID(it, AccountsTable) }) and (DeletedBookingsTable.hash inList hashes) }
+            .map { it[DeletedBookingsTable.accountId].value to it[DeletedBookingsTable.hash] }
+            .toSet()
+        pairs.forEach { pair ->
+            if (pair !in already) {
+                DeletedBookingsTable.insert {
+                    it[DeletedBookingsTable.accountId] = EntityID(pair.first, AccountsTable)
+                    it[DeletedBookingsTable.hash] = pair.second
+                    it[deletedAt] = LocalDateTime.now()
+                }
+            }
+        }
+    }
+
     override fun findByHash(hash: String): Transaction? = transaction {
         Transaction.find { TransactionsTable.hash eq hash }.firstOrNull()
+    }
+
+    override fun deletedHashes(accountId: Int): Set<String> = transaction {
+        DeletedBookingsTable
+            .select(DeletedBookingsTable.hash)
+            .where { DeletedBookingsTable.accountId eq accountId }
+            .map { it[DeletedBookingsTable.hash] }
+            .toSet()
+    }
+
+    override fun forgetDeleted(accountId: Int): Int = transaction {
+        DeletedBookingsTable.deleteWhere { DeletedBookingsTable.accountId eq accountId }
     }
 
     override fun setTaxOverride(ids: Collection<Int>, value: Boolean?): Int {

@@ -255,7 +255,8 @@ class BankingService(
     }
 
     /**
-     * Import bank bookings into the local database, skipping ones already imported and applying rules.
+     * Import bank bookings into the local database, skipping ones already imported (stored or remembered as
+     * deleted) and applying rules.
      */
     suspend fun importTransactions(
         accountId: Int,
@@ -286,7 +287,8 @@ class BankingService(
         }
         val imported = transactionRepository.createAll(rows)
 
-        ImportResult(imported = imported, duplicates = plan.exactDuplicates + plan.probableDuplicates, categorized = rows.count { it.categoryId != null })
+        // A remembered deleted booking comes back through no new field: it is not new, so it counts as duplicate
+        ImportResult(imported = imported, duplicates = plan.exactDuplicates + plan.probableDuplicates + plan.previouslyDeleted, categorized = rows.count { it.categoryId != null })
     }
 
     /** Validates a transfer before anything is sent; returns an error message or null. */

@@ -10,15 +10,22 @@ import java.time.LocalDate
  * (FinTS vs CSV vs CAMT vs manual), whose partner/purpose text and therefore hash differ. For those, bookings
  * with the same account, booking date and amount are compared by count: if 2 such bookings exist and 3 arrive,
  * 1 is new. Genuine repeats (two coffees) are kept, and a different amount on the same day is always new.
+ *
+ * A booking the user deleted is remembered by hash ([TransactionRepository.deletedHashes]): such a candidate
+ * has no stored row but is counted in [Plan.previouslyDeleted] and skipped, unless a row with the same hash is
+ * stored again — a stored row always wins over a remembered deletion.
  */
 object BookingDedup {
     data class Candidate<T>(val item: T, val date: LocalDate, val amount: BigDecimal, val hash: String)
 
-    data class Plan<T>(val toImport: List<Candidate<T>>, val exactDuplicates: Int, val probableDuplicates: Int)
+    data class Plan<T>(val toImport: List<Candidate<T>>, val exactDuplicates: Int, val probableDuplicates: Int, val previouslyDeleted: Int = 0)
 
     fun <T> plan(accountId: Int, candidates: List<Candidate<T>>, repository: TransactionRepository): Plan<T> {
         // Indexed so identical bookings (equal candidates) keep their own identity and the file order
-        val (known, unknown) = candidates.withIndex().partition { repository.findByHash(it.value.hash) != null }
+        val (known, rest) = candidates.withIndex().partition { repository.findByHash(it.value.hash) != null }
+        // Remembered deletions are read once per plan; they are skipped, not counted as known or probable
+        val deleted = repository.deletedHashes(accountId)
+        val (previouslyDeleted, unknown) = rest.partition { it.value.hash in deleted }
         val knownPerDay = known.groupingBy { it.value.date to it.value.amount.stripTrailingZeros() }.eachCount()
         val toImport = mutableListOf<IndexedValue<Candidate<T>>>()
         var probable = 0
@@ -30,6 +37,6 @@ object BookingDedup {
             probable += skip
             toImport += group.drop(skip)
         }
-        return Plan(toImport.sortedBy { it.index }.map { it.value }, known.size, probable)
+        return Plan(toImport.sortedBy { it.index }.map { it.value }, known.size, probable, previouslyDeleted.size)
     }
 }

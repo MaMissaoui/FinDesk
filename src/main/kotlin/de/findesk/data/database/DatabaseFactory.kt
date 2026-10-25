@@ -31,6 +31,7 @@ object DatabaseFactory {
             AccountsTable,
             AccountGroupsTable,
             TransactionsTable,
+            DeletedBookingsTable,
             CategoriesTable,
             RulesTable,
             DocumentsTable,

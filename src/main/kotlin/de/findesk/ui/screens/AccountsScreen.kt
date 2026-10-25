@@ -214,6 +214,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                             onDeleteAccount = { confirmDeleteAccount = it },
                             onOpenAccount = { vm.openDetail(it.id) },
                             onRenameAccount = { renameAccount = it },
+                            onForgetDeleted = { vm.forgetDeletedBookings(it.id) },
                         )
                     }
                 }
@@ -356,6 +357,7 @@ private fun BankCard(
     onDeleteAccount: (AccountItem) -> Unit,
     onOpenAccount: (AccountItem) -> Unit,
     onRenameAccount: (AccountItem) -> Unit,
+    onForgetDeleted: (AccountItem) -> Unit,
 ) {
     val s = strings()
     // The collapsed header shows the connection's total, coloured green/red when it is a single currency
@@ -564,6 +566,7 @@ private fun BankCard(
                                 onChangeType = { onEditBalance(account) },
                                 onEditBalance = { onEditBalance(account) },
                                 onDelete = { onDeleteAccount(account) },
+                                onForgetDeleted = { onForgetDeleted(account) },
                             )
                         }
                     }
@@ -582,6 +585,8 @@ internal fun AccountRowMenu(
     onEditBalance: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    /** "Allow deleted bookings again" from the account's menu; see [AccountsViewModel.forgetDeletedBookings]. */
+    onForgetDeleted: () -> Unit = {},
 ) {
     val s = strings()
     var expanded by remember { mutableStateOf(false) }
@@ -626,6 +631,14 @@ internal fun AccountRowMenu(
                 onClick = {
                     expanded = false
                     onEditBalance()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(s[StringKey.AllowDeletedAgain]) },
+                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onForgetDeleted()
                 },
             )
             DropdownMenuItem(
