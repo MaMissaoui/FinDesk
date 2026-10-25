@@ -1144,4 +1144,7 @@ enum class StringKey {
 
     /** Error when printing failed; never carries exception or bank data. */
     ErrorPrintFailed,
+
+    /** Back button and its tooltip; %s is the screen the button reopens. */
+    BackTo,
 }

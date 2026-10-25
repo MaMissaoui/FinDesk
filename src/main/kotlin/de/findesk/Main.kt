@@ -8,7 +8,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
@@ -79,7 +81,8 @@ fun App(
 ) {
     // A language change recreates the screen (see the key below), so the top bar refuses it while work would be lost
     val busy by Busy.active.collectAsState()
-    val navigate: (Screen, NavigationArgs) -> Unit = { screen, args -> navigationState.navigateTo(screen, args) }
+    // Links inside a screen: they leave a back entry; the sidebar, shortcuts and menus use navigateTo (see below)
+    val navigate: (Screen, NavigationArgs) -> Unit = { screen, args -> navigationState.follow(screen, args) }
     val strings = Translations.of(language)
     LaunchedEffect(language) { AppStrings.set(language) }
 
@@ -106,6 +109,9 @@ fun App(
                             language = language,
                             onLanguageChange = onLanguageChange,
                             languageEnabled = !busy && navigationState.lockedOn == null,
+                            // While an order is being sent there is nowhere to go back to
+                            backTarget = if (navigationState.lockedOn == null) navigationState.backTarget else null,
+                            onBack = { navigationState.back() },
                             profileMenu = profiles?.let { store ->
                                 ProfileMenuModel(
                                     current = currentProfile,
@@ -122,7 +128,7 @@ fun App(
                             // key() gives each visit a fresh screen (and view model) so navigation args are applied
                             key(navigationState.currentScreen, navigationState.args, language) {
                                 when (navigationState.currentScreen) {
-                                    Screen.DASHBOARD -> DashboardScreen(onNavigate = navigate)
+                                    Screen.DASHBOARD -> DashboardScreen(onNavigate = navigate, args = navigationState.args)
 
                                     Screen.ACCOUNTS -> AccountsScreen(onNavigate = navigate)
 
@@ -312,9 +318,16 @@ private fun ApplicationScope.FinDeskWindow(
     Window(
         onCloseRequest = ::exitApplication,
         onPreviewKeyEvent = { event ->
-            val target = if (event.type == KeyEventType.KeyDown) shortcutScreen(event.key, event.isCtrlPressed || event.isMetaPressed) else null
+            val down = event.type == KeyEventType.KeyDown
+            val target = if (down) shortcutScreen(event.key, event.isCtrlPressed || event.isMetaPressed) else null
             if (target != null) navigationState.navigateTo(target)
-            target != null
+            when {
+                // Back: ⌘/Ctrl + [ and Alt + Left arrow; only consumed when something was opened, so typing keeps the keys
+                down && ((event.key == Key.LeftBracket && (event.isCtrlPressed || event.isMetaPressed)) || (event.key == Key.DirectionLeft && event.isAltPressed)) ->
+                    navigationState.back()
+
+                else -> target != null
+            }
         },
         title = strings[StringKey.WindowTitle] + profileLabel?.let { " · $it" }.orEmpty(),
         state = windowState,

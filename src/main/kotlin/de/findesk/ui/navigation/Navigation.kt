@@ -3,8 +3,10 @@ package de.findesk.ui.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.graphics.vector.ImageVector
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
@@ -68,7 +70,13 @@ data class NavigationArgs(
     val settingsSection: SettingsSection? = null,
     /** Reports opens on the Tax bookings tab for this year; null keeps the screen's own start. */
     val taxYear: Int? = null,
+
+    /** The args to reopen the screen this link leaves with when the user goes Back; null reopens it with the args it arrived with. */
+    val backArgs: NavigationArgs? = null,
 )
+
+/** One step on the back stack: the screen a link left and the args to reopen it with. */
+data class BackEntry(val screen: Screen, val args: NavigationArgs)
 
 class NavigationState {
     // Compose state: plain vars don't trigger recomposition, so the sidebar used to do nothing visible
@@ -81,6 +89,13 @@ class NavigationState {
     /** Screen that must stay open, because an order is being sent from it; null while navigation is free. */
     var lockedOn: Screen? by mutableStateOf(null)
         private set
+
+    /** Where links inside a screen have led, oldest first; at most [MAX_BACK] entries. Read-only: only [back] pops. */
+    private val backStack: SnapshotStateList<BackEntry> = mutableStateListOf()
+
+    /** The screen [back] would open, or null when the back stack is empty (then no Back button shows). */
+    val backTarget: Screen?
+        get() = backStack.lastOrNull()?.screen
 
     fun lock(screen: Screen) {
         lockedOn = screen
@@ -95,6 +110,40 @@ class NavigationState {
         if (lockedOn != null && screen != lockedOn) return
         this.args = args
         currentScreen = screen
+        // Choosing a screen directly (sidebar, shortcuts, menus) starts a new trail
+        backStack.clear()
+    }
+
+    /**
+     * Navigation for links inside a screen. Pushes where the user leaves from ([NavigationArgs.backArgs] may name the
+     * args to reopen that screen with), then navigates without clearing the stack.
+     */
+    fun follow(screen: Screen, args: NavigationArgs = NavigationArgs()) {
+        // Same refusal as navigateTo: leaving mid-send would cancel the bank's PIN/TAN prompts
+        if (lockedOn != null && screen != lockedOn) return
+        // A link to the screen already shown changes only its args, so going back would reopen the same screen
+        if (screen != currentScreen) {
+            if (backStack.size == MAX_BACK) backStack.removeAt(0)
+            // A menu request (e.g. File → New Transaction) is one-shot: Back must not open its dialog again
+            backStack.add(BackEntry(currentScreen, (args.backArgs ?: this.args).copy(request = null)))
+        }
+        this.args = args
+        currentScreen = screen
+    }
+
+    /** Opens the screen the last link left. False (and no change) when the stack is empty or a screen is locked. */
+    fun back(): Boolean {
+        val entry = backStack.lastOrNull() ?: return false
+        if (lockedOn != null && entry.screen != lockedOn) return false
+        backStack.removeAt(backStack.lastIndex)
+        args = entry.args
+        currentScreen = entry.screen
+        return true
+    }
+
+    private companion object {
+        /** Depth of the back stack; when full, the oldest entry is dropped. */
+        const val MAX_BACK = 10
     }
 }
 
