@@ -134,6 +134,8 @@ data class TransactionsState(
     val period: Period = Period.THIS_MONTH,
     /** One exact month (e.g. navigated from the dashboard's past-month category): wins over [period]. */
     val month: YearMonth? = null,
+    /** One arbitrary From/To range (period menu's "Custom range…"), inclusive: after an exact [month] but before [period]. */
+    val customRange: Pair<LocalDate, LocalDate>? = null,
     val direction: Direction = Direction.ALL,
     val categoryFilter: CategoryFilter = CategoryFilter.Any,
     /** Derived from [selection] (the selected single account), kept for the running balance, import and CSV export. */
@@ -234,7 +236,7 @@ class TransactionsViewModel(
     private var lastRefreshedSelection: AccountSelection? = null
 
     fun currentFilter(s: TransactionsState = _state.value): TransactionFilter {
-        val (start, end) = dateRange(s.month, s.period)
+        val (start, end) = dateRange(s)
         val accountId: Int?
         val accountIds: Set<Int>?
         when (val selection = s.selection) {
@@ -269,11 +271,16 @@ class TransactionsViewModel(
     }
 
     /**
-     * The inclusive date range behind [month]/[period]: exactly [month] when it is set (the dashboard's past-month
-     * click-through), otherwise what [Period.range] resolves on today. Every filter that turns the period into
-     * dates goes through this one, so list and chart always agree.
+     * The inclusive date range behind [month]/[customRange]/[period]: exactly [month] when it is set (the dashboard's
+     * past-month click-through), else [TransactionsState.customRange] (the period menu's custom From/To), else what
+     * [Period.range] resolves on today. Every filter that turns the period into dates goes through this one, so list
+     * and chart always agree.
      */
-    private fun dateRange(month: YearMonth?, period: Period): Pair<LocalDate?, LocalDate?> = month?.let { it.atDay(1) to it.atEndOfMonth() } ?: period.range(today())
+    private fun dateRange(s: TransactionsState): Pair<LocalDate?, LocalDate?> = when {
+        s.month != null -> s.month.let { it.atDay(1) to it.atEndOfMonth() }
+        s.customRange != null -> s.customRange.first to s.customRange.second
+        else -> s.period.range(today())
+    }
 
     /** The selection only ever covers what the list shows, so a change of the filters starts over with an empty one. */
     private fun TransactionsState.clearingSelection(): TransactionsState = copy(selectedIds = emptySet(), selectionAnchorId = null)
@@ -296,6 +303,9 @@ class TransactionsViewModel(
         if (partner != null) return showPartner(partner)
         if (categoryId != null) return showCategory(categoryId, period, month)
         restoreSelection = accountId == null
+        // Any navigation (a period, an exact month, an account, the uncategorized list) resets to its own period;
+        // only a plain start() keeps a custom From/To that was set from the period menu
+        val navigated = period != null || month != null || accountId != null || uncategorizedOnly
         _state.update {
             // A deep link into an account or the uncategorized list shouldn't be limited to this month,
             // unless the navigation asks for a period itself
@@ -311,6 +321,7 @@ class TransactionsViewModel(
                 period = effectivePeriod,
                 // Only an explicit month navigation keeps one; any other start clears it
                 month = month,
+                customRange = if (navigated) null else it.customRange,
             ).clearingSelection()
         }
         return loadTransactions()
@@ -334,6 +345,7 @@ class TransactionsViewModel(
                 accountId = null,
                 minAmount = null,
                 maxAmount = null,
+                customRange = null,
             ).clearingSelection()
         }
         return loadTransactions()
@@ -354,6 +366,7 @@ class TransactionsViewModel(
                 accountId = null,
                 minAmount = null,
                 maxAmount = null,
+                customRange = null,
             ).clearingSelection()
         }
         return loadTransactions()
@@ -422,7 +435,7 @@ class TransactionsViewModel(
         val accountBookings = balanceAccount?.let { transactionRepository.findItems(TransactionFilter(accountId = it.id)).toList() }
         val balances = if (balanceAccount != null && accountBookings != null) RunningBalance.compute(balanceAccount.balance, accountBookings) else null
         val balanceChart = if (balanceAccount != null && accountBookings != null && balances != null) {
-            balanceChartPoints(accountBookings, balances, _state.value.period, today(), _state.value.month)
+            balanceChartPoints(accountBookings, balances, _state.value)
         } else {
             null
         }
@@ -460,11 +473,10 @@ class TransactionsViewModel(
     private fun balanceChartPoints(
         bookings: List<TransactionItem>,
         running: Map<Int, RunningBalance.Entry>,
-        period: Period,
-        now: LocalDate,
-        month: YearMonth?,
+        s: TransactionsState,
     ): List<Pair<LocalDate, BigDecimal>> {
-        val (start, end) = dateRange(month, period)
+        val (start, end) = dateRange(s)
+        val now = today()
         val from = start ?: bookings.minOfOrNull { it.date } ?: return emptyList()
         // The period's end, but never past today: the balance of a future day is not known
         val to = if (end == null || end.isAfter(now)) now else end
@@ -482,8 +494,19 @@ class TransactionsViewModel(
     }
 
     fun updatePeriod(period: Period): Job {
-        // Picking a period from the list ends the exact-month navigation
-        _state.update { it.copy(period = period, month = null).clearingSelection() }
+        // Picking a period from the list ends the exact-month navigation and a custom From/To
+        _state.update { it.copy(period = period, month = null, customRange = null).clearingSelection() }
+        return loadTransactions()
+    }
+
+    /**
+     * Filters the list by an arbitrary From/To range (the period menu's "Custom range…"): it wins over [Period]
+     * beneath an exact month, clears the exact-month navigation and the selection, and reloads. A reversed range
+     * changes nothing and completes without loading anything.
+     */
+    fun setCustomRange(from: LocalDate, to: LocalDate): Job {
+        if (from.isAfter(to)) return Job().apply { complete() }
+        _state.update { it.copy(customRange = from to to, month = null).clearingSelection() }
         return loadTransactions()
     }
 

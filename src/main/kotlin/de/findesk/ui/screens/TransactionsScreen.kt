@@ -117,6 +117,8 @@ fun TransactionsScreen(
         }
     }
     var confirmDelete by remember { mutableStateOf<TransactionItem?>(null) }
+    // The "Custom range…" entry of the period menu opens this From/To dialog
+    var showCustomRangeDialog by remember { mutableStateOf(false) }
     // The batch-delete confirmation, captured with the exact id set and bookings it showed when it opened
     var confirmMultiDelete by remember { mutableStateOf<MultiDeleteConfirmation?>(null) }
     // A row click focuses the list, so Cmd/Ctrl+A, Delete and Escape reach its key handler afterwards
@@ -257,12 +259,15 @@ fun TransactionsScreen(
                         // The pills keep a 48 dp touch area around their 40 dp outline, so centre the field on them
                         modifier = Modifier.weight(1f).widthIn(min = 240.dp).align(Alignment.CenterVertically),
                     )
-                    // While a single month is navigated (from the dashboard), its label wins over the period's
+                    // While a single month is navigated (from the dashboard), its label wins over the period's;
+                    // otherwise a custom From/To shows as "from – to" and only then the period's own label
                     DropdownSelector(
-                        label = state.month?.let { s.month(it) } ?: s.period(state.period),
-                        Period.entries,
-                        { s.period(it) },
-                        { vm.updatePeriod(it) },
+                        label = state.month?.let { s.month(it) }
+                            ?: state.customRange?.let { (from, to) -> "${Formats.date(from)} – ${Formats.date(to)}" }
+                            ?: s.period(state.period),
+                        options = Period.entries + listOf<Period?>(null),
+                        optionLabel = { it?.let { p -> s.period(p) } ?: s[StringKey.PeriodCustomRange] },
+                        onSelect = { if (it == null) showCustomRangeDialog = true else vm.updatePeriod(it) },
                         leadingIcon = Icons.Default.DateRange,
                     )
                     DropdownSelector(
@@ -419,6 +424,21 @@ fun TransactionsScreen(
         }
     }
 
+    if (showCustomRangeDialog) {
+        val today = LocalDate.now()
+        val initial = state.customRange
+            ?: state.month?.let { it.atDay(1) to it.atEndOfMonth() }
+            ?: state.period.range(today).takeIf { (from, to) -> from != null && to != null }?.let { (from, to) -> from!! to to!! }
+            ?: (today.withDayOfYear(1) to today)
+        CustomRangeDialog(
+            initial = initial,
+            onApply = { from, to ->
+                vm.setCustomRange(from, to)
+                showCustomRangeDialog = false
+            },
+            onDismiss = { showCustomRangeDialog = false },
+        )
+    }
     state.selected?.let { txn ->
         TransactionDetailDialog(
             txn = txn,
@@ -543,6 +563,57 @@ internal fun MultiDeleteDialogContent(bookings: List<TransactionItem>) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/**
+ * The period menu's custom From/To dialog: both dates in `dd.MM.yyyy`, validated like the Reports screen's
+ * date-range inputs. Apply applies only a valid, non-reversed range; Cancel closes without changes.
+ */
+@Composable
+private fun CustomRangeDialog(initial: Pair<LocalDate, LocalDate>, onApply: (LocalDate, LocalDate) -> Unit, onDismiss: () -> Unit) {
+    val fmt = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
+    var fromText by remember { mutableStateOf(initial.first.format(fmt)) }
+    var toText by remember { mutableStateOf(initial.second.format(fmt)) }
+    fun parse(text: String) = runCatching { LocalDate.parse(text.trim(), fmt) }.getOrNull()
+    val from = parse(fromText)
+    val to = parse(toText)
+    val s = strings()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(s[StringKey.CustomRange]) },
+        text = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(320.dp)) {
+                OutlinedTextField(
+                    fromText,
+                    { fromText = it },
+                    label = { Text(s[StringKey.FromDate]) },
+                    singleLine = true,
+                    isError = from == null,
+                    supportingText = { if (from == null) Text(s[StringKey.EnterValidDate]) },
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    toText,
+                    { toText = it },
+                    label = { Text(s[StringKey.ToDate]) },
+                    singleLine = true,
+                    isError = to == null || (from != null && to != null && from.isAfter(to)),
+                    supportingText = {
+                        if (to == null) {
+                            Text(s[StringKey.EnterValidDate])
+                        } else if (from != null && to != null && from.isAfter(to)) {
+                            Text(s[StringKey.InvalidDateRange])
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        },
+        confirmButton = {
+            Button(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text(s[StringKey.Apply]) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+    )
 }
 
 /**

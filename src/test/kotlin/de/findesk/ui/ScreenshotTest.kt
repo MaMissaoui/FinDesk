@@ -399,6 +399,35 @@ class ScreenshotTest {
         render("transactions-selection-narrow-dark", 1024, 800, afterStable = ::selectFirstThree) { Frame(Screen.TRANSACTIONS, dark = true, transactions = ::selecting) }
     }
 
+    /** The transactions screen filtered by a custom From/To range: the period button shows "from – to". */
+    @Test
+    fun `render the transactions screen with a custom date range`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-custom-range").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(4), BigDecimal("-20.00"), "EUR", "Bäckerei", "Brötchen", null, "rng-1"),
+                NewTransaction(account, today.minusDays(3), BigDecimal("-80.00"), "EUR", "Stadtwerke", "Abschlag", null, "rng-2"),
+                NewTransaction(account, today.minusDays(2), BigDecimal("120.00"), "EUR", "Employer GmbH", "Gehalt", null, "rng-3"),
+                NewTransaction(account, today.minusDays(1), BigDecimal("-49.63"), "EUR", "Kiosk", "Wasser", null, "rng-4"),
+            ),
+        )
+
+        // The range is applied after the screen settled, like the selection above: the view-model action reloads
+        // the list itself, so the picture then shows exactly the four bookings inside the range
+        val created = arrayOfNulls<TransactionsViewModel>(1)
+        fun showing(): TransactionsViewModel = TransactionsViewModel().also { created[0] = it }
+        fun applyCustomRange() {
+            val model = created[0] ?: error("the view model should exist once the screen settled")
+            model.setCustomRange(today.minusDays(4), today.minusDays(1))
+        }
+
+        render("transactions-custom-range", 1440, 900, afterStable = ::applyCustomRange) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing) }
+    }
+
     /** The multi-delete confirmation: date range, per-currency total, the first bookings and the sync warning. */
     @Test
     fun `render the multi-delete confirmation`() {

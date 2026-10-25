@@ -58,6 +58,9 @@ enum class StringKey {
     PeriodLastYear,
     PeriodAllTime,
 
+    /** Last entry of the Transactions period menu; opens the custom From/To dialog. */
+    PeriodCustomRange,
+
     // Direction
     DirectionAll,
     DirectionIncome,
