@@ -59,6 +59,7 @@ import de.findesk.importer.StatementImportService
 import de.findesk.model.AccountItem
 import de.findesk.model.CategoryItem
 import de.findesk.model.Direction
+import de.findesk.model.TaxSource
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
@@ -301,6 +302,7 @@ fun TransactionsScreen(
                             SelectionBar(
                                 count = state.selectedIds.size,
                                 totals = state.selectedTotals,
+                                onTax = { vm.setTaxOverrideForSelection(it) },
                                 onDelete = openMultiDelete,
                                 onClear = vm::clearSelection,
                             )
@@ -423,6 +425,7 @@ fun TransactionsScreen(
             account = state.accounts.firstOrNull { it.id == txn.accountId },
             suggestedPattern = vm.rulePatternFor(txn),
             onCategory = { vm.updateTransactionCategory(txn.id, it) },
+            onTaxOverride = { vm.setTaxOverride(txn.id, it) },
             onAttach = { attachReceipt(txn.id) },
             onCreateRule = { pattern, categoryId -> vm.createRule(pattern, categoryId) },
             onClose = { vm.selectTransaction(null) },
@@ -602,11 +605,12 @@ private fun ReapplyRulesDialog(
 
 /**
  * The bar above the list while a multi-selection is active: how many bookings are selected, their totals per
- * currency (currencies are never added together), the batch delete and the clear action.
+ * currency (currencies are never added together), the Tax menu, the batch delete and the clear action.
  */
 @Composable
-private fun SelectionBar(count: Int, totals: Map<String, BigDecimal>, onDelete: () -> Unit, onClear: () -> Unit) {
+private fun SelectionBar(count: Int, totals: Map<String, BigDecimal>, onTax: (Boolean?) -> Unit, onDelete: () -> Unit, onClear: () -> Unit) {
     val s = strings()
+    var taxMenu by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -625,6 +629,26 @@ private fun SelectionBar(count: Int, totals: Map<String, BigDecimal>, onDelete: 
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.weight(1f))
+        Box {
+            OutlinedButton(onClick = { taxMenu = true }) {
+                Text(s[StringKey.TaxMenu], maxLines = 1, softWrap = false)
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = taxMenu, onDismissRequest = { taxMenu = false }) {
+                DropdownMenuItem(text = { Text(s[StringKey.MarkTaxRelevant]) }, onClick = {
+                    taxMenu = false
+                    onTax(true)
+                })
+                DropdownMenuItem(text = { Text(s[StringKey.MarkNotTaxRelevant]) }, onClick = {
+                    taxMenu = false
+                    onTax(false)
+                })
+                DropdownMenuItem(text = { Text(s[StringKey.ResetTaxAutomatic]) }, onClick = {
+                    taxMenu = false
+                    onTax(null)
+                })
+            }
+        }
         OutlinedButton(onClick = onClear) { Text(s[StringKey.ClearSelection]) }
         Button(onClick = onDelete) { Text(s[StringKey.DeleteSelected]) }
     }
@@ -1308,13 +1332,14 @@ private fun CompactAmountField(value: String, onValueChange: (String) -> Unit, p
 }
 
 @Composable
-private fun TransactionDetailDialog(
+internal fun TransactionDetailDialog(
     txn: TransactionItem,
     documents: List<de.findesk.model.DocumentItem>,
     categories: List<CategoryItem>,
     account: AccountItem?,
     suggestedPattern: String,
     onCategory: (Int?) -> Unit,
+    onTaxOverride: (Boolean?) -> Unit,
     onAttach: () -> Unit,
     onCreateRule: (String, Int) -> Unit,
     onClose: () -> Unit,
@@ -1351,6 +1376,21 @@ private fun TransactionDetailDialog(
                         Spacer(Modifier.width(8.dp))
                         CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
                     }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(s[StringKey.TaxMenu], fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+                    Text(
+                        taxStateLine(txn, s),
+                        modifier = Modifier.weight(1f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    DropdownSelector(
+                        label = taxChoiceLabel(txn.taxOverride, s),
+                        options = listOf<Boolean?>(null, true, false),
+                        optionLabel = { taxChoiceLabel(it, s) },
+                        onSelect = { onTaxOverride(it) },
+                    )
                 }
 
                 HorizontalDivider()
@@ -1398,4 +1438,22 @@ private fun DetailRow(label: String, value: String) {
         Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+/** The effective tax state and its deciding layer as one line, for the details dialog's Tax row. */
+internal fun taxStateLine(txn: TransactionItem, s: Strings): String {
+    val base = if (txn.isTaxRelevant) s[StringKey.TaxRelevantChoice] else s[StringKey.TaxNotRelevantChoice]
+    return when (txn.taxSource) {
+        TaxSource.MANUAL -> s.format(StringKey.TaxSetByYou, base)
+        TaxSource.RULE -> s.format(StringKey.TaxFromRule, base, txn.taxRulePattern.orEmpty())
+        TaxSource.CATEGORY -> s.format(StringKey.TaxFromCategory, base, txn.categoryName ?: s[StringKey.Uncategorized])
+        TaxSource.NONE -> base
+    }
+}
+
+/** The override dropdown's label: the stored choice, or Automatic when none is stored. */
+internal fun taxChoiceLabel(override: Boolean?, s: Strings): String = when (override) {
+    null -> s[StringKey.TaxAutomatic]
+    true -> s[StringKey.TaxRelevantChoice]
+    false -> s[StringKey.TaxNotRelevantChoice]
 }

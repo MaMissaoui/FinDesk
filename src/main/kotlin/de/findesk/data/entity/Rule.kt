@@ -18,4 +18,7 @@ class Rule(id: EntityID<Int>) : IntEntity(id) {
 
     /** Stored as the enum key ("any", "expense", "income"); see [de.findesk.model.RuleDirection.fromKey]. */
     var direction by RulesTable.direction
+
+    /** The rule's tax relevance for matching bookings of its own category; null = "as the category". */
+    var taxRelevant by RulesTable.taxRelevant
 }

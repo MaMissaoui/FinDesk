@@ -21,4 +21,7 @@ object TransactionsTable : IntIdTable("transactions") {
 
     /** Whether a bank sync brought this booking in and the user has not opened its account since. */
     val isNew = bool("is_new").default(false)
+
+    /** The user's manual tax override; null = automatic (rule and category decide). Only the user writes it. */
+    val taxOverride = bool("tax_override").nullable()
 }

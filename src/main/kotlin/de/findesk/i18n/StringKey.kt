@@ -959,4 +959,48 @@ enum class StringKey {
 
     /** Status message after the batch delete: %d is the number of deleted bookings. */
     MessageTransactionsDeleted,
+
+    // Tax relevance per booking: the manual override, a rule flag and the category flag (highest layer wins)
+
+    /** Dropdown choice: no override, rule and category decide. */
+    TaxAutomatic,
+
+    /** Dropdown choice and base of the details row: the booking is tax relevant. */
+    TaxRelevantChoice,
+
+    /** Dropdown choice and base of the details row: the booking is not tax relevant. */
+    TaxNotRelevantChoice,
+
+    /** Details dialog: the state was set by the user; %s is "Tax relevant" or "Not tax relevant". */
+    TaxSetByYou,
+
+    /** Details dialog: a rule's flag decided; %1$s is the state, %2$s the rule's pattern. */
+    TaxFromRule,
+
+    /** Details dialog: the category's flag decided; %1$s is the state, %2$s the category's name. */
+    TaxFromCategory,
+
+    /** The Tax label of the details dialog's tax row, and the selection bar's menu button before "Clear selection". */
+    TaxMenu,
+
+    /** Selection bar Tax menu: mark the selection as tax relevant. */
+    MarkTaxRelevant,
+
+    /** Selection bar Tax menu: mark the selection as not tax relevant. */
+    MarkNotTaxRelevant,
+
+    /** Selection bar Tax menu: reset the selection to automatic. */
+    ResetTaxAutomatic,
+
+    /** Rule dialog: the tax flag follows the booking's category (no rule flag). */
+    RuleTaxAsCategory,
+
+    /** Rules list marker for a rule that makes matching bookings tax relevant. */
+    RuleTaxMarkerYes,
+
+    /** Rules list marker for a rule that makes matching bookings not tax relevant. */
+    RuleTaxMarkerNo,
+
+    /** Status message after a tax override change: %d is the number of bookings. */
+    MessageTaxOverrideSet,
 }

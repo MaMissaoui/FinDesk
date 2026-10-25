@@ -233,15 +233,19 @@ class SettingsViewModel(
         autoApply: Boolean,
         matchField: RuleField = RuleField.ANY,
         direction: RuleDirection = RuleDirection.ANY,
+        /** Tax relevance the rule decides for matching bookings of its own category; null = "as the category". */
+        taxRelevant: Boolean? = null,
     ): Job = launchSafely(onError) {
         validateRule(pattern)?.let { msg ->
             _state.update { it.copy(error = msg) }
             return@launchSafely
         }
         if (id == null) {
-            ruleRepository.create(pattern.trim(), categoryId, priority, autoApply, matchField, direction)
+            ruleRepository.create(pattern.trim(), categoryId, priority, autoApply, matchField, direction, taxRelevant)
         } else {
             ruleRepository.update(id, pattern.trim(), categoryId, priority, autoApply, matchField, direction)
+            // update() uses null for "keep", so the tax flag goes through its own setter (explicit null = "as the category")
+            ruleRepository.setTaxRelevant(id, taxRelevant)
         }
         auditLogRepository.log("SAVE_RULE", "user", "Saved rule '${pattern.trim()}'")
         refresh()

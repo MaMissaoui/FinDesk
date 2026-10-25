@@ -96,6 +96,12 @@ data class TransactionItem(
     val isNew: Boolean = false,
     /** True when the booking's category marks a transfer between the user's own accounts. */
     val isTransfer: Boolean = false,
+    /** Which layer decided [isTaxRelevant] (manual override, rule or category); NONE = no layer said yes or no. */
+    val taxSource: TaxSource = TaxSource.NONE,
+    /** The deciding rule's pattern when [taxSource] is [TaxSource.RULE], else null. */
+    val taxRulePattern: String? = null,
+    /** The stored manual override, so the UI can show and reset it; null = automatic. */
+    val taxOverride: Boolean? = null,
 ) {
     val description: String get() = partnerName?.takeIf { it.isNotBlank() } ?: purpose?.takeIf { it.isNotBlank() } ?: "—"
     val isExpense: Boolean get() = amount.signum() < 0
@@ -131,7 +137,24 @@ data class RuleItem(
     val autoApply: Boolean,
     val matchField: RuleField = RuleField.ANY,
     val direction: RuleDirection = RuleDirection.ANY,
+    /** Tax relevance the rule decides for matching bookings of its own category; null = "as the category". */
+    val taxRelevant: Boolean? = null,
 )
+
+/** Which layer decided a booking's effective tax relevance. */
+enum class TaxSource {
+    /** The user's stored override (`transactions.tax_override`). */
+    MANUAL,
+
+    /** A rule's tax flag, resolved at read time (first matching rule of the booking's own category). */
+    RULE,
+
+    /** The category's `isTaxRelevant` flag. */
+    CATEGORY,
+
+    /** No layer said yes or no: no category and no override. */
+    NONE,
+}
 
 /** Which text an auto-categorization rule matches. */
 enum class RuleField(val key: String) {

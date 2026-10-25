@@ -57,8 +57,21 @@ fun Category.toItem() = CategoryItem(
     isTransfer = isTransfer,
 )
 
-fun Transaction.toItem(documentCount: Int = 0): TransactionItem {
+/**
+ * Maps a booking to its snapshot. [ruleTax]/[rulePattern] pass the rule layer [findItems] resolved (first
+ * tax-flagged rule matching the booking's text, amount and current category); alone, the mapper sees only the
+ * stored override and the category layer.
+ */
+fun Transaction.toItem(documentCount: Int = 0, ruleTax: Boolean? = null, rulePattern: String? = null): TransactionItem {
     val category = category
+    val override = taxOverride
+    // The highest layer that has a value wins: override, then rule, then category; no category and no override is NONE
+    val (effective, source) = when {
+        override != null -> override to TaxSource.MANUAL
+        ruleTax != null -> ruleTax to TaxSource.RULE
+        category != null -> category.isTaxRelevant to TaxSource.CATEGORY
+        else -> false to TaxSource.NONE
+    }
     return TransactionItem(
         id = id.value,
         accountId = account.id.value,
@@ -72,10 +85,13 @@ fun Transaction.toItem(documentCount: Int = 0): TransactionItem {
         categoryId = category?.id?.value,
         categoryName = category?.name,
         categoryColor = category?.color,
-        isTaxRelevant = category?.isTaxRelevant ?: false,
+        isTaxRelevant = effective,
         documentCount = documentCount,
         isNew = isNew,
         isTransfer = category?.isTransfer ?: false,
+        taxSource = source,
+        taxRulePattern = if (source == TaxSource.RULE) rulePattern else null,
+        taxOverride = override,
     )
 }
 
@@ -103,6 +119,7 @@ fun Rule.toItem() = RuleItem(
     autoApply = autoApply,
     matchField = RuleField.fromKey(matchField),
     direction = RuleDirection.fromKey(direction),
+    taxRelevant = taxRelevant,
 )
 
 fun PaymentOrder.toItem() = PaymentOrderItem(

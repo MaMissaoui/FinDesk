@@ -13,4 +13,7 @@ object RulesTable : IntIdTable("rules") {
 
     /** Which money flow a rule applies to ("any", "expense", "income"). */
     val direction = varchar("direction", 10).default("any")
+
+    /** Tax relevance the rule decides for matching bookings of its own category; null = "as the category". */
+    val taxRelevant = bool("tax_relevant").nullable()
 }

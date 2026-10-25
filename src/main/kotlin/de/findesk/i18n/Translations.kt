@@ -845,6 +845,21 @@ object Translations {
         K.DeleteTransactionsTitle to "Delete %d {1:transaction|transactions}?",
         K.DeleteSyncedHint to "Bookings from a bank sync can come back with a later sync while they are still within the bank's sync period. Linked receipts are kept and only unlinked.",
         K.MessageTransactionsDeleted to "Deleted %d {1:transaction|transactions}",
+
+        K.TaxAutomatic to "Automatic",
+        K.TaxRelevantChoice to "Tax relevant",
+        K.TaxNotRelevantChoice to "Not tax relevant",
+        K.TaxSetByYou to "%s · set by you",
+        K.TaxFromRule to "%1\$s · from rule “%2\$s”",
+        K.TaxFromCategory to "%1\$s · from category “%2\$s”",
+        K.TaxMenu to "Tax",
+        K.MarkTaxRelevant to "Mark as tax relevant",
+        K.MarkNotTaxRelevant to "Mark as not tax relevant",
+        K.ResetTaxAutomatic to "Reset to automatic",
+        K.RuleTaxAsCategory to "As the category",
+        K.RuleTaxMarkerYes to "Tax",
+        K.RuleTaxMarkerNo to "No tax",
+        K.MessageTaxOverrideSet to "Tax status changed for %d {1:booking|bookings}",
     )
 
     val de: Map<K, String> = mapOf(
@@ -1680,6 +1695,21 @@ object Translations {
         K.DeleteTransactionsTitle to "%d {1:Buchung|Buchungen} löschen?",
         K.DeleteSyncedHint to "Buchungen aus einem Bankabgleich können mit einem späteren Abruf zurückkommen, solange sie noch innerhalb des Abrufzeitraums der Bank liegen. Verknüpfte Belege bleiben erhalten und werden nur entknüpft.",
         K.MessageTransactionsDeleted to "%d {1:Buchung|Buchungen} gelöscht",
+
+        K.TaxAutomatic to "Automatisch",
+        K.TaxRelevantChoice to "Steuerrelevant",
+        K.TaxNotRelevantChoice to "Nicht steuerrelevant",
+        K.TaxSetByYou to "%s · von Ihnen gesetzt",
+        K.TaxFromRule to "%1\$s · aus Regel „%2\$s“",
+        K.TaxFromCategory to "%1\$s · aus Kategorie „%2\$s“",
+        K.TaxMenu to "Steuer",
+        K.MarkTaxRelevant to "Als steuerrelevant markieren",
+        K.MarkNotTaxRelevant to "Als nicht steuerrelevant markieren",
+        K.ResetTaxAutomatic to "Auf automatisch zurücksetzen",
+        K.RuleTaxAsCategory to "Wie die Kategorie",
+        K.RuleTaxMarkerYes to "Steuer",
+        K.RuleTaxMarkerNo to "keine Steuer",
+        K.MessageTaxOverrideSet to "Steuerstatus geändert für %d {1:Buchung|Buchungen}",
     )
 
     val fr: Map<K, String> = mapOf(
@@ -2515,5 +2545,20 @@ object Translations {
         K.DeleteTransactionsTitle to "Supprimer %d {1:opération|opérations} ?",
         K.DeleteSyncedHint to "Les opérations issues d'une synchronisation bancaire peuvent revenir lors d'une synchronisation ultérieure tant qu'elles restent dans la période de synchronisation de la banque. Les justificatifs liés sont conservés et seulement déliés.",
         K.MessageTransactionsDeleted to "%d {1:opération supprimée|opérations supprimées}",
+
+        K.TaxAutomatic to "Automatique",
+        K.TaxRelevantChoice to "Fiscalement pertinent",
+        K.TaxNotRelevantChoice to "Non fiscalement pertinent",
+        K.TaxSetByYou to "%s · défini par vous",
+        K.TaxFromRule to "%1\$s · via la règle « %2\$s »",
+        K.TaxFromCategory to "%1\$s · via la catégorie « %2\$s »",
+        K.TaxMenu to "Impôt",
+        K.MarkTaxRelevant to "Marquer comme fiscalement pertinent",
+        K.MarkNotTaxRelevant to "Marquer comme non fiscalement pertinent",
+        K.ResetTaxAutomatic to "Rétablir l'automatique",
+        K.RuleTaxAsCategory to "Comme la catégorie",
+        K.RuleTaxMarkerYes to "impôt",
+        K.RuleTaxMarkerNo to "sans impôt",
+        K.MessageTaxOverrideSet to "Statut fiscal modifié pour %d {1:opération|opérations}",
     )
 }

@@ -311,6 +311,71 @@ class ScreenshotTest {
         dialog("transactions-multi-delete-confirm-de", AppLanguage.DE)
     }
 
+    /** The details dialog of a booking whose tax state comes from a rule: the Tax row with its source and override. */
+    @Test
+    fun `render the details dialog of a rule-flagged booking`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-tax-details").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val office = de.findesk.repository.CategoryRepositoryImpl().create("Bürobedarf", "#3BC7B0")
+        de.findesk.repository.RuleRepositoryImpl().create("Beispiel Büro", office.id.value, taxRelevant = true)
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(2), BigDecimal("-19.99"), "EUR", "Beispiel Büro GmbH", "Rechnung 4711", office.id.value, "tax-1"),
+                NewTransaction(account, today.minusDays(1), BigDecimal("-4.50"), "EUR", "Bäckerei", "Brötchen", null, "tax-2"),
+            ),
+        )
+
+        val created = arrayOfNulls<TransactionsViewModel>(1)
+        fun showing(): TransactionsViewModel = TransactionsViewModel().also { created[0] = it }
+        fun openDetails() {
+            val model = created[0] ?: error("the view model should exist once the screen settled")
+            val rows = model.state.value.transactions
+            check(rows.size == 2) { "the list should show the two bookings" }
+            model.selectTransaction(rows.first { it.partnerName == "Beispiel Büro GmbH" })
+        }
+
+        render("transactions-tax-details", 1440, 900, afterStable = ::openDetails) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing) }
+        render("transactions-tax-details-de", 1440, 900, afterStable = ::openDetails) { Frame(Screen.TRANSACTIONS, dark = false, language = AppLanguage.DE, transactions = ::showing) }
+    }
+
+    /** The rule dialog with its Tax selector, editing a rule that carries a tax flag. */
+    @Test
+    fun `render the rule dialog with the tax selector`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-rule-tax").toFile().absolutePath)
+        val category = de.findesk.repository.CategoryRepositoryImpl().create("Bürobedarf", "#3BC7B0")
+        val existing = de.findesk.model.RuleItem(
+            id = 1,
+            pattern = "Beispiel Büro",
+            categoryId = category.id.value,
+            categoryName = "Bürobedarf",
+            priority = 5,
+            autoApply = true,
+            matchField = de.findesk.model.RuleField.ANY,
+            direction = de.findesk.model.RuleDirection.ANY,
+            taxRelevant = true,
+        )
+        render("settings-rule-dialog-tax", 720, 800) {
+            CompositionLocalProvider(LocalStrings provides Translations.of(AppLanguage.EN)) {
+                FinDeskTheme(darkTheme = false) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        Box(contentAlignment = Alignment.Center) {
+                            RuleDialog(
+                                existing = existing,
+                                categories = listOf(de.findesk.model.CategoryItem(category.id.value, "Bürobedarf", "#3BC7B0", budgetLimit = null, isTaxRelevant = false)),
+                                validate = { null },
+                                onDismiss = {},
+                                onConfirm = { _, _, _, _, _, _, _ -> },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Test
     fun `render accounts with a custom account name`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-names").toFile().absolutePath)

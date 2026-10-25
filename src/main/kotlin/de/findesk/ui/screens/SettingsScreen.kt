@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import de.findesk.document.TesseractOcrEngine
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.StringKey
+import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.model.CategoryItem
 import de.findesk.model.RuleDirection
@@ -261,7 +262,7 @@ fun SettingsScreen(
                         ) {
                             Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                             Column(Modifier.weight(1f)) {
-                                Text("→ ${r.categoryName}")
+                                Text("→ ${r.categoryName}" + ruleTaxMarker(r, s))
                                 val restrictions = listOf(
                                     RuleField.PARTNER to s[StringKey.RuleFieldPartner],
                                     RuleField.PURPOSE to s[StringKey.RuleFieldPurpose],
@@ -486,8 +487,8 @@ fun SettingsScreen(
                 newRule = false
                 editRule = null
             },
-            onConfirm = { pattern, categoryId, priority, autoApply, matchField, direction ->
-                vm.saveRule(editRule?.id, pattern, categoryId, priority, autoApply, matchField, direction)
+            onConfirm = { pattern, categoryId, priority, autoApply, matchField, direction, taxRelevant ->
+                vm.saveRule(editRule?.id, pattern, categoryId, priority, autoApply, matchField, direction, taxRelevant)
                 newRule = false
                 editRule = null
             },
@@ -687,12 +688,12 @@ private fun CategoryDialog(
 }
 
 @Composable
-private fun RuleDialog(
+internal fun RuleDialog(
     existing: RuleItem?,
     categories: List<CategoryItem>,
     validate: (String) -> String?,
     onDismiss: () -> Unit,
-    onConfirm: (String, Int, Int, Boolean, RuleField, RuleDirection) -> Unit,
+    onConfirm: (String, Int, Int, Boolean, RuleField, RuleDirection, Boolean?) -> Unit,
 ) {
     var pattern by remember { mutableStateOf(existing?.pattern.orEmpty()) }
     var category by remember { mutableStateOf(categories.firstOrNull { it.id == existing?.categoryId } ?: categories.first()) }
@@ -700,6 +701,7 @@ private fun RuleDialog(
     var autoApply by remember { mutableStateOf(existing?.autoApply ?: true) }
     var matchField by remember { mutableStateOf(existing?.matchField ?: RuleField.ANY) }
     var direction by remember { mutableStateOf(existing?.direction ?: RuleDirection.ANY) }
+    var taxRelevant by remember { mutableStateOf(existing?.taxRelevant) }
     val error = validate(pattern) ?: if (priority.toIntOrNull() == null) strings()[StringKey.PriorityMustBeNumber] else null
     val s = strings()
 
@@ -731,6 +733,7 @@ private fun RuleDialog(
                 // The button shows the current choice, like the category selector above
                 DropdownSelector("${s[StringKey.RuleSearchIn]}: ${fieldLabel(matchField)}", RuleField.entries, fieldLabel, { matchField = it })
                 DropdownSelector("${s[StringKey.RuleAppliesTo]}: ${directionLabel(direction)}", RuleDirection.entries, directionLabel, { direction = it })
+                DropdownSelector("${s[StringKey.TaxMenu]}: ${ruleTaxLabel(taxRelevant, s)}", listOf<Boolean?>(null, true, false), { ruleTaxLabel(it, s) }, { taxRelevant = it })
                 OutlinedTextField(priority, { priority = it }, label = { Text(s[StringKey.Priority]) }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = autoApply, onCheckedChange = { autoApply = it })
@@ -740,7 +743,7 @@ private fun RuleDialog(
             }
         },
         confirmButton = {
-            Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply, matchField, direction) }) {
+            Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply, matchField, direction, taxRelevant) }) {
                 Text(s[StringKey.Save])
             }
         },
@@ -867,4 +870,18 @@ private fun LineList(lines: List<String>) {
     if (lines.size > 20) {
         Text(s.format(StringKey.AndMore, lines.size - 20), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** The rule dialog's Tax choices: null reads "As the category", unlike the booking override's "Automatic". */
+internal fun ruleTaxLabel(value: Boolean?, s: Strings): String = when (value) {
+    null -> s[StringKey.RuleTaxAsCategory]
+    true -> s[StringKey.TaxRelevantChoice]
+    false -> s[StringKey.TaxNotRelevantChoice]
+}
+
+/** The rules list's short marker after the category for a rule with its own tax flag ("· Tax" / "· No tax"). */
+internal fun ruleTaxMarker(rule: RuleItem, s: Strings): String = when (rule.taxRelevant) {
+    true -> " · ${s[StringKey.RuleTaxMarkerYes]}"
+    false -> " · ${s[StringKey.RuleTaxMarkerNo]}"
+    null -> ""
 }
