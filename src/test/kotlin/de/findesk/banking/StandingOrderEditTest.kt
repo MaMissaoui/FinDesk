@@ -210,6 +210,32 @@ class StandingOrderEditTest {
     }
 
     @Test
+    fun `an every-2-months order edited with the monthly fallback schedule is refused before the gateway`() = runBlocking {
+        // "M"/2 has no StandingOrderInterval: the form's dropdown falls back to monthly, which would pay twice as often
+        val biMonthly = standingOrder().copy(schedule = StandingOrderSchedule(LocalDate.of(2026, 11, 1), "M", 2, 1, null))
+        val monthly = StandingOrderSchedule.of(LocalDate.of(2026, 11, 1), StandingOrderInterval.MONTHLY, 1)
+
+        val result = service.editStandingOrder(account(), biMonthly, editedOrder(), monthly, AskPin(), confirmed = true)
+
+        val error = result as BankingResult.Error
+        assertEquals("INVALID", error.code)
+        assertEquals(AppStrings[StringKey.ErrorEditIntervalUnsupported], error.message)
+        assertTrue(gateway.edits.isEmpty(), "an order FinDesk can't re-express must not reach the bank")
+    }
+
+    @Test
+    fun `an every-2-months order is refused even when edited with its own unchanged schedule`() = runBlocking {
+        val biMonthly = standingOrder().copy(schedule = StandingOrderSchedule(LocalDate.of(2026, 11, 1), "M", 2, 1, null))
+
+        val result = service.editStandingOrder(account(), biMonthly, editedOrder(), biMonthly.schedule, AskPin(), confirmed = true)
+
+        val error = result as BankingResult.Error
+        assertEquals("INVALID", error.code)
+        assertEquals(AppStrings[StringKey.ErrorEditIntervalUnsupported], error.message)
+        assertTrue(gateway.edits.isEmpty(), "even a faithful round trip of the schedule may not reach the bank")
+    }
+
+    @Test
     fun `whitespace in the recomposed form values is not a recipient change`() {
         // The form hands in the reported name with an extra space at the end and the IBAN spaced in groups of four
         val tidied = TransferOrder(" ${order.recipientName} ", "DE44 5001 0517 5407 3249 31", order.recipientBic, BigDecimal("25.00"), "Rent October")
