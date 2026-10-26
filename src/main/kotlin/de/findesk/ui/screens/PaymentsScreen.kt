@@ -265,8 +265,16 @@ fun PaymentsScreen(
                             )
                         }
                         Text(Formats.money(o.order.amount), fontWeight = FontWeight.SemiBold)
-                        IconButton(enabled = o.canChange && !state.isSending, onClick = { vm.requestEdit(o) }) {
-                            Icon(Icons.Default.Edit, contentDescription = s[StringKey.Edit])
+                        // Editing must keep the interval, so an order FinDesk can't express (e.g. every 2 months) is not offered
+                        DisabledReason(
+                            when {
+                                o.canChange && o.schedule.interval == null -> s[StringKey.ErrorEditIntervalUnsupported]
+                                else -> null
+                            },
+                        ) {
+                            IconButton(enabled = o.canChange && o.schedule.interval != null && !state.isSending, onClick = { vm.requestEdit(o) }) {
+                                Icon(Icons.Default.Edit, contentDescription = s[StringKey.Edit])
+                            }
                         }
                         IconButton(enabled = o.canDelete && !state.isSending, onClick = { vm.requestDelete(o) }) {
                             Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteStandingOrderTo, o.order.recipientName))

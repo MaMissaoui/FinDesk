@@ -318,14 +318,19 @@ class BankingService(
     /**
      * Checks what an edit of [existing] may change; returns an error message or null. The recipient (name, IBAN,
      * BIC) is fixed: the bank identifies the order by its data, so changing it means deleting the order and creating
-     * a new one. A changed schedule differs from [validateSchedule] for a running order: its unchanged first date
-     * may lie in the past, but a changed (or new last) date must be in the future.
+     * a new one. An order with an interval FinDesk has no [StandingOrderInterval] for (e.g. every 2 months) can't be
+     * edited at all: the form could only hand in a schedule that changes how often it pays. A changed schedule
+     * differs from [validateSchedule] for a running order: its unchanged first date may lie in the past, but a
+     * changed (or new last) date must be in the future.
      */
     fun validateEditedOrder(existing: StandingOrder, order: TransferOrder, schedule: StandingOrderSchedule): String? = when {
         Iban.normalize(order.recipientIban) != Iban.normalize(existing.order.recipientIban) ||
             order.recipientName.trim() != existing.order.recipientName.trim() ||
             order.recipientBic?.trim().orEmpty() != existing.order.recipientBic?.trim().orEmpty() ->
             AppStrings[StringKey.ErrorEditRecipientFixed]
+
+        // The edit form keeps only intervals FinDesk offers; anything else it hands in would change the cadence
+        existing.schedule.interval == null -> AppStrings[StringKey.ErrorEditIntervalUnsupported]
 
         order.amount.signum() <= 0 -> AppStrings[StringKey.ErrorAmountGreaterThanZero]
 

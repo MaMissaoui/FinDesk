@@ -796,6 +796,7 @@ enum class StringKey {
     ErrorDeleteNotConfirmed,
     ErrorCannotDeleteStandingOrder,
     ErrorCannotEditStandingOrder,
+    ErrorEditIntervalUnsupported,
     ErrorEditRecipientFixed,
     ErrorEditNothingChanged,
     ErrorStandingOrderOtherAccount,
