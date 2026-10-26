@@ -265,6 +265,9 @@ fun PaymentsScreen(
                             )
                         }
                         Text(Formats.money(o.order.amount), fontWeight = FontWeight.SemiBold)
+                        IconButton(enabled = o.canChange && !state.isSending, onClick = { vm.requestEdit(o) }) {
+                            Icon(Icons.Default.Edit, contentDescription = s[StringKey.Edit])
+                        }
                         IconButton(enabled = o.canDelete && !state.isSending, onClick = { vm.requestDelete(o) }) {
                             Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteStandingOrderTo, o.order.recipientName))
                         }
@@ -337,6 +340,7 @@ fun PaymentsScreen(
                 Text(
                     s[
                         when {
+                            review.editOf != null -> StringKey.ChangeStandingOrder
                             review.schedule != null -> StringKey.ConfirmStandingOrder
                             review.instant -> StringKey.InstantTransferReview
                             else -> StringKey.ConfirmTransfer
@@ -351,7 +355,9 @@ fun PaymentsScreen(
                         recipient = order.recipientName,
                         warning = warnings.joinToString("\n").ifEmpty { null },
                     )
-                    val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.Purpose], s[StringKey.Execution])
+                    // An edit's change rows share the label column, so their labels size it too
+                    val changeLabels = if (review.editOf != null) listOf(s[StringKey.AmountEuro], s[StringKey.IntervalLabel], s[StringKey.ScheduleDay], s[StringKey.LastExecution]) else emptyList()
+                    val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.Purpose], s[StringKey.Execution], *changeLabels.toTypedArray())
                     ReviewRow(s[StringKey.From], accountLabel(account), labels)
                     ReviewRow(s[StringKey.To], order.recipientName, labels)
                     ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)), labels)
@@ -366,6 +372,18 @@ fun PaymentsScreen(
                         },
                         labels,
                     )
+                    // An edited standing order shows old and new values side by side, for every changed field
+                    review.editOf?.let { existing ->
+                        val newSchedule = review.schedule ?: return@let
+                        Spacer(Modifier.height(4.dp))
+                        val oldOrder = existing.order
+                        val oldSchedule = existing.schedule
+                        if (oldOrder.amount != order.amount) ReviewChangeRow(s[StringKey.AmountEuro], Formats.money(oldOrder.amount), Formats.money(order.amount), labels)
+                        if (oldOrder.purpose.trim() != order.purpose.trim()) ReviewChangeRow(s[StringKey.Purpose], oldOrder.purpose.ifBlank { "—" }, order.purpose.ifBlank { "—" }, labels)
+                        if (oldSchedule.interval != newSchedule.interval) ReviewChangeRow(s[StringKey.IntervalLabel], intervalText(oldSchedule, s), intervalText(newSchedule, s), labels)
+                        if (oldSchedule.executionDay != newSchedule.executionDay) ReviewChangeRow(s[StringKey.ScheduleDay], "${oldSchedule.executionDay}", "${newSchedule.executionDay}", labels)
+                        if (oldSchedule.lastDate != newSchedule.lastDate) ReviewChangeRow(s[StringKey.LastExecution], oldSchedule.lastDate?.let(Formats::date) ?: "—", newSchedule.lastDate?.let(Formats::date) ?: "—", labels)
+                    }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
@@ -384,6 +402,131 @@ fun PaymentsScreen(
                 Button(enabled = acknowledged && !state.isSending, onClick = { vm.confirmAndSend() }) { Text(s[StringKey.ConfirmAndSend]) }
             },
             dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelReview) { Text(s[StringKey.Back]) } },
+        )
+    }
+
+    // While the change review of an edit is open it sits on top; the form stays for the way back
+    state.editReview?.takeIf { state.review == null }?.let { o ->
+        val account = state.accounts.firstOrNull { Iban.normalize(it.iban) == Iban.normalize(o.fromIban) }
+        // Amount, purpose and schedule are editable; the recipient is not (standingOrderForm holds the current values)
+        var amount by remember(o) { mutableStateOf(o.order.amount.toPlainString()) }
+        var purpose by remember(o) { mutableStateOf(o.order.purpose) }
+        var interval by remember(o) { mutableStateOf(o.schedule.interval ?: StandingOrderInterval.MONTHLY) }
+        var dayText by remember(o) { mutableStateOf(o.schedule.executionDay.toString()) }
+        var firstDateText by remember(o) { mutableStateOf(Formats.date(o.schedule.firstDate)) }
+        var lastDateText by remember(o) { mutableStateOf(o.schedule.lastDate?.let(Formats::date).orEmpty()) }
+
+        val parsedAmount = Formats.parseAmount(amount)
+        val firstDate = Formats.parseDate(firstDateText)
+        val lastDate = lastDateText.takeIf { it.isNotBlank() }?.let(Formats::parseDate)
+        val schedule = firstDate?.let {
+            StandingOrderSchedule(it, interval.timeUnit, interval.step, dayText.toIntOrNull() ?: 0, lastDate)
+        }
+        val order = parsedAmount?.let {
+            TransferOrder(o.order.recipientName, o.order.recipientIban, o.order.recipientBic, it, purpose)
+        }
+        val editError = order?.let { o2 -> schedule?.let { s2 -> vm.validateEdited(o, o2, s2) } }
+        // A running order's start must stay as it is; only a future start can be moved
+        val firstDateEditable = o.schedule.firstDate.isAfter(java.time.LocalDate.now())
+
+        AlertDialog(
+            onDismissRequest = { if (!state.isSending) vm.cancelEdit() },
+            title = { Text(s[StringKey.EditStandingOrder]) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.width(440.dp).verticalScroll(rememberScrollState()),
+                ) {
+                    // The recipient identifies the order at the bank and cannot be edited
+                    OutlinedTextField(
+                        o.order.recipientName,
+                        {},
+                        label = { Text(s[StringKey.RecipientName]) },
+                        enabled = false,
+                        supportingText = { Text(s[StringKey.ErrorEditRecipientFixed]) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        o.order.recipientIban,
+                        {},
+                        label = { Text(s[StringKey.RecipientIban]) },
+                        enabled = false,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        o.order.recipientBic.orEmpty(),
+                        {},
+                        label = { Text(s[StringKey.BicOptional]) },
+                        enabled = false,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        amount,
+                        { amount = it },
+                        label = { Text(s[StringKey.AmountEuro]) },
+                        isError = amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
+                        supportingText = if (amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) ({ Text(s[StringKey.EnterAmountGreaterThan0]) }) else null,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        purpose,
+                        { purpose = it.take(BankingService.MAX_PURPOSE_LENGTH) },
+                        label = { Text(s[StringKey.PurposeVerwendungszweck]) },
+                        supportingText = { Text("${purpose.length}/${BankingService.MAX_PURPOSE_LENGTH}") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            firstDateText,
+                            { firstDateText = it },
+                            label = { Text(s[StringKey.FirstExecution]) },
+                            placeholder = { Text("dd.mm.yyyy") },
+                            isError = firstDateText.isNotBlank() && firstDate == null,
+                            supportingText = { if (firstDateText.isNotBlank() && firstDate == null) Text(s[StringKey.EnterValidDate]) },
+                            singleLine = true,
+                            enabled = firstDateEditable,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            lastDateText,
+                            { lastDateText = it },
+                            label = { Text(s[StringKey.LastExecutionOptional]) },
+                            placeholder = { Text("dd.mm.yyyy") },
+                            isError = lastDateText.isNotBlank() && lastDate == null,
+                            supportingText = { if (lastDateText.isNotBlank() && lastDate == null) Text(s[StringKey.EnterValidDate]) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    DropdownSelector(
+                        label = s[intervalLabel(interval)],
+                        options = StandingOrderInterval.entries,
+                        optionLabel = { s[intervalLabel(it)] },
+                        onSelect = { interval = it },
+                    )
+                    OutlinedTextField(
+                        dayText,
+                        { dayText = it.filter { c -> c.isDigit() }.take(2) },
+                        label = { Text(s[StringKey.ScheduleDay]) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (editError != null) Text(editError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = account != null && parsedAmount != null && parsedAmount.signum() > 0 && schedule != null && editError == null && !state.isSending,
+                    onClick = {
+                        account?.let { vm.reviewEdit(it, o, order!!, schedule!!) }
+                    },
+                ) { Text(s[StringKey.ReviewTransfer]) }
+            },
+            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelEdit) { Text(s[StringKey.Back]) } },
         )
     }
 
@@ -439,10 +582,12 @@ private fun intervalLabel(i: StandingOrderInterval): StringKey = when (i) {
     StandingOrderInterval.YEARLY -> StringKey.IntervalYearly
 }
 
-/** "Monthly from 01.11.2026, day 1, until 31.12.2027"; intervals FinDesk doesn't offer show as "every 2 M". */
+/** "Monthly"; intervals FinDesk doesn't offer show as "every 2 M". */
+private fun intervalText(schedule: StandingOrderSchedule, s: Strings): String = schedule.interval?.let { s[intervalLabel(it)] } ?: s.format(StringKey.EveryN, schedule.step, schedule.timeUnit)
+
+/** "Monthly from 01.11.2026, day 1, until 31.12.2027". */
 private fun scheduleText(schedule: StandingOrderSchedule, s: Strings): String {
-    val interval = schedule.interval?.let { s[intervalLabel(it)] } ?: s.format(StringKey.EveryN, schedule.step, schedule.timeUnit)
-    val base = s.format(StringKey.ScheduleFrom, interval, Formats.date(schedule.firstDate), schedule.executionDay)
+    val base = s.format(StringKey.ScheduleFrom, intervalText(schedule, s), Formats.date(schedule.firstDate), schedule.executionDay)
     return base + (schedule.lastDate?.let { " " + s.format(StringKey.ScheduleUntil, Formats.date(it)) } ?: "")
 }
 
@@ -497,6 +642,17 @@ private fun ReviewRow(label: String, value: String, labelWidth: Dp) {
     Row {
         Text(label, fontWeight = FontWeight.Medium, softWrap = false, modifier = Modifier.width(labelWidth))
         Text(value)
+    }
+}
+
+/** What a changed field looked like before and what it becomes now, side by side. */
+@Composable
+private fun ReviewChangeRow(label: String, oldValue: String, newValue: String, labelWidth: Dp) {
+    Row {
+        Text(label, fontWeight = FontWeight.Medium, softWrap = false, modifier = Modifier.width(labelWidth))
+        Text(oldValue)
+        Text("  →  ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(newValue)
     }
 }
 

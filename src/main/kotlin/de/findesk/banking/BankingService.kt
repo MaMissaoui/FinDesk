@@ -316,6 +316,41 @@ class BankingService(
     fun validateExecutionDate(date: LocalDate): String? = if (!date.isAfter(today())) AppStrings[StringKey.ErrorExecutionDateFuture] else null
 
     /**
+     * Checks what an edit of [existing] may change; returns an error message or null. The recipient (name, IBAN,
+     * BIC) is fixed: the bank identifies the order by its data, so changing it means deleting the order and creating
+     * a new one. A changed schedule differs from [validateSchedule] for a running order: its unchanged first date
+     * may lie in the past, but a changed (or new last) date must be in the future.
+     */
+    fun validateEditedOrder(existing: StandingOrder, order: TransferOrder, schedule: StandingOrderSchedule): String? = when {
+        Iban.normalize(order.recipientIban) != Iban.normalize(existing.order.recipientIban) ||
+            order.recipientName.trim() != existing.order.recipientName.trim() ||
+            order.recipientBic?.trim().orEmpty() != existing.order.recipientBic?.trim().orEmpty() ->
+            AppStrings[StringKey.ErrorEditRecipientFixed]
+
+        order.amount.signum() <= 0 -> AppStrings[StringKey.ErrorAmountGreaterThanZero]
+
+        order.amount.scale() > 2 && order.amount.stripTrailingZeros().scale() > 2 -> AppStrings[StringKey.ErrorAmountMaxDecimals]
+
+        order.purpose.length > MAX_PURPOSE_LENGTH -> AppStrings.format(StringKey.ErrorPurposeTooLong, MAX_PURPOSE_LENGTH)
+
+        schedule.interval == null -> AppStrings[StringKey.ErrorIntervalUnsupported]
+
+        // A running order keeps its start; only a moved start has to be a new one
+        schedule.firstDate != existing.schedule.firstDate && !schedule.firstDate.isAfter(today()) ->
+            AppStrings[StringKey.ErrorFirstExecutionFuture]
+
+        schedule.lastDate != null && !schedule.lastDate.isAfter(today()) -> AppStrings[StringKey.ErrorLastDateFuture]
+
+        schedule.lastDate != null && schedule.lastDate.isBefore(schedule.firstDate) -> AppStrings[StringKey.ErrorLastBeforeFirst]
+
+        schedule.timeUnit == "M" && schedule.executionDay !in 1..31 && schedule.executionDay != 99 -> AppStrings[StringKey.ErrorExecutionDayMonth]
+
+        schedule.timeUnit == "W" && schedule.executionDay !in 1..7 -> AppStrings[StringKey.ErrorExecutionDayWeek]
+
+        else -> null
+    }
+
+    /**
      * Error if the bank login is known not to support [job]; null when it does or when its capabilities are
      * unknown (never synced, or the bank reported nothing), in which case the bank decides.
      */
@@ -399,6 +434,45 @@ class BankingService(
         accountCheck = { account -> unsupported(account.bankAccessId, BankCapabilities.JOB_STANDING_NEW) },
     ) { account, o ->
         finTSClient.createStandingOrder(account.bankAccessId, interaction, account.iban, o, schedule)
+    }
+
+    /**
+     * Changes amount, purpose and schedule of a standing order; the recipient can't be edited. Same guards as other
+     * orders: [validateEditedOrder] takes the place of [validateTransfer] (and the schedule check of
+     * [validateSchedule]), because the bank-reported order data may exceed what sending accepts and because a
+     * running order's unchanged first date may lie in the past.
+     */
+    suspend fun editStandingOrder(
+        fromAccountId: Int,
+        existing: StandingOrder,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+        interaction: BankingInteraction,
+        confirmed: Boolean,
+    ): BankingResult<String?> {
+        val scheduleText = "${schedule.interval?.name?.lowercase() ?: "${schedule.step}${schedule.timeUnit}"} from ${schedule.firstDate} on day ${schedule.executionDay}" +
+            (schedule.lastDate?.let { " until $it" } ?: "")
+        val check = if (existing.orderId == null || !existing.canChange) AppStrings[StringKey.ErrorCannotEditStandingOrder] else validateEditedOrder(existing, order, schedule)
+        return sendOrder(
+            action = "STANDING_ORDER_EDIT",
+            fromAccountId = fromAccountId,
+            order = order,
+            confirmed = confirmed,
+            check = check,
+            describe = " (id ${existing.orderId}) $scheduleText",
+            // The recipient is fixed and the editable fields were checked above
+            validateOrder = false,
+            schedule = scheduleText,
+            accountCheck = { account ->
+                if (!Iban.normalize(existing.fromIban).equals(account.iban, ignoreCase = true)) {
+                    AppStrings[StringKey.ErrorStandingOrderOtherAccount]
+                } else {
+                    unsupported(account.bankAccessId, BankCapabilities.JOB_STANDING_EDIT)
+                }
+            },
+        ) { account, o ->
+            finTSClient.editStandingOrder(account.bankAccessId, interaction, existing, o, schedule)
+        }
     }
 
     /** Read-only: the account's standing orders as the bank reports them. */
