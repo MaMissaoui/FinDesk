@@ -103,11 +103,11 @@ class InstantTransferTest {
 
         val audit = AuditLogRepositoryImpl().findByAction("INSTANT_TRANSFER").single()
         assertTrue(audit.details!!.contains(" (instant): sent"), audit.details)
-        assertTrue(!audit.details!!.contains("bank status"), "the audit keeps codes only, not the bank's answer: ${audit.details}")
+        assertTrue(!audit.details!!.contains("status 2"), "the audit keeps codes only, not the bank's answer: ${audit.details}")
         // The raw order status is stored with the order record, not in the audit
         val recorded = PaymentOrderRepositoryImpl().findRecentItems().single()
         assertEquals(de.findesk.model.PaymentOrderStatus.ACCEPTED, recorded.status)
-        assertEquals("bank status 2", recorded.message)
+        assertEquals("2", recorded.message)
     }
 
     @Test

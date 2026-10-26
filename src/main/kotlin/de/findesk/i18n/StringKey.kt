@@ -914,6 +914,7 @@ enum class StringKey {
     PaymentActionStandingOrder,
     PaymentActionStandingOrderDelete,
     PaymentOrderId,
+    PaymentBankStatus,
 
     // Offline banks (no online banking; statements are imported from files)
 

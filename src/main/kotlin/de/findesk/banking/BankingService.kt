@@ -4,6 +4,7 @@ import de.findesk.data.entity.BankAccess
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.model.BankAccessItem
+import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
 import de.findesk.util.Formats
@@ -347,7 +348,7 @@ class BankingService(
         interaction: BankingInteraction,
         confirmed: Boolean,
     ): BankingResult<FinTSClient.TransferResult> = sendOrder(
-        "INSTANT_TRANSFER",
+        PaymentAction.INSTANT_TRANSFER,
         fromAccountId,
         order,
         confirmed,
@@ -579,7 +580,6 @@ class BankingService(
 
         is BankingResult.Success -> (result.data as? FinTSClient.TransferResult)?.bankStatusCode
             ?.takeIf { it.isNotBlank() }
-            ?.let { "bank status $it" }
 
         else -> null
     }
