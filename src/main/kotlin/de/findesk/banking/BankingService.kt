@@ -336,6 +336,28 @@ class BankingService(
         finTSClient.initiateTransfer(account.bankAccessId, interaction, account.iban, o)
     }
 
+    /**
+     * Moves real money within seconds; same guards as [initiateTransfer]. The bank keeps the raw order status in
+     * the recorded message. There is deliberately no fallback: if the instant order fails, is rejected, is
+     * cancelled or has an unknown outcome, no normal transfer is sent instead — that could pay twice.
+     */
+    suspend fun initiateInstantTransfer(
+        fromAccountId: Int,
+        order: TransferOrder,
+        interaction: BankingInteraction,
+        confirmed: Boolean,
+    ): BankingResult<FinTSClient.TransferResult> = sendOrder(
+        "INSTANT_TRANSFER",
+        fromAccountId,
+        order,
+        confirmed,
+        check = null,
+        describe = " (instant)",
+        accountCheck = { account -> unsupported(account.bankAccessId, BankCapabilities.JOB_INSTANT_TRANSFER) },
+    ) { account, o ->
+        finTSClient.initiateInstantTransfer(account.bankAccessId, interaction, account.iban, o)
+    }
+
     /** SEPA transfer executed on [date]. Same guards as [initiateTransfer]. */
     suspend fun scheduleTransfer(
         fromAccountId: Int,
@@ -548,7 +570,19 @@ class BankingService(
         else -> null
     }
 
-    private fun resultMessage(result: BankingResult<*>): String? = (result as? BankingResult.Error)?.message?.let { BankingRedactor.maskAccountNumbers(it) }
+    /**
+     * The stored message of an order: a failure's (masked) text, or an instant transfer's raw bank order status
+     * (1-9), which the bank keeps uninterpreted and FinDesk stores uninterpreted alongside the accepted status.
+     */
+    private fun resultMessage(result: BankingResult<*>): String? = when (result) {
+        is BankingResult.Error -> result.message?.let { BankingRedactor.maskAccountNumbers(it) }
+
+        is BankingResult.Success -> (result.data as? FinTSClient.TransferResult)?.bankStatusCode
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "bank status $it" }
+
+        else -> null
+    }
 
     data class ImportResult(
         val imported: Int,

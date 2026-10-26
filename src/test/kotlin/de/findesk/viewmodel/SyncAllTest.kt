@@ -49,6 +49,8 @@ class SyncAllTest {
         }
 
         override fun transfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = throw UnsupportedOperationException()
+
+        override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = throw UnsupportedOperationException()
     }
 
     private fun connection(name: String, blz: String): Int = data.bankAccessRepo.create(name, blz, "", "user").id.value.also {

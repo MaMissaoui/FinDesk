@@ -60,6 +60,13 @@ class OfflineBankGuardTest {
             throw IllegalStateException("reached the bank")
         }
 
+        val instantTransfers = mutableListOf<String>()
+
+        override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult {
+            instantTransfers += fromIban
+            throw IllegalStateException("reached the bank")
+        }
+
         override fun scheduledTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder, date: LocalDate): FinTSClient.TransferResult {
             scheduled += fromIban
             throw IllegalStateException("reached the bank")
@@ -149,7 +156,7 @@ class OfflineBankGuardTest {
     private fun assertNothingReachable() {
         assertEquals(0, interaction.prompts, "no dialog may open")
         assertTrue(
-            gateway.transfers.isEmpty() && gateway.scheduled.isEmpty() && gateway.standingCreated.isEmpty() &&
+            gateway.transfers.isEmpty() && gateway.scheduled.isEmpty() && gateway.standingCreated.isEmpty() && gateway.instantTransfers.isEmpty() &&
                 gateway.standingDeleted.isEmpty() && gateway.listed.isEmpty() && gateway.fetched == 0 && gateway.resets == 0,
         )
     }

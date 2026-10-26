@@ -107,6 +107,17 @@ interface FinTSGateway {
         order: TransferOrder,
     ): FinTSClient.TransferResult
 
+    /**
+     * SEPA instant transfer (Echtzeitüberweisung), executed within seconds. The bank answers with an order status
+     * (1-9) that is passed through uninterpreted, and a cancellation code means the bank stopped the order.
+     */
+    fun instantTransfer(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+    ): FinTSClient.TransferResult
+
     /** SEPA transfer executed on [date] (Terminüberweisung). */
     fun scheduledTransfer(
         connection: FinTSConnection,

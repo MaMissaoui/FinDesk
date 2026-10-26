@@ -69,6 +69,7 @@ fun PaymentsScreen(
     val lastDate = lastDateText.takeIf { it.isNotBlank() }?.let(Formats::parseDate)
     val scheduleOk = when (execution) {
         Execution.NOW -> true
+        Execution.INSTANT -> true
         Execution.ON_DATE -> date != null
         Execution.STANDING -> date != null && (lastDateText.isBlank() || lastDate != null)
     }
@@ -76,9 +77,13 @@ fun PaymentsScreen(
     val capabilities = from?.let { state.bankCapabilities[it.bankAccessId] }
     val scheduledOk = capabilities?.supportsScheduledTransfer != false
     val standingOk = capabilities?.supportsStandingOrders != false
-    LaunchedEffect(scheduledOk, standingOk) {
+    // Instant transfers need the bank's explicit answer: an unknown set is not enough, because the order reaches the
+    // bank within seconds
+    val instantOk = capabilities?.supportsInstantTransfer == true
+    LaunchedEffect(scheduledOk, standingOk, instantOk) {
         if (execution == Execution.ON_DATE && !scheduledOk) execution = Execution.NOW
         if (execution == Execution.STANDING && !standingOk) execution = Execution.NOW
+        if (execution == Execution.INSTANT && !instantOk) execution = Execution.NOW
     }
 
     Row(Modifier.fillMaxSize().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -143,6 +148,7 @@ fun PaymentsScreen(
                             when (e) {
                                 Execution.ON_DATE -> scheduledOk
                                 Execution.STANDING -> standingOk
+                                Execution.INSTANT -> instantOk
                                 Execution.NOW -> true
                             }
                         },
@@ -150,7 +156,15 @@ fun PaymentsScreen(
                     if (!scheduledOk || !standingOk) {
                         Text(s[StringKey.NotOfferedByBank], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (execution != Execution.NOW) {
+                    // Why the Instant option is off: a bank not synced yet, or one that answered it doesn't offer it
+                    if (!instantOk) {
+                        Text(
+                            if (capabilities == null) s[StringKey.InstantSyncUnknown] else s[StringKey.InstantNotOffered],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (execution == Execution.ON_DATE || execution == Execution.STANDING) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedTextField(
                                 dateText,
@@ -186,11 +200,14 @@ fun PaymentsScreen(
                     }
                     Button(
                         enabled = from != null && name.isNotBlank() && ibanOk && parsedAmount != null && parsedAmount.signum() > 0 && scheduleOk && !state.isSending &&
-                            (execution != Execution.ON_DATE || scheduledOk) && (execution != Execution.STANDING || standingOk),
+                            (execution != Execution.ON_DATE || scheduledOk) && (execution != Execution.STANDING || standingOk) &&
+                            (execution != Execution.INSTANT || instantOk),
                         onClick = {
                             val order = TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose)
                             when (execution) {
                                 Execution.NOW -> vm.review(from!!, order)
+
+                                Execution.INSTANT -> vm.review(from!!, order, instant = true)
 
                                 Execution.ON_DATE -> vm.review(from!!, order, date = date)
 
@@ -272,7 +289,7 @@ fun PaymentsScreen(
                     RowContextMenu(again) {
                         Column(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(order.recipientName ?: s.paymentAction(order.action), style = MaterialTheme.typography.bodySmall)
+                                Text(order.recipientName ?: paymentActionLabel(order.action, s), style = MaterialTheme.typography.bodySmall)
                                 order.amount?.let { Text(Formats.money(it, order.currency), style = MaterialTheme.typography.bodySmall) }
                                 Text(
                                     s.paymentStatus(order.status),
@@ -281,12 +298,19 @@ fun PaymentsScreen(
                                 )
                             }
                             Text(
-                                "${s.paymentAction(order.action)} · ${Formats.dateTime(order.createdAt)}",
+                                "${paymentActionLabel(order.action, s)} · ${Formats.dateTime(order.createdAt)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             order.bankOrderId?.let { Text("${s[StringKey.PaymentOrderId]}: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                            order.message?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
+                            order.message?.let {
+                                // An accepted order's stored detail is its bank status code, not an error
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (order.status == PaymentOrderStatus.ACCEPTED) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                                )
+                            }
                         }
                     }
                     HorizontalDivider(Modifier.padding(vertical = 6.dp))
@@ -298,17 +322,33 @@ fun PaymentsScreen(
     state.review?.let { review ->
         val (account, order) = review
         var acknowledged by remember(review) { mutableStateOf(false) }
+        // One callout above the figure: the unconfirmed earlier order and, for an instant transfer, the fact that
+        // the money is gone within seconds and cannot be recalled
+        val warnings = buildList {
+            review.unconfirmed?.let { earlier ->
+                add(s.format(StringKey.WarningUnconfirmedOrder, earlier.recipientName.orEmpty(), Formats.money(order.amount), Formats.date(earlier.createdAt.toLocalDate())))
+            }
+            if (review.instant) add(s[StringKey.InstantTransferWarning])
+        }
         AlertDialog(
             onDismissRequest = { if (!state.isSending) vm.cancelReview() },
-            title = { Text(s[if (review.schedule != null) StringKey.ConfirmStandingOrder else StringKey.ConfirmTransfer]) },
+            title = {
+                Text(
+                    s[
+                        when {
+                            review.schedule != null -> StringKey.ConfirmStandingOrder
+                            review.instant -> StringKey.InstantTransferReview
+                            else -> StringKey.ConfirmTransfer
+                        },
+                    ],
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
                     ReviewHeader(
                         amount = Formats.money(order.amount),
                         recipient = order.recipientName,
-                        warning = review.unconfirmed?.let { earlier ->
-                            s.format(StringKey.WarningUnconfirmedOrder, earlier.recipientName.orEmpty(), Formats.money(order.amount), Formats.date(earlier.createdAt.toLocalDate()))
-                        },
+                        warning = warnings.joinToString("\n").ifEmpty { null },
                     )
                     val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.Purpose], s[StringKey.Execution])
                     ReviewRow(s[StringKey.From], accountLabel(account), labels)
@@ -318,7 +358,11 @@ fun PaymentsScreen(
                     ReviewRow(s[StringKey.Purpose], order.purpose.ifBlank { "—" }, labels)
                     ReviewRow(
                         s[StringKey.Execution],
-                        review.schedule?.let { scheduleText(it, s) } ?: review.date?.let { s.format(StringKey.OnDate, Formats.date(it)) } ?: s[StringKey.ExecuteNow],
+                        when {
+                            review.schedule != null -> scheduleText(review.schedule, s)
+                            review.instant -> s[StringKey.ExecuteInstant]
+                            else -> review.date?.let { s.format(StringKey.OnDate, Formats.date(it)) } ?: s[StringKey.ExecuteNow]
+                        },
                         labels,
                     )
                     Spacer(Modifier.height(4.dp))
@@ -384,7 +428,10 @@ fun PaymentsScreen(
     }
 }
 
-private enum class Execution(val label: StringKey) { NOW(StringKey.ExecuteNow), ON_DATE(StringKey.ExecuteOnDate), STANDING(StringKey.ExecuteStanding) }
+private enum class Execution(val label: StringKey) { NOW(StringKey.ExecuteNow), INSTANT(StringKey.ExecuteInstant), ON_DATE(StringKey.ExecuteOnDate), STANDING(StringKey.ExecuteStanding) }
+
+/** Label of an order's action in the recent list, including the instant transfer (see [Strings.paymentAction]). */
+private fun paymentActionLabel(action: String, s: Strings): String = if (action == "INSTANT_TRANSFER") s[StringKey.PaymentActionInstant] else s.paymentAction(action)
 
 private fun intervalLabel(i: StandingOrderInterval): StringKey = when (i) {
     StandingOrderInterval.WEEKLY -> StringKey.IntervalWeekly

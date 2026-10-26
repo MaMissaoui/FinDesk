@@ -196,6 +196,20 @@ class FinTSClient(
         gateway.transfer(connection, interaction, fromIban, order)
     }
 
+    /**
+     * Send a SEPA instant transfer (Echtzeitüberweisung), which the bank executes within seconds. Opens one dialog
+     * that always asks for the PIN (a remembered PIN is used for syncs only) and is confirmed explicitly, exactly
+     * like [initiateTransfer], with the same error mapping.
+     */
+    suspend fun initiateInstantTransfer(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+    ): BankingResult<TransferResult> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressSendingInstant]) { connection ->
+        gateway.instantTransfer(connection, interaction, fromIban, order)
+    }
+
     suspend fun scheduleTransfer(
         bankAccessId: Int,
         interaction: BankingInteraction,
@@ -343,6 +357,8 @@ class FinTSClient(
     data class TransferResult(
         val transactionId: String,
         val status: String,
+        /** The bank's raw order status code (instant transfers), if it reports one; never interpreted. */
+        val bankStatusCode: String? = null,
     )
 
     companion object {

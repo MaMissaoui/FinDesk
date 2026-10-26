@@ -85,6 +85,11 @@ private class PinGateway : FinTSGateway {
         interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
         return FinTSClient.TransferResult("job-1", "ACCEPTED")
     }
+
+    override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult {
+        interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
+        return FinTSClient.TransferResult("inst-1", "ACCEPTED")
+    }
 }
 
 class SavedPinTest {
