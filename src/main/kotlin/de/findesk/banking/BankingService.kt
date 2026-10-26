@@ -545,7 +545,7 @@ class BankingService(
     ): BankingResult<Unit> {
         val check = if (existing.orderId == null || !existing.canDelete) AppStrings[StringKey.ErrorCannotDeleteScheduledTransfer] else null
         return sendOrder(
-            action = "SCHEDULED_TRANSFER_DELETE",
+            action = PaymentAction.SCHEDULED_TRANSFER_DELETE,
             fromAccountId = fromAccountId,
             order = existing.order,
             confirmed = confirmed,

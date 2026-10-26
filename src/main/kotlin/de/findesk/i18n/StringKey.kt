@@ -936,6 +936,7 @@ enum class StringKey {
     PaymentActionTransfer,
     PaymentActionInstant,
     PaymentActionScheduled,
+    PaymentActionScheduledDelete,
     PaymentActionStandingOrder,
     PaymentActionStandingOrderDelete,
     PaymentActionStandingOrderEdit,

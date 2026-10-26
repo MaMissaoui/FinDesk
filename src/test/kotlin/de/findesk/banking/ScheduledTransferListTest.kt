@@ -159,6 +159,14 @@ class ScheduledTransferListTest {
     }
 
     @Test
+    fun `the cancellation action is labelled instead of shown as the raw code`() {
+        val label = AppStrings.current.paymentAction(de.findesk.model.PaymentAction.SCHEDULED_TRANSFER_DELETE)
+
+        assertEquals("Scheduled transfer cancelled", label)
+        assertNotEquals(de.findesk.model.PaymentAction.SCHEDULED_TRANSFER_DELETE, label)
+    }
+
+    @Test
     fun `a transfer of another account is denied before the gateway`() = runBlocking {
         val result = service.deleteScheduledTransfer(account(), scheduledTransfer(fromIban = savings), AskPin(), confirmed = true)
 

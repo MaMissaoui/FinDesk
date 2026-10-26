@@ -111,6 +111,7 @@ class Strings(
         PaymentAction.STANDING_ORDER_CREATE -> this[StringKey.PaymentActionStandingOrder]
         PaymentAction.STANDING_ORDER_DELETE -> this[StringKey.PaymentActionStandingOrderDelete]
         PaymentAction.STANDING_ORDER_EDIT -> this[StringKey.PaymentActionStandingOrderEdit]
+        PaymentAction.SCHEDULED_TRANSFER_DELETE -> this[StringKey.PaymentActionScheduledDelete]
         else -> action
     }
 
