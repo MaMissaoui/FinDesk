@@ -246,6 +246,17 @@ class FinTSClient(
         gateway.deleteStandingOrder(connection, interaction, existing)
     }
 
+    /** Edits a standing order (amount, purpose and schedule). Like every order, this dialog always asks for the PIN. */
+    suspend fun editStandingOrder(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        existing: StandingOrder,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+    ): BankingResult<String?> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressEditingStandingOrder]) { connection ->
+        gateway.editStandingOrder(connection, interaction, existing, order, schedule)
+    }
+
     private suspend fun <T> run(
         bankAccessId: Int,
         status: ConnectionStatus,

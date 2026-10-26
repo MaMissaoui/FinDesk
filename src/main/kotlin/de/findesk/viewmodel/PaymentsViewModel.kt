@@ -26,7 +26,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** What the user is about to send: a transfer now, an instant transfer, on [date], or a standing order with [schedule]. */
+/** What the user is about to send: a transfer now, an instant transfer, on [date], or a standing order with [schedule].
+ * For an edit of a standing order ([editOf]) the review shows old and new values instead. */
 data class PaymentReview(
     val account: AccountItem,
     val order: TransferOrder,
@@ -35,6 +36,8 @@ data class PaymentReview(
     val instant: Boolean = false,
     /** An earlier order to the same recipient and amount whose outcome is unknown or still open: maybe already paid. */
     val unconfirmed: PaymentOrderItem? = null,
+    /** The standing order being edited; its recipient is fixed. */
+    val editOf: StandingOrder? = null,
 )
 
 data class PaymentsState(
@@ -47,6 +50,8 @@ data class PaymentsState(
     val isLoadingStandingOrders: Boolean = false,
     /** Standing order the user asked to delete, waiting for confirmation. */
     val deleteReview: StandingOrder? = null,
+    /** Standing order the user asked to edit; the form dialog shows it. */
+    val editReview: StandingOrder? = null,
     /** Locally recorded orders sent to a bank, newest first, with the bank's answer. */
     val paymentOrders: List<PaymentOrderItem> = emptyList(),
     /** Known capabilities per bank access id; an absent entry means "unknown" (nothing is hidden). */
@@ -129,6 +134,24 @@ class PaymentsViewModel(
         _state.update { it.copy(review = null) }
     }
 
+    /** Validation of an edit shown before the review; reviewed orders are checked again in [BankingService]. */
+    fun validateEdited(existing: StandingOrder, order: TransferOrder, schedule: StandingOrderSchedule): String? = bankingService.validateEditedOrder(existing, order, schedule)
+
+    /** Opens the edit form of a standing order; the edit is reviewed explicitly before it is sent. */
+    fun requestEdit(order: StandingOrder) {
+        _state.update { it.copy(editReview = order) }
+    }
+
+    fun cancelEdit() {
+        _state.update { it.copy(editReview = null) }
+    }
+
+    /** Step 1 of an edit: validate and show the change review. Nothing is sent. */
+    fun reviewEdit(from: AccountItem, existing: StandingOrder, order: TransferOrder, schedule: StandingOrderSchedule) {
+        val error = bankingService.validateEditedOrder(existing, order, schedule)
+        _state.update { if (error != null) it.copy(error = error) else it.copy(review = PaymentReview(from, order, schedule = schedule, editOf = existing), error = null) }
+    }
+
     /** Step 2: the user confirmed the reviewed order. Sends it; the bank will ask for a TAN. */
     fun confirmAndSend(): Job {
         val review = _state.value.review ?: return Job().apply { complete() }
@@ -142,9 +165,21 @@ class PaymentsViewModel(
             val result = try {
                 Busy.track {
                     when {
+                        review.editOf != null -> bankingService.editStandingOrder(
+                            from.id,
+                            review.editOf,
+                            order,
+                            requireNotNull(review.schedule),
+                            bankingInteraction,
+                            confirmed = true,
+                        )
+
                         review.schedule != null -> bankingService.createStandingOrder(from.id, order, review.schedule, bankingInteraction, confirmed = true)
+
                         review.date != null -> bankingService.scheduleTransfer(from.id, order, review.date, bankingInteraction, confirmed = true)
+
                         review.instant -> bankingService.initiateInstantTransfer(from.id, order, bankingInteraction, confirmed = true)
+
                         else -> bankingService.initiateTransfer(from.id, order, bankingInteraction, confirmed = true)
                     }
                 }
@@ -153,12 +188,13 @@ class PaymentsViewModel(
             }
             refresh()
             val sent = when {
+                review.editOf != null -> AppStrings[StringKey.MessageStandingOrderChanged]
                 review.schedule != null -> AppStrings.format(StringKey.MessageStandingOrderSetUp, order.recipientName)
                 review.date != null -> AppStrings.format(StringKey.MessageTransferScheduled, order.recipientName, de.findesk.util.Formats.date(review.date))
                 review.instant -> AppStrings[StringKey.MessageInstantTransferAccepted]
                 else -> AppStrings.format(StringKey.MessageTransferSent, order.recipientName)
             }
-            // A new standing order makes the loaded list stale
+            // A new or changed standing order makes the loaded list stale
             if (result is BankingResult.Success && review.schedule != null) _state.update { it.copy(standingOrders = null) }
             _state.update {
                 when (result) {
@@ -171,8 +207,13 @@ class PaymentsViewModel(
                         review = if (result.code == "CANCELLED" || result.code == BankingService.OUTCOME_UNKNOWN) null else it.review,
                         error = if (result.code == "CANCELLED") AppStrings[StringKey.MessageTransferCancelled] else result.message,
                     )
+                }.let { s ->
+                    // A closed review ends the edit too: the form must not reopen after a sent, cancelled or unknown order
+                    if (review.editOf != null && s.review == null) s.copy(editReview = null) else s
                 }
             }
+            // After a successful edit the list shows the changed order without another click on "Load from bank"
+            if (result is BankingResult.Success && review.editOf != null) loadStandingOrders(from)
         }
     }
 

@@ -7,6 +7,7 @@ import org.hbci4java.HBCI4JavaBankAccount
 import org.hbci4java.HBCI4JavaClient
 import org.hbci4java.HBCI4JavaConfig
 import org.kapott.hbci.GV.HBCIJob
+import org.kapott.hbci.GV_Result.GVRDauerEdit
 import org.kapott.hbci.GV_Result.GVRDauerList
 import org.kapott.hbci.GV_Result.GVRDauerNew
 import org.kapott.hbci.GV_Result.GVRInstUebSEPA
@@ -243,6 +244,7 @@ class Hbci4JavaGateway : FinTSGateway {
                 nextDate = d.nextdate?.toLocalDate(),
                 // Trust the bank: if it says no (or gave no id), deleting is left to online banking
                 canDelete = d.can_delete && d.orderid != null,
+                canChange = d.can_change && d.orderid != null,
             )
         }
     }
@@ -276,6 +278,24 @@ class Hbci4JavaGateway : FinTSGateway {
             addToQueue()
         }
         checkOrder(handler.execute(), job)
+    }
+
+    override fun editStandingOrder(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        existing: StandingOrder,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+    ): String? = withHandler(connection, interaction) { handler ->
+        // The bank identifies the order by its id but takes the changed order data and schedule alongside
+        val job = handler.newJob("DauerSEPAEdit").apply {
+            setOrderParams(handler.findKonto(existing.fromIban), order)
+            setScheduleParams(schedule)
+            setParam("orderid", requireNotNull(existing.orderId) { AppStrings[StringKey.ErrorNoStandingOrderId] })
+            addToQueue()
+        }
+        checkOrder(handler.execute(), job)
+        (job.jobResult as? GVRDauerEdit)?.orderId
     }
 
     private fun HBCIJob<*>.setOrderParams(src: Konto, order: TransferOrder) {

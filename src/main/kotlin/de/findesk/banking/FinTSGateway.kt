@@ -71,6 +71,7 @@ data class StandingOrder(
     val schedule: StandingOrderSchedule,
     val nextDate: LocalDate? = null,
     val canDelete: Boolean = true,
+    val canChange: Boolean = false,
 )
 
 /** One account's state as reported by the bank in a sync. */
@@ -147,6 +148,18 @@ interface FinTSGateway {
         interaction: BankingInteraction,
         existing: StandingOrder,
     ): Unit = throw UnsupportedOperationException("Standing orders are not supported")
+
+    /**
+     * Edits [existing] in place with the new [order] and [schedule] (the bank identifies it by its id) and returns
+     * the bank's (possibly new) order id, if it reports one.
+     */
+    fun editStandingOrder(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        existing: StandingOrder,
+        order: TransferOrder,
+        schedule: StandingOrderSchedule,
+    ): String? = throw UnsupportedOperationException("Standing orders are not supported")
 
     /** The TAN method chosen during the last dialog, so it can be remembered. */
     val lastTanMethod: String? get() = null

@@ -36,6 +36,7 @@ data class BankCapabilities(
         const val JOB_STANDING_LIST = "DauerSEPAList"
         const val JOB_STANDING_NEW = "DauerSEPANew"
         const val JOB_STANDING_DELETE = "DauerSEPADel"
+        const val JOB_STANDING_EDIT = "DauerSEPAEdit"
 
         /** Jobs FinDesk uses; only these are probed and stored. */
         val PROBED = listOf(
@@ -48,6 +49,7 @@ data class BankCapabilities(
             JOB_STANDING_LIST,
             JOB_STANDING_NEW,
             JOB_STANDING_DELETE,
+            JOB_STANDING_EDIT,
         )
 
         /** From a support predicate (e.g. HBCIHandler.isSupported), keeping only jobs FinDesk knows. */

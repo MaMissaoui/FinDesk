@@ -17,6 +17,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Density
 import de.findesk.banking.BankCapabilities
+import de.findesk.banking.StandingOrder
+import de.findesk.banking.StandingOrderInterval
+import de.findesk.banking.StandingOrderSchedule
 import de.findesk.banking.TransferOrder
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.document.ReportService
@@ -198,6 +201,48 @@ class ScreenshotTest {
         render("payments-instant-review-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::reviewing) }
         // Instant is the second segment of the execution row (the capabilities above keep it enabled)
         render("payments-form-instant", 1440, 900, clickAt = Offset(500f, 689f)) { Frame(Screen.PAYMENTS, dark = false) }
+    }
+
+    /** Editing a standing order: the prefilled form with a read-only recipient, and the change review of a running order. */
+    @Test
+    fun `render the standing order edit form and change review`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-standing-edit").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val order = TransferOrder("Vermieter GmbH", "DE02120300000000202051", null, BigDecimal("850.00"), "Miete Oktober")
+        val schedule = StandingOrderSchedule.of(java.time.LocalDate.of(2026, 11, 1), StandingOrderInterval.MONTHLY, 1)
+        val existing = StandingOrder(
+            orderId = "so-42",
+            fromIban = "DE89370400440532013000",
+            order = order,
+            schedule = schedule,
+            nextDate = java.time.LocalDate.of(2026, 11, 1),
+            canChange = true,
+        )
+
+        fun editing(): PaymentsViewModel = PaymentsViewModel().apply {
+            runBlocking { load().join() }
+            requestEdit(existing)
+            check(state.value.editReview != null) { "the edit form should be open" }
+        }
+
+        fun reviewing(): PaymentsViewModel = PaymentsViewModel().apply {
+            runBlocking { load().join() }
+            val from = state.value.accounts.single()
+            requestEdit(existing)
+            // A running order: amount, purpose and schedule change, the recipient and the start stay
+            reviewEdit(
+                from,
+                existing,
+                order.copy(amount = BigDecimal("875.00"), purpose = "Miete November"),
+                StandingOrderSchedule.of(schedule.firstDate, StandingOrderInterval.MONTHLY, 1, java.time.LocalDate.of(2027, 12, 31)),
+            )
+            check(state.value.review?.editOf != null) { "the change review should be open" }
+        }
+        render("payments-standing-edit-form", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::editing) }
+        render("payments-standing-edit-review", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::reviewing) }
+        render("payments-standing-edit-review-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::reviewing) }
     }
 
     /** The Payments "From" picker open: accounts grouped by bank on two readable lines instead of one long string. */
