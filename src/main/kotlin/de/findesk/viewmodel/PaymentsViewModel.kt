@@ -26,12 +26,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** What the user is about to send: a transfer now, on [date], or a standing order with [schedule]. */
+/** What the user is about to send: a transfer now, an instant transfer, on [date], or a standing order with [schedule]. */
 data class PaymentReview(
     val account: AccountItem,
     val order: TransferOrder,
     val date: java.time.LocalDate? = null,
     val schedule: StandingOrderSchedule? = null,
+    val instant: Boolean = false,
     /** An earlier order to the same recipient and amount whose outcome is unknown or still open: maybe already paid. */
     val unconfirmed: PaymentOrderItem? = null,
 )
@@ -112,7 +113,7 @@ class PaymentsViewModel(
     fun bicFor(iban: String): String? = BankDirectory.byIban(iban)?.bic?.takeIf { it.isNotBlank() }
 
     /** Step 1: validate and show the review. Nothing is sent. */
-    fun review(from: AccountItem, order: TransferOrder, date: java.time.LocalDate? = null, schedule: StandingOrderSchedule? = null) {
+    fun review(from: AccountItem, order: TransferOrder, date: java.time.LocalDate? = null, schedule: StandingOrderSchedule? = null, instant: Boolean = false) {
         val error = validate(order)
             ?: date?.let(bankingService::validateExecutionDate)
             ?: schedule?.let(bankingService::validateSchedule)
@@ -121,7 +122,7 @@ class PaymentsViewModel(
                 o.recipientIban.equals(Iban.normalize(order.recipientIban), ignoreCase = true) &&
                 o.amount?.compareTo(order.amount) == 0
         }
-        _state.update { if (error != null) it.copy(error = error) else it.copy(review = PaymentReview(from, order, date, schedule, unconfirmed), error = null) }
+        _state.update { if (error != null) it.copy(error = error) else it.copy(review = PaymentReview(from, order, date, schedule, instant, unconfirmed), error = null) }
     }
 
     fun cancelReview() {
@@ -143,6 +144,7 @@ class PaymentsViewModel(
                     when {
                         review.schedule != null -> bankingService.createStandingOrder(from.id, order, review.schedule, bankingInteraction, confirmed = true)
                         review.date != null -> bankingService.scheduleTransfer(from.id, order, review.date, bankingInteraction, confirmed = true)
+                        review.instant -> bankingService.initiateInstantTransfer(from.id, order, bankingInteraction, confirmed = true)
                         else -> bankingService.initiateTransfer(from.id, order, bankingInteraction, confirmed = true)
                     }
                 }
@@ -153,6 +155,7 @@ class PaymentsViewModel(
             val sent = when {
                 review.schedule != null -> AppStrings.format(StringKey.MessageStandingOrderSetUp, order.recipientName)
                 review.date != null -> AppStrings.format(StringKey.MessageTransferScheduled, order.recipientName, de.findesk.util.Formats.date(review.date))
+                review.instant -> AppStrings[StringKey.MessageInstantTransferAccepted]
                 else -> AppStrings.format(StringKey.MessageTransferSent, order.recipientName)
             }
             // A new standing order makes the loaded list stale

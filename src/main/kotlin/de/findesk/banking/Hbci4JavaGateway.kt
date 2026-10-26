@@ -9,6 +9,7 @@ import org.hbci4java.HBCI4JavaConfig
 import org.kapott.hbci.GV.HBCIJob
 import org.kapott.hbci.GV_Result.GVRDauerList
 import org.kapott.hbci.GV_Result.GVRDauerNew
+import org.kapott.hbci.GV_Result.GVRInstUebSEPA
 import org.kapott.hbci.GV_Result.GVRKUms
 import org.kapott.hbci.GV_Result.GVRSaldoReq
 import org.kapott.hbci.GV_Result.HBCIJobResult
@@ -161,6 +162,42 @@ class Hbci4JavaGateway : FinTSGateway {
         }
         checkOrder(handler.execute(), job)
         FinTSClient.TransferResult(transactionId = job.jobResult.jobId ?: "", status = "ACCEPTED")
+    }
+
+    /**
+     * SEPA instant transfer (Echtzeitüberweisung, HKIPZ). The job takes the same parameters as a normal transfer;
+     * the difference is the answer: the bank reports an order status (1-9) it keeps raw in the result and a
+     * cancellation code when it stopped the order. FinDesk says "accepted by the bank", never "executed".
+     */
+    override fun instantTransfer(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+        order: TransferOrder,
+    ): FinTSClient.TransferResult = withHandler(connection, interaction) { handler ->
+        val src = handler.findKonto(fromIban)
+        val dst = Konto().apply {
+            iban = order.recipientIban
+            bic = order.recipientBic?.takeIf { it.isNotBlank() }
+            name = order.recipientName
+        }
+        val job = handler.newJob("InstUebSEPA").apply {
+            setParam("src", src)
+            setParam("dst", dst)
+            setParam("btg", Value(order.amount, "EUR"))
+            setParam("usage", order.purpose)
+            addToQueue()
+        }
+        checkOrder(handler.execute(), job)
+        val result = job.jobResult as? GVRInstUebSEPA
+        result?.cancellationCode?.takeIf { it.isNotBlank() }?.let {
+            throw OrderNotExecutedException(AppStrings.format(StringKey.ErrorInstantCancelled, it))
+        }
+        FinTSClient.TransferResult(
+            transactionId = result?.orderId ?: job.jobResult.jobId ?: "",
+            status = "ACCEPTED",
+            bankStatusCode = result?.orderStatus,
+        )
     }
 
     override fun scheduledTransfer(

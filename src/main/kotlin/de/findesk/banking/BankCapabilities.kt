@@ -17,6 +17,7 @@ data class BankCapabilities(
     val supportsStatements: Boolean get() = supportsMt940 || supportsCamt
     val supportsBalance: Boolean get() = supports(JOB_BALANCE)
     val supportsTransfer: Boolean get() = supports(JOB_TRANSFER)
+    val supportsInstantTransfer: Boolean get() = supports(JOB_INSTANT_TRANSFER)
     val supportsScheduledTransfer: Boolean get() = supports(JOB_SCHEDULED_TRANSFER)
 
     /** Reading and creating standing orders are separate jobs at some banks. */
@@ -30,6 +31,7 @@ data class BankCapabilities(
         const val JOB_STATEMENTS_CAMT = "KUmsAllCamt"
         const val JOB_BALANCE = "SaldoReq"
         const val JOB_TRANSFER = "UebSEPA"
+        const val JOB_INSTANT_TRANSFER = "InstUebSEPA"
         const val JOB_SCHEDULED_TRANSFER = "TermUebSEPA"
         const val JOB_STANDING_LIST = "DauerSEPAList"
         const val JOB_STANDING_NEW = "DauerSEPANew"
@@ -41,6 +43,7 @@ data class BankCapabilities(
             JOB_STATEMENTS_CAMT,
             JOB_BALANCE,
             JOB_TRANSFER,
+            JOB_INSTANT_TRANSFER,
             JOB_SCHEDULED_TRANSFER,
             JOB_STANDING_LIST,
             JOB_STANDING_NEW,

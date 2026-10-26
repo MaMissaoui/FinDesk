@@ -1023,6 +1023,8 @@ class ViewModelsTest {
             }
 
             override fun transfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = throw UnsupportedOperationException()
+
+            override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = throw UnsupportedOperationException()
         }
         val service = BankingService(finTSClient = FinTSClient(gateway = gateway, passportDir = File(tmp, "sync-passports")), today = { today })
         val vm = AccountsViewModel(bankingService = service)

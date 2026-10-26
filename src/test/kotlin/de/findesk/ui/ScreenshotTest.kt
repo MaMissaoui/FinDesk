@@ -16,6 +16,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Density
+import de.findesk.banking.BankCapabilities
 import de.findesk.banking.TransferOrder
 import de.findesk.data.database.DatabaseFactory
 import de.findesk.document.ReportService
@@ -170,6 +171,33 @@ class ScreenshotTest {
         render("payments-review-unconfirmed-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::reviewing) }
         // While an order is in flight the sidebar keeps the user on Payments
         render("payments-sending-locked-sidebar", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, lockedOn = Screen.PAYMENTS) }
+    }
+
+    /**
+     * The instant transfer (Echtzeitüberweisung): the form with Instant selected, and its review step, which warns
+     * that the money arrives within seconds and cannot be recalled.
+     */
+    @Test
+    fun `render the instant transfer form and review`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-instant").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        BankAccessRepositoryImpl().updateCapabilities(
+            bank,
+            "${BankCapabilities.JOB_TRANSFER},${BankCapabilities.JOB_INSTANT_TRANSFER},${BankCapabilities.JOB_SCHEDULED_TRANSFER},${BankCapabilities.JOB_STANDING_NEW}",
+        )
+        val order = TransferOrder("Vermieter GmbH", "DE02120300000000202051", null, BigDecimal("850.00"), "Miete Oktober")
+
+        fun reviewing(): PaymentsViewModel = PaymentsViewModel().apply {
+            runBlocking { load().join() }
+            review(state.value.accounts.single(), order, instant = true)
+            check(state.value.review != null) { "the review should be open" }
+        }
+        render("payments-instant-review", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::reviewing) }
+        render("payments-instant-review-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::reviewing) }
+        // Instant is the second segment of the execution row (the capabilities above keep it enabled)
+        render("payments-form-instant", 1440, 900, clickAt = Offset(500f, 689f)) { Frame(Screen.PAYMENTS, dark = false) }
     }
 
     /** The Payments "From" picker open: accounts grouped by bank on two readable lines instead of one long string. */

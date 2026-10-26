@@ -77,6 +77,17 @@ private class FakeGateway : FinTSGateway {
         return FinTSClient.TransferResult("job-1", "ACCEPTED")
     }
 
+    val instantTransfers = mutableListOf<Pair<String, TransferOrder>>()
+    var instantResult: FinTSClient.TransferResult = FinTSClient.TransferResult("inst-1", "ACCEPTED")
+    var instantFailsWith: Exception? = null
+
+    override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult {
+        interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
+        instantFailsWith?.let { throw it }
+        instantTransfers += fromIban to order
+        return instantResult
+    }
+
     val scheduled = mutableListOf<Triple<String, TransferOrder, LocalDate>>()
     val created = mutableListOf<Triple<String, TransferOrder, StandingOrderSchedule>>()
     val deleted = mutableListOf<StandingOrder>()
