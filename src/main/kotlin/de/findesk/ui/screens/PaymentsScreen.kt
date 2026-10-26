@@ -329,7 +329,7 @@ fun PaymentsScreen(
                 if (state.paymentOrders.isEmpty()) Text(s[StringKey.NoneYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 state.paymentOrders.forEach { order ->
                     // Transfer again only fills the form; sending still goes through the review and its confirmation
-                    val again = order.takeIf { it.recipientIban != null && it.amount != null && it.action != PaymentAction.STANDING_ORDER_DELETE }?.let { o ->
+                    val again = order.takeIf { it.recipientIban != null && it.amount != null && it.action in AGAIN_ACTIONS }?.let { o ->
                         menuItem(s[StringKey.TransferAgain]) {
                             from = state.accounts.firstOrNull { it.iban == o.accountIban } ?: from
                             name = o.recipientName.orEmpty()
@@ -669,6 +669,9 @@ fun PaymentsScreen(
         )
     }
 }
+
+/** Actions that paid someone; only their rows offer "Transfer again" (a cancellation or edit fills no form). */
+private val AGAIN_ACTIONS = setOf(PaymentAction.TRANSFER, PaymentAction.INSTANT_TRANSFER, PaymentAction.SCHEDULED_TRANSFER, PaymentAction.STANDING_ORDER_CREATE)
 
 private enum class Execution(val label: StringKey) { NOW(StringKey.ExecuteNow), INSTANT(StringKey.ExecuteInstant), ON_DATE(StringKey.ExecuteOnDate), STANDING(StringKey.ExecuteStanding) }
 

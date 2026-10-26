@@ -7,6 +7,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.repository.AccountRepositoryImpl
 import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.PaymentOrderRepositoryImpl
+import de.findesk.viewmodel.PaymentsViewModel
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -59,6 +60,14 @@ class ScheduledTransferListTest {
         override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult {
             interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
             return FinTSClient.TransferResult("inst-1", "ACCEPTED")
+        }
+
+        val scheduled = mutableListOf<Triple<String, TransferOrder, LocalDate>>()
+
+        override fun scheduledTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder, date: LocalDate): FinTSClient.TransferResult {
+            interaction.pin(connection.bankName, connection.userId) ?: throw BankingCancelledException()
+            scheduled += Triple(fromIban, order, date)
+            return FinTSClient.TransferResult("job-2", "SCHEDULED")
         }
 
         override fun listScheduledTransfers(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String): List<ScheduledTransfer> {
@@ -118,6 +127,30 @@ class ScheduledTransferListTest {
         assertEquals(giro, listed[1].fromIban)
         assertFalse(listed[1].canDelete)
         assertNull(listed[1].orderId)
+    }
+
+    @Test
+    fun `sending a scheduled transfer through the view model clears the loaded scheduled list`() = runBlocking {
+        val id = account()
+        val reported = scheduledTransfer()
+        gateway.reported += ScheduledGateway.Raw(reported.orderId, reported.fromIban, reported.order, reported.date, true)
+        // The view model's interaction shows dialogs; answer the PIN here instead
+        val scripted = object : FinTSGateway by gateway {
+            override fun listScheduledTransfers(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String) = gateway.listScheduledTransfers(connection, AskPin(), fromIban)
+            override fun scheduledTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder, date: LocalDate) = gateway.scheduledTransfer(connection, AskPin(), fromIban, order, date)
+        }
+        val vm = PaymentsViewModel(bankingService = BankingService(finTSClient = FinTSClient(gateway = scripted, passportDir = File(tmp, "passports-vm")), today = { today }))
+        vm.load().join()
+        val from = vm.state.value.accounts.single { it.id == id }
+        vm.loadScheduledTransfers(from).join()
+        assertEquals(1, vm.state.value.scheduledTransfers?.size)
+
+        vm.review(from, order, date = today.plusDays(3))
+        vm.confirmAndSend().join()
+
+        assertEquals(1, gateway.scheduled.size, "the scheduled transfer was sent")
+        assertNull(vm.state.value.scheduledTransfers, "a newly scheduled transfer makes the loaded list stale")
+        vm.close()
     }
 
     @Test
