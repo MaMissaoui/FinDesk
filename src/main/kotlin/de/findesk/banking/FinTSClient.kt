@@ -228,6 +228,15 @@ class FinTSClient(
         gateway.listStandingOrders(connection, interaction, fromIban)
     }
 
+    /** Read-only: loads a connection's scheduled transfers. Like every dialog, this asks for the PIN. */
+    suspend fun listScheduledTransfers(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        fromIban: String,
+    ): BankingResult<List<ScheduledTransfer>> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressLoadingScheduledTransfers]) { connection ->
+        gateway.listScheduledTransfers(connection, interaction, fromIban)
+    }
+
     suspend fun createStandingOrder(
         bankAccessId: Int,
         interaction: BankingInteraction,
@@ -244,6 +253,15 @@ class FinTSClient(
         existing: StandingOrder,
     ): BankingResult<Unit> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressDeletingStandingOrder]) { connection ->
         gateway.deleteStandingOrder(connection, interaction, existing)
+    }
+
+    /** Cancels a scheduled transfer (stops the bank executing it). This dialog always asks for the PIN. */
+    suspend fun deleteScheduledTransfer(
+        bankAccessId: Int,
+        interaction: BankingInteraction,
+        existing: ScheduledTransfer,
+    ): BankingResult<Unit> = run(bankAccessId, ConnectionStatus.CONNECTING, AppStrings[StringKey.ProgressDeletingScheduledTransfer]) { connection ->
+        gateway.deleteScheduledTransfer(connection, interaction, existing)
     }
 
     /** Edits a standing order (amount, purpose and schedule). Like every order, this dialog always asks for the PIN. */

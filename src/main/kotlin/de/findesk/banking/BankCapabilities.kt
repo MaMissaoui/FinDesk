@@ -33,6 +33,8 @@ data class BankCapabilities(
         const val JOB_TRANSFER = "UebSEPA"
         const val JOB_INSTANT_TRANSFER = "InstUebSEPA"
         const val JOB_SCHEDULED_TRANSFER = "TermUebSEPA"
+        const val JOB_SCHEDULED_LIST = "TermUebSEPAList"
+        const val JOB_SCHEDULED_DELETE = "TermUebSEPADel"
         const val JOB_STANDING_LIST = "DauerSEPAList"
         const val JOB_STANDING_NEW = "DauerSEPANew"
         const val JOB_STANDING_DELETE = "DauerSEPADel"
@@ -46,6 +48,8 @@ data class BankCapabilities(
             JOB_TRANSFER,
             JOB_INSTANT_TRANSFER,
             JOB_SCHEDULED_TRANSFER,
+            JOB_SCHEDULED_LIST,
+            JOB_SCHEDULED_DELETE,
             JOB_STANDING_LIST,
             JOB_STANDING_NEW,
             JOB_STANDING_DELETE,

@@ -4,6 +4,7 @@ import de.findesk.banking.BankCapabilities
 import de.findesk.banking.BankDirectory
 import de.findesk.banking.BankingResult
 import de.findesk.banking.BankingService
+import de.findesk.banking.ScheduledTransfer
 import de.findesk.banking.StandingOrder
 import de.findesk.banking.StandingOrderInterval
 import de.findesk.banking.StandingOrderSchedule
@@ -62,6 +63,12 @@ data class PaymentsState(
     val standingOrders: List<StandingOrder>? = null,
     val standingOrdersAccount: Int? = null,
     val isLoadingStandingOrders: Boolean = false,
+    /** Scheduled transfers of [scheduledTransfersAccount] as last loaded from the bank; null until loaded. */
+    val scheduledTransfers: List<ScheduledTransfer>? = null,
+    val scheduledTransfersAccount: Int? = null,
+    val isLoadingScheduledTransfers: Boolean = false,
+    /** Scheduled transfer the user asked to cancel, waiting for confirmation. */
+    val scheduledDeleteReview: ScheduledTransfer? = null,
     /** Standing order the user asked to delete, waiting for confirmation. */
     val deleteReview: StandingOrder? = null,
     /** Standing order the user asked to edit; the form dialog shows it. */
@@ -293,6 +300,63 @@ class PaymentsViewModel(
 
     fun cancelDelete() {
         _state.update { it.copy(deleteReview = null) }
+    }
+
+    /** Asks the bank for the account's scheduled transfers (needs the PIN). Read-only. */
+    fun loadScheduledTransfers(account: AccountItem): Job {
+        _state.update { it.copy(isLoadingScheduledTransfers = true, error = null, scheduledTransfersAccount = account.id) }
+        return launchSafely({ e -> _state.update { it.copy(isLoadingScheduledTransfers = false, error = e.userMessage()) } }) {
+            val result = bankingService.loadScheduledTransfers(account.id, bankingInteraction)
+            _state.update {
+                when (result) {
+                    is BankingResult.Success -> it.copy(isLoadingScheduledTransfers = false, scheduledTransfers = result.data)
+                    is BankingResult.Error -> it.copy(isLoadingScheduledTransfers = false, error = if (result.code == "CANCELLED") null else result.message)
+                }
+            }
+        }
+    }
+
+    fun requestScheduledDelete(existing: ScheduledTransfer) {
+        _state.update { it.copy(scheduledDeleteReview = existing) }
+    }
+
+    fun cancelScheduledDelete() {
+        _state.update { it.copy(scheduledDeleteReview = null) }
+    }
+
+    /** The user confirmed cancelling [PaymentsState.scheduledDeleteReview]; the bank then stops executing it. */
+    fun confirmScheduledDelete(): Job {
+        val existing = _state.value.scheduledDeleteReview ?: return Job().apply { complete() }
+        val accountId = _state.value.scheduledTransfersAccount ?: return Job().apply { complete() }
+        if (!sending.compareAndSet(false, true)) return Job().apply { complete() }
+        _state.update { it.copy(isSending = true, error = null, message = null) }
+        return launchSafely({ e ->
+            sending.set(false)
+            onError(e)
+        }) {
+            val result = try {
+                bankingService.deleteScheduledTransfer(accountId, existing, bankingInteraction, confirmed = true)
+            } finally {
+                sending.set(false)
+            }
+            refresh()
+            _state.update {
+                when (result) {
+                    is BankingResult.Success -> it.copy(
+                        isSending = false,
+                        scheduledDeleteReview = null,
+                        scheduledTransfers = it.scheduledTransfers?.minus(existing),
+                        message = AppStrings.format(StringKey.MessageScheduledTransferDeleted, existing.order.recipientName),
+                    )
+
+                    is BankingResult.Error -> it.copy(
+                        isSending = false,
+                        scheduledDeleteReview = if (result.code == "CANCELLED" || result.code == BankingService.OUTCOME_UNKNOWN) null else it.scheduledDeleteReview,
+                        error = if (result.code == "CANCELLED") null else result.message,
+                    )
+                }
+            }
+        }
     }
 
     /** The user confirmed deleting [PaymentsState.deleteReview]; this stops its future payments. */

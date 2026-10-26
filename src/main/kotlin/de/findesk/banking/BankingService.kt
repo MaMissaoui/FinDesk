@@ -521,6 +521,50 @@ class BankingService(
         }
     }
 
+    /** Read-only: the account's scheduled transfers as the bank reports them. */
+    suspend fun loadScheduledTransfers(fromAccountId: Int, interaction: BankingInteraction): BankingResult<List<ScheduledTransfer>> {
+        val account = withContext(Dispatchers.IO) { accountRepository.findAllItems().firstOrNull { it.id == fromAccountId } }
+            ?: return BankingResult.Error("NOT_FOUND", AppStrings[StringKey.ErrorAccountNotFound])
+        // No scheduled transfers for an account of an offline bank, nor for one whose identifier is not an IBAN
+        if (bankAccessRepository.findItem(account.bankAccessId)?.offline == true || !Iban.isValid(account.iban)) {
+            return BankingResult.Error("OFFLINE", AppStrings[StringKey.ErrorOrderOfflineAccount])
+        }
+        unsupported(account.bankAccessId, BankCapabilities.JOB_SCHEDULED_LIST)?.let { return BankingResult.Error("UNSUPPORTED", it) }
+        return finTSClient.listScheduledTransfers(account.bankAccessId, interaction, account.iban)
+    }
+
+    /**
+     * Cancels a scheduled transfer, so the bank does not execute it on [ScheduledTransfer.date]. Same guards as
+     * other orders; the bank decides with the recorded order data and the execution date.
+     */
+    suspend fun deleteScheduledTransfer(
+        fromAccountId: Int,
+        existing: ScheduledTransfer,
+        interaction: BankingInteraction,
+        confirmed: Boolean,
+    ): BankingResult<Unit> {
+        val check = if (existing.orderId == null || !existing.canDelete) AppStrings[StringKey.ErrorCannotDeleteScheduledTransfer] else null
+        return sendOrder(
+            action = "SCHEDULED_TRANSFER_DELETE",
+            fromAccountId = fromAccountId,
+            order = existing.order,
+            confirmed = confirmed,
+            check = check,
+            describe = " on ${existing.date} (id ${existing.orderId})",
+            // The bank may report names/purposes longer than we accept when sending; don't re-validate those
+            validateOrder = false,
+            accountCheck = { account ->
+                if (!Iban.normalize(existing.fromIban).equals(account.iban, ignoreCase = true)) {
+                    AppStrings[StringKey.ErrorScheduledTransferOtherAccount]
+                } else {
+                    unsupported(account.bankAccessId, BankCapabilities.JOB_SCHEDULED_DELETE)
+                }
+            },
+        ) { account, _ ->
+            finTSClient.deleteScheduledTransfer(account.bankAccessId, interaction, existing)
+        }
+    }
+
     /**
      * Shared guard for everything that changes an order at the bank: explicit confirmation of the exact order, a valid
      * order (and [check], e.g. the schedule), an EUR source account and any [accountCheck]. Every attempt, including
