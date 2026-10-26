@@ -454,7 +454,7 @@ class BankingService(
             (schedule.lastDate?.let { " until $it" } ?: "")
         val check = if (existing.orderId == null || !existing.canChange) AppStrings[StringKey.ErrorCannotEditStandingOrder] else validateEditedOrder(existing, order, schedule)
         return sendOrder(
-            action = "STANDING_ORDER_EDIT",
+            action = PaymentAction.STANDING_ORDER_EDIT,
             fromAccountId = fromAccountId,
             order = order,
             confirmed = confirmed,

@@ -189,6 +189,7 @@ object PaymentAction {
     const val SCHEDULED_TRANSFER = "SCHEDULED_TRANSFER"
     const val STANDING_ORDER_CREATE = "STANDING_ORDER_CREATE"
     const val STANDING_ORDER_DELETE = "STANDING_ORDER_DELETE"
+    const val STANDING_ORDER_EDIT = "STANDING_ORDER_EDIT"
 }
 
 /** Lifecycle of a [PaymentOrderItem]; only the bank's answer changes it after it was recorded. */

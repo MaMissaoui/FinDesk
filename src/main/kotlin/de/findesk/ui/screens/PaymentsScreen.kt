@@ -408,24 +408,18 @@ fun PaymentsScreen(
     // While the change review of an edit is open it sits on top; the form stays for the way back
     state.editReview?.takeIf { state.review == null }?.let { o ->
         val account = state.accounts.firstOrNull { Iban.normalize(it.iban) == Iban.normalize(o.fromIban) }
+        // The form's values live in the view model's draft, so Back from the change review restores them
+        val draft = state.editDraft ?: return@let
         // Amount, purpose and schedule are editable; the recipient is not (standingOrderForm holds the current values)
-        var amount by remember(o) { mutableStateOf(o.order.amount.toPlainString()) }
-        var purpose by remember(o) { mutableStateOf(o.order.purpose) }
-        var interval by remember(o) { mutableStateOf(o.schedule.interval ?: StandingOrderInterval.MONTHLY) }
-        var dayText by remember(o) { mutableStateOf(o.schedule.executionDay.toString()) }
-        var firstDateText by remember(o) { mutableStateOf(Formats.date(o.schedule.firstDate)) }
-        var lastDateText by remember(o) { mutableStateOf(o.schedule.lastDate?.let(Formats::date).orEmpty()) }
-
-        val parsedAmount = Formats.parseAmount(amount)
-        val firstDate = Formats.parseDate(firstDateText)
-        val lastDate = lastDateText.takeIf { it.isNotBlank() }?.let(Formats::parseDate)
-        val schedule = firstDate?.let {
-            StandingOrderSchedule(it, interval.timeUnit, interval.step, dayText.toIntOrNull() ?: 0, lastDate)
-        }
+        val parsedAmount = Formats.parseAmount(draft.amountText)
+        val firstDate = Formats.parseDate(draft.firstDateText)
+        val lastDate = draft.lastDateText.takeIf { it.isNotBlank() }?.let(Formats::parseDate)
+        val schedule = vm.editedSchedule(o, firstDate, draft.interval, draft.executionDayText, lastDate)
         val order = parsedAmount?.let {
-            TransferOrder(o.order.recipientName, o.order.recipientIban, o.order.recipientBic, it, purpose)
+            TransferOrder(o.order.recipientName, o.order.recipientIban, o.order.recipientBic, it, draft.purpose)
         }
         val editError = order?.let { o2 -> schedule?.let { s2 -> vm.validateEdited(o, o2, s2) } }
+        val unchanged = order?.let { o2 -> schedule?.let { s2 -> vm.editUnchanged(o, o2, s2) } } == true
         // A running order's start must stay as it is; only a future start can be moved
         val firstDateEditable = o.schedule.firstDate.isAfter(java.time.LocalDate.now())
 
@@ -464,53 +458,65 @@ fun PaymentsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
-                        amount,
-                        { amount = it },
+                        draft.amountText,
+                        { vm.updateEditDraft(draft.copy(amountText = it)) },
                         label = { Text(s[StringKey.AmountEuro]) },
-                        isError = amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
-                        supportingText = if (amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) ({ Text(s[StringKey.EnterAmountGreaterThan0]) }) else null,
+                        isError = draft.amountText.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
+                        supportingText = if (draft.amountText.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) ({ Text(s[StringKey.EnterAmountGreaterThan0]) }) else null,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
-                        purpose,
-                        { purpose = it.take(BankingService.MAX_PURPOSE_LENGTH) },
+                        draft.purpose,
+                        { vm.updateEditDraft(draft.copy(purpose = it.take(BankingService.MAX_PURPOSE_LENGTH))) },
                         label = { Text(s[StringKey.PurposeVerwendungszweck]) },
-                        supportingText = { Text("${purpose.length}/${BankingService.MAX_PURPOSE_LENGTH}") },
+                        supportingText = { Text("${draft.purpose.length}/${BankingService.MAX_PURPOSE_LENGTH}") },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
-                            firstDateText,
-                            { firstDateText = it },
+                            draft.firstDateText,
+                            { vm.updateEditDraft(draft.copy(firstDateText = it)) },
                             label = { Text(s[StringKey.FirstExecution]) },
                             placeholder = { Text("dd.mm.yyyy") },
-                            isError = firstDateText.isNotBlank() && firstDate == null,
-                            supportingText = { if (firstDateText.isNotBlank() && firstDate == null) Text(s[StringKey.EnterValidDate]) },
+                            isError = draft.firstDateText.isNotBlank() && firstDate == null,
+                            supportingText = { if (draft.firstDateText.isNotBlank() && firstDate == null) Text(s[StringKey.EnterValidDate]) },
                             singleLine = true,
                             enabled = firstDateEditable,
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedTextField(
-                            lastDateText,
-                            { lastDateText = it },
+                            draft.lastDateText,
+                            { vm.updateEditDraft(draft.copy(lastDateText = it)) },
                             label = { Text(s[StringKey.LastExecutionOptional]) },
                             placeholder = { Text("dd.mm.yyyy") },
-                            isError = lastDateText.isNotBlank() && lastDate == null,
-                            supportingText = { if (lastDateText.isNotBlank() && lastDate == null) Text(s[StringKey.EnterValidDate]) },
+                            isError = draft.lastDateText.isNotBlank() && lastDate == null,
+                            supportingText = { if (draft.lastDateText.isNotBlank() && lastDate == null) Text(s[StringKey.EnterValidDate]) },
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
                     }
-                    DropdownSelector(
-                        label = s[intervalLabel(interval)],
-                        options = StandingOrderInterval.entries,
-                        optionLabel = { s[intervalLabel(it)] },
-                        onSelect = { interval = it },
-                    )
+                    if (o.schedule.interval == null) {
+                        // The bank's interval is not one FinDesk offers (e.g. every 2 months): it stays as reported, so read-only
+                        OutlinedTextField(
+                            intervalText(o.schedule, s),
+                            {},
+                            label = { Text(s[StringKey.IntervalLabel]) },
+                            enabled = false,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        DropdownSelector(
+                            label = s[intervalLabel(draft.interval)],
+                            options = StandingOrderInterval.entries,
+                            optionLabel = { s[intervalLabel(it)] },
+                            onSelect = { vm.updateEditDraft(draft.copy(interval = it)) },
+                        )
+                    }
                     OutlinedTextField(
-                        dayText,
-                        { dayText = it.filter { c -> c.isDigit() }.take(2) },
+                        draft.executionDayText,
+                        { vm.updateEditDraft(draft.copy(executionDayText = it.filter { c -> c.isDigit() }.take(2))) },
                         label = { Text(s[StringKey.ScheduleDay]) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -520,7 +526,7 @@ fun PaymentsScreen(
             },
             confirmButton = {
                 Button(
-                    enabled = account != null && parsedAmount != null && parsedAmount.signum() > 0 && schedule != null && editError == null && !state.isSending,
+                    enabled = account != null && parsedAmount != null && parsedAmount.signum() > 0 && schedule != null && editError == null && !state.isSending && !unchanged,
                     onClick = {
                         account?.let { vm.reviewEdit(it, o, order!!, schedule!!) }
                     },

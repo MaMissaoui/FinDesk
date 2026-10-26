@@ -720,6 +720,7 @@ object Translations {
         K.ErrorCannotDeleteStandingOrder to "The bank does not allow deleting this standing order here",
         K.ErrorCannotEditStandingOrder to "The bank doesn't allow changing this standing order here; use your online banking.",
         K.ErrorEditRecipientFixed to "The recipient of a standing order can't be changed; delete it and create a new one.",
+        K.ErrorEditNothingChanged to "Nothing was changed.",
         K.ErrorStandingOrderOtherAccount to "The standing order belongs to another account",
         K.ErrorSepaEurOnly to "SEPA transfers can only be sent from EUR accounts (this account is in %s)",
         K.ErrorSyncFailed to "Sync failed",
@@ -845,6 +846,7 @@ object Translations {
         K.PaymentActionScheduled to "Scheduled transfer",
         K.PaymentActionStandingOrder to "Standing order",
         K.PaymentActionStandingOrderDelete to "Standing order deleted",
+        K.PaymentActionStandingOrderEdit to "Standing order changed",
         K.PaymentOrderId to "Reference",
         K.PaymentBankStatus to "Bank status: %s",
 
@@ -1640,6 +1642,7 @@ object Translations {
         K.ErrorCannotDeleteStandingOrder to "Die Bank erlaubt das Löschen dieses Dauerauftrags hier nicht",
         K.ErrorCannotEditStandingOrder to "Die Bank erlaubt hier keine Änderung dieses Dauerauftrags; nutzen Sie Ihr Online-Banking.",
         K.ErrorEditRecipientFixed to "Der Empfänger eines Dauerauftrags lässt sich nicht ändern; löschen Sie ihn und legen Sie einen neuen an.",
+        K.ErrorEditNothingChanged to "Es wurde nichts geändert.",
         K.ErrorStandingOrderOtherAccount to "Der Dauerauftrag gehört zu einem anderen Konto",
         K.ErrorSepaEurOnly to "SEPA-Überweisungen können nur von EUR-Konten gesendet werden (dieses Konto lautet auf %s)",
         K.ErrorSyncFailed to "Synchronisierung fehlgeschlagen",
@@ -1765,6 +1768,7 @@ object Translations {
         K.PaymentActionScheduled to "Terminüberweisung",
         K.PaymentActionStandingOrder to "Dauerauftrag",
         K.PaymentActionStandingOrderDelete to "Dauerauftrag gelöscht",
+        K.PaymentActionStandingOrderEdit to "Dauerauftrag geändert",
         K.PaymentOrderId to "Referenz",
         K.PaymentBankStatus to "Bankstatus: %s",
 
@@ -2560,6 +2564,7 @@ object Translations {
         K.ErrorCannotDeleteStandingOrder to "La banque n'autorise pas la suppression de ce virement permanent ici",
         K.ErrorCannotEditStandingOrder to "La banque ne permet pas de modifier cet ordre permanent ici ; utilisez votre banque en ligne.",
         K.ErrorEditRecipientFixed to "Le bénéficiaire d'un ordre permanent ne peut pas être modifié ; supprimez-le et créez-en un nouveau.",
+        K.ErrorEditNothingChanged to "Rien n'a été modifié.",
         K.ErrorStandingOrderOtherAccount to "Le virement permanent appartient à un autre compte",
         K.ErrorSepaEurOnly to "Les virements SEPA ne peuvent être envoyés que depuis des comptes EUR (ce compte est en %s)",
         K.ErrorSyncFailed to "Échec de la synchronisation",
@@ -2685,6 +2690,7 @@ object Translations {
         K.PaymentActionScheduled to "Virement programmé",
         K.PaymentActionStandingOrder to "Virement permanent",
         K.PaymentActionStandingOrderDelete to "Virement permanent supprimé",
+        K.PaymentActionStandingOrderEdit to "Ordre permanent modifié",
         K.PaymentOrderId to "Référence",
         K.PaymentBankStatus to "Statut bancaire : %s",
 
