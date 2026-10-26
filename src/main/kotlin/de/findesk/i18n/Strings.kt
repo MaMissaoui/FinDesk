@@ -110,6 +110,7 @@ class Strings(
         PaymentAction.SCHEDULED_TRANSFER -> this[StringKey.PaymentActionScheduled]
         PaymentAction.STANDING_ORDER_CREATE -> this[StringKey.PaymentActionStandingOrder]
         PaymentAction.STANDING_ORDER_DELETE -> this[StringKey.PaymentActionStandingOrderDelete]
+        PaymentAction.STANDING_ORDER_EDIT -> this[StringKey.PaymentActionStandingOrderEdit]
         else -> action
     }
 

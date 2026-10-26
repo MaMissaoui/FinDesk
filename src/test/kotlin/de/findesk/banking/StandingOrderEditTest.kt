@@ -247,6 +247,65 @@ class StandingOrderEditTest {
         assertEquals(1, gateway.edits.size)
         assertNull(vm.state.value.review)
         assertNull(vm.state.value.editReview, "the edit form must not reopen after the order was sent")
+        assertNull(vm.state.value.editDraft, "the draft is cleared with the edit")
         vm.close()
+    }
+
+    @Test
+    fun `editing only the amount of an every-2-months order keeps the bank's step and time unit`() {
+        val vm = PaymentsViewModel(bankingService = service)
+        // "M"/2 is not a StandingOrderInterval FinDesk offers; the form's dropdown falls back to monthly for it
+        val existing = standingOrder().copy(schedule = StandingOrderSchedule(LocalDate.of(2026, 11, 1), "M", 2, 1, null))
+
+        val schedule = vm.editedSchedule(existing, existing.schedule.firstDate, StandingOrderInterval.MONTHLY, "1", null)!!
+
+        assertEquals(2, schedule.step, "the gateway must receive the bank's step, not the dropdown's fallback")
+        assertEquals("M", schedule.timeUnit, "the gateway must receive the bank's time unit")
+        assertNull(schedule.interval)
+        vm.close()
+    }
+
+    @Test
+    fun `back from the change review keeps the entered values`() = runBlocking {
+        val id = account()
+        val vm = PaymentsViewModel(bankingService = service)
+        vm.load().join()
+        val from = vm.state.value.accounts.single { it.id == id }
+        val existing = standingOrder()
+
+        vm.requestEdit(existing)
+        vm.updateEditDraft(vm.state.value.editDraft!!.copy(amountText = "42.00"))
+        vm.reviewEdit(from, existing, editedOrder(BigDecimal("42.00")), editedSchedule())
+        assertNotNull(vm.state.value.review?.editOf)
+        vm.cancelReview()
+
+        assertEquals("42.00", vm.state.value.editDraft?.amountText, "Back from the review must restore the form's values")
+        vm.cancelEdit()
+        assertNull(vm.state.value.editDraft, "closing the edit clears the draft")
+        vm.close()
+    }
+
+    @Test
+    fun `an edit that changes nothing sets ErrorEditNothingChanged and opens no review`() = runBlocking {
+        val id = account()
+        val vm = PaymentsViewModel(bankingService = service)
+        vm.load().join()
+        val from = vm.state.value.accounts.single { it.id == id }
+        val existing = standingOrder()
+
+        vm.reviewEdit(from, existing, existing.order, existing.schedule)
+
+        assertEquals(AppStrings[StringKey.ErrorEditNothingChanged], vm.state.value.error)
+        assertNull(vm.state.value.review, "an unchanged edit opens no review")
+        assertTrue(gateway.edits.isEmpty())
+        vm.close()
+    }
+
+    @Test
+    fun `the edit action is shown as words, not the raw code`() {
+        val action = AppStrings.current.paymentAction(de.findesk.model.PaymentAction.STANDING_ORDER_EDIT)
+
+        assertNotEquals(de.findesk.model.PaymentAction.STANDING_ORDER_EDIT, action, "the recent transfers list must not show the raw code")
+        assertEquals("Standing order changed", action)
     }
 }

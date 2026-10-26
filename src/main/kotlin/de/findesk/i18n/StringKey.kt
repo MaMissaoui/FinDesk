@@ -797,6 +797,7 @@ enum class StringKey {
     ErrorCannotDeleteStandingOrder,
     ErrorCannotEditStandingOrder,
     ErrorEditRecipientFixed,
+    ErrorEditNothingChanged,
     ErrorStandingOrderOtherAccount,
     ErrorSepaEurOnly,
     ErrorSyncFailed,
@@ -924,6 +925,7 @@ enum class StringKey {
     PaymentActionScheduled,
     PaymentActionStandingOrder,
     PaymentActionStandingOrderDelete,
+    PaymentActionStandingOrderEdit,
     PaymentOrderId,
     PaymentBankStatus,
 

@@ -5,6 +5,7 @@ import de.findesk.banking.BankDirectory
 import de.findesk.banking.BankingResult
 import de.findesk.banking.BankingService
 import de.findesk.banking.StandingOrder
+import de.findesk.banking.StandingOrderInterval
 import de.findesk.banking.StandingOrderSchedule
 import de.findesk.banking.TransferOrder
 import de.findesk.i18n.AppStrings
@@ -15,6 +16,7 @@ import de.findesk.model.PaymentOrderStatus
 import de.findesk.repository.*
 import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AppInfo
+import de.findesk.util.Formats
 import de.findesk.util.Iban
 import de.findesk.util.LOAN_TYPE
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +42,18 @@ data class PaymentReview(
     val editOf: StandingOrder? = null,
 )
 
+/** The standing-order edit form's values; kept in the state so Back from the change review restores them. */
+data class StandingOrderEditDraft(
+    val amountText: String,
+    val purpose: String,
+    /** The dropdown's interval; ignored for an order whose own interval FinDesk doesn't offer. */
+    val interval: StandingOrderInterval,
+    /** Execution day as typed (digits only). */
+    val executionDayText: String,
+    val firstDateText: String,
+    val lastDateText: String,
+)
+
 data class PaymentsState(
     val accounts: List<AccountItem> = emptyList(),
     /** Order waiting for the user's explicit confirmation. */
@@ -52,6 +66,8 @@ data class PaymentsState(
     val deleteReview: StandingOrder? = null,
     /** Standing order the user asked to edit; the form dialog shows it. */
     val editReview: StandingOrder? = null,
+    /** What the user typed in the edit form; cleared with [editReview]. */
+    val editDraft: StandingOrderEditDraft? = null,
     /** Locally recorded orders sent to a bank, newest first, with the bank's answer. */
     val paymentOrders: List<PaymentOrderItem> = emptyList(),
     /** Known capabilities per bank access id; an absent entry means "unknown" (nothing is hidden). */
@@ -137,18 +153,58 @@ class PaymentsViewModel(
     /** Validation of an edit shown before the review; reviewed orders are checked again in [BankingService]. */
     fun validateEdited(existing: StandingOrder, order: TransferOrder, schedule: StandingOrderSchedule): String? = bankingService.validateEditedOrder(existing, order, schedule)
 
+    /**
+     * The edited schedule from the form's values. An interval FinDesk doesn't offer (the existing schedule's
+     * [StandingOrderSchedule.interval] is null, e.g. every 2 months) keeps the bank's time unit and step instead
+     * of silently becoming the [interval] the dropdown fell back to.
+     */
+    fun editedSchedule(existing: StandingOrder, firstDate: java.time.LocalDate?, interval: StandingOrderInterval, executionDayText: String, lastDate: java.time.LocalDate?): StandingOrderSchedule? = firstDate?.let {
+        val day = executionDayText.toIntOrNull() ?: 0
+        if (existing.schedule.interval == null) {
+            StandingOrderSchedule(it, existing.schedule.timeUnit, existing.schedule.step, day, lastDate)
+        } else {
+            StandingOrderSchedule.of(it, interval, day, lastDate)
+        }
+    }
+
+    /** Whether an edit changes nothing: the same amount (by value), a purpose equal when trimmed and the same schedule fields. */
+    fun editUnchanged(existing: StandingOrder, order: TransferOrder, schedule: StandingOrderSchedule): Boolean = order.amount.compareTo(existing.order.amount) == 0 &&
+        order.purpose.trim() == existing.order.purpose.trim() &&
+        schedule == existing.schedule
+
     /** Opens the edit form of a standing order; the edit is reviewed explicitly before it is sent. */
     fun requestEdit(order: StandingOrder) {
-        _state.update { it.copy(editReview = order) }
+        _state.update {
+            it.copy(
+                editReview = order,
+                editDraft = StandingOrderEditDraft(
+                    amountText = order.order.amount.toPlainString(),
+                    purpose = order.order.purpose,
+                    interval = order.schedule.interval ?: StandingOrderInterval.MONTHLY,
+                    executionDayText = order.schedule.executionDay.toString(),
+                    firstDateText = Formats.date(order.schedule.firstDate),
+                    lastDateText = order.schedule.lastDate?.let(Formats::date).orEmpty(),
+                ),
+            )
+        }
+    }
+
+    /** Updates the edit form's values, which survive Back from the change review. */
+    fun updateEditDraft(draft: StandingOrderEditDraft) {
+        _state.update { it.copy(editDraft = draft) }
     }
 
     fun cancelEdit() {
-        _state.update { it.copy(editReview = null) }
+        _state.update { it.copy(editReview = null, editDraft = null) }
     }
 
     /** Step 1 of an edit: validate and show the change review. Nothing is sent. */
     fun reviewEdit(from: AccountItem, existing: StandingOrder, order: TransferOrder, schedule: StandingOrderSchedule) {
-        val error = bankingService.validateEditedOrder(existing, order, schedule)
+        val error = if (editUnchanged(existing, order, schedule)) {
+            AppStrings[StringKey.ErrorEditNothingChanged]
+        } else {
+            bankingService.validateEditedOrder(existing, order, schedule)
+        }
         _state.update { if (error != null) it.copy(error = error) else it.copy(review = PaymentReview(from, order, schedule = schedule, editOf = existing), error = null) }
     }
 
@@ -209,7 +265,7 @@ class PaymentsViewModel(
                     )
                 }.let { s ->
                     // A closed review ends the edit too: the form must not reopen after a sent, cancelled or unknown order
-                    if (review.editOf != null && s.review == null) s.copy(editReview = null) else s
+                    if (review.editOf != null && s.review == null) s.copy(editReview = null, editDraft = null) else s
                 }
             }
             // After a successful edit the list shows the changed order without another click on "Load from bank"
