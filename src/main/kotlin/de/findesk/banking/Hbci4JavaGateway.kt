@@ -325,7 +325,9 @@ class Hbci4JavaGateway : FinTSGateway {
                 ),
                 date = date.toLocalDate(),
                 // Trust the bank: if it says no (or gave no id), deleting is left to online banking
-                canDelete = t.can_delete && t.orderid != null,
+                canDelete = t.can_delete && t.orderid != null &&
+                    // The entry shows 0.00; never cancel it with a made-up amount
+                    t.value != null,
             )
         }
     }

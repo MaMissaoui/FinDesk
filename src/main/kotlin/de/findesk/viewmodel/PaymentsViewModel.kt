@@ -259,6 +259,8 @@ class PaymentsViewModel(
             }
             // A new or changed standing order makes the loaded list stale
             if (result is BankingResult.Success && review.schedule != null) _state.update { it.copy(standingOrders = null) }
+            // So does a new scheduled transfer
+            if (result is BankingResult.Success && review.date != null) _state.update { it.copy(scheduledTransfers = null) }
             _state.update {
                 when (result) {
                     is BankingResult.Success -> it.copy(isSending = false, review = null, message = sent)
