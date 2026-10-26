@@ -185,6 +185,7 @@ enum class Direction { ALL, INCOME, EXPENSES }
 /** Actions recorded in [PaymentOrderItem.action]. */
 object PaymentAction {
     const val TRANSFER = "TRANSFER"
+    const val INSTANT_TRANSFER = "INSTANT_TRANSFER"
     const val SCHEDULED_TRANSFER = "SCHEDULED_TRANSFER"
     const val STANDING_ORDER_CREATE = "STANDING_ORDER_CREATE"
     const val STANDING_ORDER_DELETE = "STANDING_ORDER_DELETE"

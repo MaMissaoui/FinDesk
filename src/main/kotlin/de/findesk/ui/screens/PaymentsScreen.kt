@@ -289,7 +289,7 @@ fun PaymentsScreen(
                     RowContextMenu(again) {
                         Column(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(order.recipientName ?: paymentActionLabel(order.action, s), style = MaterialTheme.typography.bodySmall)
+                                Text(order.recipientName ?: s.paymentAction(order.action), style = MaterialTheme.typography.bodySmall)
                                 order.amount?.let { Text(Formats.money(it, order.currency), style = MaterialTheme.typography.bodySmall) }
                                 Text(
                                     s.paymentStatus(order.status),
@@ -298,17 +298,18 @@ fun PaymentsScreen(
                                 )
                             }
                             Text(
-                                "${paymentActionLabel(order.action, s)} · ${Formats.dateTime(order.createdAt)}",
+                                "${s.paymentAction(order.action)} · ${Formats.dateTime(order.createdAt)}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             order.bankOrderId?.let { Text("${s[StringKey.PaymentOrderId]}: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             order.message?.let {
-                                // An accepted order's stored detail is its bank status code, not an error
+                                // An accepted order's stored detail is its raw bank status code, not an error
+                                val accepted = order.status == PaymentOrderStatus.ACCEPTED
                                 Text(
-                                    it,
+                                    if (accepted) s.format(StringKey.PaymentBankStatus, it) else it,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (order.status == PaymentOrderStatus.ACCEPTED) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                                    color = if (accepted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
                                 )
                             }
                         }
@@ -429,9 +430,6 @@ fun PaymentsScreen(
 }
 
 private enum class Execution(val label: StringKey) { NOW(StringKey.ExecuteNow), INSTANT(StringKey.ExecuteInstant), ON_DATE(StringKey.ExecuteOnDate), STANDING(StringKey.ExecuteStanding) }
-
-/** Label of an order's action in the recent list, including the instant transfer (see [Strings.paymentAction]). */
-private fun paymentActionLabel(action: String, s: Strings): String = if (action == "INSTANT_TRANSFER") s[StringKey.PaymentActionInstant] else s.paymentAction(action)
 
 private fun intervalLabel(i: StandingOrderInterval): StringKey = when (i) {
     StandingOrderInterval.WEEKLY -> StringKey.IntervalWeekly

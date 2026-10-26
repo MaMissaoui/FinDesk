@@ -835,6 +835,7 @@ object Translations {
         K.PaymentActionStandingOrder to "Standing order",
         K.PaymentActionStandingOrderDelete to "Standing order deleted",
         K.PaymentOrderId to "Reference",
+        K.PaymentBankStatus to "Bank status: %s",
 
         K.BankOfflineHint to "Offline: import statements in Transactions.",
         K.IbanOrCardLast4 to "IBAN or last 4 digits of the card",
@@ -1743,6 +1744,7 @@ object Translations {
         K.PaymentActionStandingOrder to "Dauerauftrag",
         K.PaymentActionStandingOrderDelete to "Dauerauftrag gelöscht",
         K.PaymentOrderId to "Referenz",
+        K.PaymentBankStatus to "Bankstatus: %s",
 
         K.BankOfflineHint to "Offline: Umsätze im Bereich „Umsätze“ importieren.",
         K.IbanOrCardLast4 to "IBAN oder die letzten 4 Ziffern der Karte",
@@ -2651,6 +2653,7 @@ object Translations {
         K.PaymentActionStandingOrder to "Virement permanent",
         K.PaymentActionStandingOrderDelete to "Virement permanent supprimé",
         K.PaymentOrderId to "Référence",
+        K.PaymentBankStatus to "Statut bancaire : %s",
 
         K.BankOfflineHint to "Hors ligne : importez les relevés dans « Opérations ».",
         K.IbanOrCardLast4 to "IBAN ou 4 derniers chiffres de la carte",

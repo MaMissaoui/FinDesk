@@ -106,6 +106,7 @@ class Strings(
 
     fun paymentAction(action: String): String = when (action) {
         PaymentAction.TRANSFER -> this[StringKey.PaymentActionTransfer]
+        PaymentAction.INSTANT_TRANSFER -> this[StringKey.PaymentActionInstant]
         PaymentAction.SCHEDULED_TRANSFER -> this[StringKey.PaymentActionScheduled]
         PaymentAction.STANDING_ORDER_CREATE -> this[StringKey.PaymentActionStandingOrder]
         PaymentAction.STANDING_ORDER_DELETE -> this[StringKey.PaymentActionStandingOrderDelete]
