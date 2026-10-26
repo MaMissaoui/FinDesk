@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import de.findesk.banking.BankCapabilities
 import de.findesk.banking.BankingService
 import de.findesk.banking.StandingOrderInterval
 import de.findesk.banking.StandingOrderSchedule
@@ -77,6 +78,7 @@ fun PaymentsScreen(
     val capabilities = from?.let { state.bankCapabilities[it.bankAccessId] }
     val scheduledOk = capabilities?.supportsScheduledTransfer != false
     val standingOk = capabilities?.supportsStandingOrders != false
+    val scheduledListOk = capabilities?.supports(BankCapabilities.JOB_SCHEDULED_LIST) != false
     // Instant transfers need the bank's explicit answer: an unknown set is not enough, because the order reaches the
     // bank within seconds
     val instantOk = capabilities?.supportsInstantTransfer == true
@@ -278,6 +280,47 @@ fun PaymentsScreen(
                         }
                         IconButton(enabled = o.canDelete && !state.isSending, onClick = { vm.requestDelete(o) }) {
                             Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteStandingOrderTo, o.order.recipientName))
+                        }
+                    }
+                }
+            }
+            SectionCard(
+                s[StringKey.ScheduledTransfers],
+                Modifier.fillMaxWidth(),
+                actions = {
+                    if (state.isLoadingScheduledTransfers) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    DisabledReason(
+                        when {
+                            from == null -> s[StringKey.HintNeedsAccount]
+                            !scheduledListOk -> s[StringKey.NotOfferedByBank]
+                            else -> null
+                        },
+                    ) {
+                        TextButton(enabled = from != null && scheduledListOk && !state.isLoadingScheduledTransfers && !state.isSending, onClick = { from?.let(vm::loadScheduledTransfers) }) {
+                            Text(s[StringKey.LoadFromBank])
+                        }
+                    }
+                },
+            ) {
+                val transfers = state.scheduledTransfers?.takeIf { state.scheduledTransfersAccount == from?.id }
+                when {
+                    !scheduledListOk -> Text(s[StringKey.NotOfferedByBank], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    transfers == null -> Text(s[StringKey.ScheduledTransfersHint], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    transfers.isEmpty() -> Text(s[StringKey.NoScheduledTransfers], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                transfers?.forEach { t ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(t.order.recipientName, fontWeight = FontWeight.Medium)
+                            Text(
+                                Formats.date(t.date) + " · " + Formats.iban(Iban.normalize(t.order.recipientIban)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(Formats.money(t.order.amount), fontWeight = FontWeight.SemiBold)
+                        IconButton(enabled = t.canDelete && !state.isSending, onClick = { vm.requestScheduledDelete(t) }) {
+                            Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteScheduledTransferTo, t.order.recipientName))
                         }
                     }
                 }
@@ -582,6 +625,47 @@ fun PaymentsScreen(
                 ) { Text(s[StringKey.Delete]) }
             },
             dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelDelete) { Text(s[StringKey.Back]) } },
+        )
+    }
+
+    state.scheduledDeleteReview?.let { t ->
+        var acknowledged by remember(t) { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { if (!state.isSending) vm.cancelScheduledDelete() },
+            title = { Text(s[StringKey.DeleteScheduledTransfer]) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(440.dp)) {
+                    ReviewHeader(
+                        amount = Formats.money(t.order.amount),
+                        recipient = t.order.recipientName,
+                        warning = null,
+                    )
+                    val labels = labelColumnWidth(s[StringKey.To], s[StringKey.Iban], s[StringKey.Execution])
+                    ReviewRow(s[StringKey.To], t.order.recipientName, labels)
+                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(t.order.recipientIban)), labels)
+                    ReviewRow(s[StringKey.Execution], Formats.date(t.date), labels)
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it }, enabled = !state.isSending)
+                        Text(s[StringKey.DeleteScheduledTransferAcknowledgement])
+                    }
+                    if (state.isSending) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(s[StringKey.WaitingForBank])
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = acknowledged && !state.isSending,
+                    onClick = { vm.confirmScheduledDelete() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text(s[StringKey.Delete]) }
+            },
+            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelScheduledDelete) { Text(s[StringKey.Back]) } },
         )
     }
 }

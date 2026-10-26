@@ -74,6 +74,17 @@ data class StandingOrder(
     val canChange: Boolean = false,
 )
 
+/** A scheduled transfer (Terminüberweisung) as the bank reports it. */
+data class ScheduledTransfer(
+    /** Bank's id; needed to delete it. */
+    val orderId: String?,
+    val fromIban: String,
+    val order: TransferOrder,
+    /** The day the bank is to execute it. */
+    val date: LocalDate,
+    val canDelete: Boolean = true,
+)
+
 /** One account's state as reported by the bank in a sync. */
 data class AccountSnapshot(
     val account: FinTSAccount,
@@ -148,6 +159,20 @@ interface FinTSGateway {
         interaction: BankingInteraction,
         existing: StandingOrder,
     ): Unit = throw UnsupportedOperationException("Standing orders are not supported")
+
+    /** The account's scheduled transfers (Terminüberweisungen) as the bank reports them. Read-only. */
+    fun listScheduledTransfers(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+    ): List<ScheduledTransfer> = throw UnsupportedOperationException("Scheduled transfers are not supported")
+
+    /** Cancels [existing], which stops the bank executing it. Same guards as [deleteScheduledTransfer]'s callers. */
+    fun deleteScheduledTransfer(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        existing: ScheduledTransfer,
+    ): Unit = throw UnsupportedOperationException("Scheduled transfers are not supported")
 
     /**
      * Edits [existing] in place with the new [order] and [schedule] (the bank identifies it by its id) and returns

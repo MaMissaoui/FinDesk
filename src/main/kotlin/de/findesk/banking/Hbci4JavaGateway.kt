@@ -13,6 +13,7 @@ import org.kapott.hbci.GV_Result.GVRDauerNew
 import org.kapott.hbci.GV_Result.GVRInstUebSEPA
 import org.kapott.hbci.GV_Result.GVRKUms
 import org.kapott.hbci.GV_Result.GVRSaldoReq
+import org.kapott.hbci.GV_Result.GVRTermUebList
 import org.kapott.hbci.GV_Result.HBCIJobResult
 import org.kapott.hbci.callback.AbstractHBCICallback
 import org.kapott.hbci.callback.HBCICallback
@@ -296,6 +297,52 @@ class Hbci4JavaGateway : FinTSGateway {
         }
         checkOrder(handler.execute(), job)
         (job.jobResult as? GVRDauerEdit)?.orderId
+    }
+
+    override fun listScheduledTransfers(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        fromIban: String,
+    ): List<ScheduledTransfer> = withHandler(connection, interaction) { handler ->
+        val job = handler.newJob("TermUebSEPAList").apply {
+            setParam("src", handler.findKonto(fromIban))
+            addToQueue()
+        }
+        checkStatus(handler.execute().let { it.isOK to it.errorString })
+        checkJob(job.jobResult)
+        (job.jobResult as GVRTermUebList).entries.orEmpty().mapNotNull { t ->
+            // An entry the bank reports without a date cannot be shown or cancelled: skip it
+            val date = t.date ?: return@mapNotNull null
+            ScheduledTransfer(
+                orderId = t.orderid,
+                fromIban = t.my?.iban ?: fromIban,
+                order = TransferOrder(
+                    recipientName = t.other?.name.orEmpty(),
+                    recipientIban = t.other?.iban.orEmpty(),
+                    recipientBic = t.other?.bic,
+                    amount = t.value?.bigDecimalValue ?: java.math.BigDecimal.ZERO,
+                    purpose = t.usage.orEmpty().joinToString(" ").trim(),
+                ),
+                date = date.toLocalDate(),
+                // Trust the bank: if it says no (or gave no id), deleting is left to online banking
+                canDelete = t.can_delete && t.orderid != null,
+            )
+        }
+    }
+
+    override fun deleteScheduledTransfer(
+        connection: FinTSConnection,
+        interaction: BankingInteraction,
+        existing: ScheduledTransfer,
+    ) = withHandler(connection, interaction) { handler ->
+        // The bank identifies the order by its id but expects the original order data and the execution date alongside
+        val job = handler.newJob("TermUebSEPADel").apply {
+            setOrderParams(handler.findKonto(existing.fromIban), existing.order)
+            setParam("date", existing.date.toDate())
+            setParam("orderid", requireNotNull(existing.orderId) { AppStrings[StringKey.ErrorNoScheduledTransferId] })
+            addToQueue()
+        }
+        checkOrder(handler.execute(), job)
     }
 
     private fun HBCIJob<*>.setOrderParams(src: Konto, order: TransferOrder) {

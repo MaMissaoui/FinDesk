@@ -16,7 +16,15 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Density
+import de.findesk.banking.AccountSnapshot
 import de.findesk.banking.BankCapabilities
+import de.findesk.banking.BankingCancelledException
+import de.findesk.banking.BankingInteraction
+import de.findesk.banking.BankingService
+import de.findesk.banking.FinTSClient
+import de.findesk.banking.FinTSConnection
+import de.findesk.banking.FinTSGateway
+import de.findesk.banking.ScheduledTransfer
 import de.findesk.banking.StandingOrder
 import de.findesk.banking.StandingOrderInterval
 import de.findesk.banking.StandingOrderSchedule
@@ -243,6 +251,59 @@ class ScreenshotTest {
         render("payments-standing-edit-form", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::editing) }
         render("payments-standing-edit-review", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::reviewing) }
         render("payments-standing-edit-review-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::reviewing) }
+    }
+
+    /** The scheduled transfers (Terminüberweisungen) list with two rows, loaded from a fake gateway. */
+    @Test
+    fun `render the scheduled transfers list`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-scheduled").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+
+        fun listing(): PaymentsViewModel = PaymentsViewModel(
+            bankingService = BankingService(
+                finTSClient = FinTSClient(
+                    gateway = ScheduledGateway(
+                        ScheduledTransfer(
+                            orderId = "t-1",
+                            fromIban = "DE89370400440532013000",
+                            order = TransferOrder("Vermieter GmbH", "DE02120300000000202051", null, BigDecimal("850.00"), "Miete November"),
+                            date = java.time.LocalDate.of(2026, 11, 1),
+                        ),
+                        ScheduledTransfer(
+                            orderId = "t-2",
+                            fromIban = "DE89370400440532013000",
+                            order = TransferOrder("Stadtwerke GmbH", "DE02100500000054540402", null, BigDecimal("42.50"), "Strom"),
+                            date = java.time.LocalDate.of(2026, 12, 15),
+                            canDelete = false,
+                        ),
+                    ),
+                    passportDir = File(Files.createTempDirectory("findesk-scheduled-passports").toFile().absolutePath),
+                ),
+            ),
+        ).apply {
+            runBlocking {
+                load().join()
+                loadScheduledTransfers(state.value.accounts.single()).join()
+            }
+            check(state.value.scheduledTransfers?.size == 2) { "the fake bank should report two scheduled transfers (error: ${state.value.error}, listed: ${state.value.scheduledTransfers})" }
+        }
+        render("payments-scheduled-transfers", 1440, 900) { Frame(Screen.PAYMENTS, dark = false, payments = ::listing) }
+        render("payments-scheduled-transfers-de-dark", 1440, 900) { Frame(Screen.PAYMENTS, dark = true, language = AppLanguage.DE, payments = ::listing) }
+    }
+
+    /** A fake bank for the scheduled transfers render: reports the given entries (no PIN prompt, no dialog). */
+    private class ScheduledGateway(private vararg val entries: ScheduledTransfer) : FinTSGateway {
+        override fun fetchAll(connection: FinTSConnection, interaction: BankingInteraction, since: (String) -> java.time.LocalDate?, to: java.time.LocalDate): List<AccountSnapshot> = emptyList()
+
+        override fun transfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = FinTSClient.TransferResult("job-1", "ACCEPTED")
+
+        override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = FinTSClient.TransferResult("inst-1", "ACCEPTED")
+
+        override fun listScheduledTransfers(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String): List<ScheduledTransfer> = entries.filter { it.fromIban == fromIban }
+
+        override fun deleteScheduledTransfer(connection: FinTSConnection, interaction: BankingInteraction, existing: ScheduledTransfer) = Unit
     }
 
     /** The Payments "From" picker open: accounts grouped by bank on two readable lines instead of one long string. */
