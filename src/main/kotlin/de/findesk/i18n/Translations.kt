@@ -787,6 +787,7 @@ object Translations {
         K.SyncSummaryHistoryFrom to " History requested from %s.",
         K.BalanceNotProvided to "…%s: the bank sends no balance for this account (%s). Enter it with “Edit balance”; a loan as a negative amount.",
         K.BalanceNotProvidedNoCode to "…%s: the bank sends no balance for this account. Enter it with “Edit balance”; a loan as a negative amount.",
+        K.PendingHeader to "Pending (not yet booked) · as of %s",
 
         K.ImportSummary to "Imported %d {1:transaction|transactions}",
         K.ImportSummaryAuto to ", %d auto-categorized",
@@ -1723,6 +1724,7 @@ object Translations {
         K.SyncSummaryHistoryFrom to " Verlauf angefordert ab %s.",
         K.BalanceNotProvided to "…%s: Die Bank liefert für dieses Konto keinen Saldo (%s). Tragen Sie ihn mit „Saldo bearbeiten“ ein, einen Kredit als negativen Betrag.",
         K.BalanceNotProvidedNoCode to "…%s: Die Bank liefert für dieses Konto keinen Saldo. Tragen Sie ihn mit „Saldo bearbeiten“ ein, einen Kredit als negativen Betrag.",
+        K.PendingHeader to "Vorgemerkt (noch nicht gebucht) · Stand %s",
 
         K.ImportSummary to "%d {1:Buchung|Buchungen} importiert",
         K.ImportSummaryAuto to ", %d automatisch kategorisiert",
@@ -2659,6 +2661,7 @@ object Translations {
         K.SyncSummaryHistoryFrom to " Historique demandé depuis le %s.",
         K.BalanceNotProvided to "…%s : la banque ne fournit pas de solde pour ce compte (%s). Saisissez-le avec « Modifier le solde », un crédit en montant négatif.",
         K.BalanceNotProvidedNoCode to "…%s : la banque ne fournit pas de solde pour ce compte. Saisissez-le avec « Modifier le solde », un crédit en montant négatif.",
+        K.PendingHeader to "En attente (pas encore comptabilisé) · au %s",
 
         K.ImportSummary to "%d {1:opération importée|opérations importées}",
         K.ImportSummaryAuto to ", %d {1:catégorisée|catégorisées} automatiquement",

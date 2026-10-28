@@ -157,7 +157,7 @@ class BankAccessRepositoryImpl : BankAccessRepository {
     }
 }
 
-/** Must run inside a transaction. Deletes the bank access with its accounts and their transactions. */
+/** Must run inside a transaction. Deletes the bank access with its accounts and their transactions and pending lines. */
 private fun deleteBankAccessCascade(id: Int): Boolean {
     AccountsTable.select(AccountsTable.id)
         .where { AccountsTable.bankAccessId eq id }

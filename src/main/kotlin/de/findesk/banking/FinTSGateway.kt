@@ -97,6 +97,13 @@ data class AccountSnapshot(
      * message text (it contains the full account number).
      */
     val balanceCode: String? = null,
+    /**
+     * The bank's pending lines (vorgemerkte Umsätze) the statement job reported. `null` = not fetched (no
+     * statement requested, the job failed or its lines wouldn't map): keep what's stored. An empty list =
+     * fetched and none pending: clear what's stored. They are not bookings — the bank may still change or
+     * drop them — so they never enter the transactions table (see [Hbci4JavaGateway.toTransaction]).
+     */
+    val pending: List<FinTSTransaction>? = null,
 )
 
 /** Port to the bank. [Hbci4JavaGateway] talks FinTS; tests use a fake. */

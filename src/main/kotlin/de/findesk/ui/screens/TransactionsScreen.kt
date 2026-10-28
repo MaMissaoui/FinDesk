@@ -9,6 +9,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +46,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +61,7 @@ import de.findesk.importer.StatementImportService
 import de.findesk.model.AccountItem
 import de.findesk.model.CategoryItem
 import de.findesk.model.Direction
+import de.findesk.model.PendingBookingItem
 import de.findesk.model.TaxSource
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
@@ -371,6 +374,24 @@ fun TransactionsScreen(
                                     }
                                 },
                         ) {
+                            // Pending (vorgemerkte) bank lines: greyed out above the list, with the fetch time.
+                            // Not bookings, so no balance, category, menu or selection, and never clickable.
+                            if (state.pendingBookings.isNotEmpty()) {
+                                item(key = "pending-header") {
+                                    Text(
+                                        s.format(StringKey.PendingHeader, Formats.dateTime(state.pendingBookings.first().fetchedAt)),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                                    )
+                                }
+                            }
+                            itemsIndexed(state.pendingBookings, key = { i, _ -> "pending-$i" }) { _, line ->
+                                PendingRow(line)
+                            }
+                            if (state.pendingBookings.isNotEmpty()) {
+                                item(key = "pending-divider") { HorizontalDivider() }
+                            }
                             items(state.transactions, key = { it.id }) { txn ->
                                 val inMultiSelection = state.selectedIds.size >= 2 && txn.id in state.selectedIds
                                 val deleteLabel = if (inMultiSelection) s.format(StringKey.DeleteSelectedCount, state.selectedIds.size) else s[StringKey.Delete]
@@ -1001,6 +1022,53 @@ private fun TransactionRow(
                 })
             }
         }
+    }
+}
+
+/**
+ * One pending (vorgemerkte) bank line, greyed out like the booking rows around it: date, partner and purpose,
+ * and the amount in italics. Not a booking, so no balance, category, action or click.
+ */
+@Composable
+private fun PendingRow(line: PendingBookingItem) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            Formats.date(line.date),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Column(Modifier.weight(3f)) {
+            Text(
+                BankText.displayPartner(line.partnerName) ?: BankText.displayPurpose(line.purpose) ?: "—",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (line.partnerName != null) {
+                BankText.displayPurpose(line.purpose)?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Text(
+            Formats.money(line.amount, line.currency, signed = true),
+            style = MaterialTheme.typography.bodyMedium,
+            fontStyle = FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1.2f),
+            textAlign = TextAlign.End,
+        )
     }
 }
 

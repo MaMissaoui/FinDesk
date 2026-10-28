@@ -5,6 +5,7 @@ import de.findesk.data.entity.BankAccess
 import de.findesk.data.table.AccountsTable
 import de.findesk.data.table.DeletedBookingsTable
 import de.findesk.data.table.DocumentsTable
+import de.findesk.data.table.PendingBookingsTable
 import de.findesk.data.table.TransactionsTable
 import de.findesk.model.AccountItem
 import de.findesk.model.toItem
@@ -146,6 +147,8 @@ class AccountRepositoryImpl : AccountRepository {
 internal fun deleteAccountCascade(accountId: Int): Boolean {
     // The account is gone for good, so its remembered deleted bookings have nothing to point at any more
     DeletedBookingsTable.deleteWhere { DeletedBookingsTable.accountId eq accountId }
+    // The pending (vorgemerkte) lines belong to the account only
+    PendingBookingsTable.deleteWhere { PendingBookingsTable.accountId eq accountId }
     val txnIds = TransactionsTable.select(TransactionsTable.id)
         .where { TransactionsTable.accountId eq accountId }
         .map { it[TransactionsTable.id] }

@@ -6,6 +6,7 @@ import de.findesk.data.entity.BankAccess
 import de.findesk.data.entity.Category
 import de.findesk.data.entity.Document
 import de.findesk.data.entity.PaymentOrder
+import de.findesk.data.entity.PendingBooking
 import de.findesk.data.entity.Rule
 import de.findesk.data.entity.Transaction
 
@@ -46,6 +47,21 @@ fun AccountGroup.toItem() = AccountGroupItem(
     id = id.value,
     name = name,
     sortOrder = sortOrder,
+)
+
+/**
+ * Maps a pending (vorgemerkte) bank line to its snapshot. Must run inside a transaction, since it reads
+ * `account`; the pending block's header shows [PendingBookingItem.fetchedAt].
+ */
+fun PendingBooking.toItem() = PendingBookingItem(
+    accountId = account.id.value,
+    date = date,
+    valueDate = valueDate,
+    amount = amount,
+    currency = currency,
+    partnerName = partnerName,
+    purpose = purpose,
+    fetchedAt = fetchedAt,
 )
 
 fun Category.toItem() = CategoryItem(

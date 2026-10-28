@@ -11,6 +11,7 @@ import de.findesk.model.AccountGroupItem
 import de.findesk.model.AccountItem
 import de.findesk.model.CategoryItem
 import de.findesk.model.Direction
+import de.findesk.model.PendingBookingItem
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
@@ -177,6 +178,8 @@ data class TransactionsState(
     /** A manual entry identical to one already booked that day, waiting for the user to confirm it (see [TransactionsViewModel.confirmDuplicate]). */
     val pendingDuplicate: ManualEntry? = null,
     val isImporting: Boolean = false,
+    /** The selected account's pending (vorgemerkte) bank lines, greyed out above the list; never bookings. */
+    val pendingBookings: List<PendingBookingItem> = emptyList(),
     /** The rules' preview of the shown bookings, waiting for the user's confirmation in the dialog. */
     val reapplyPreview: ReapplyPreview? = null,
     /** Whether [TransactionsViewModel.undoReapplyRules] still has the last re-apply's previous categories (memory only). */
@@ -214,6 +217,7 @@ class TransactionsViewModel(
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
+    private val pendingRepository: PendingBookingRepository = PendingBookingRepositoryImpl(),
     private val reportService: ReportService = ReportService(),
     private val importService: StatementImportService = StatementImportService(),
     private val documentService: de.findesk.document.DocumentService = de.findesk.document.DocumentService(),
@@ -449,6 +453,8 @@ class TransactionsViewModel(
             }
         }
         val categories = categoryRepository.findAllItems()
+        // Pending (vorgemerkte) bank lines, loaded together with the bookings; only one selected account shows them
+        val pendingBookings = (selection as? AccountSelection.Account)?.let { pendingRepository.findItems(it.id) } ?: emptyList()
         // The running balance needs every booking of the account, not just the filtered list, so a text or period
         // filter hides rows but never changes their balances. A depot's balance is a market value, not the sum of
         // its bookings, so the column only makes sense for a single non-depot account.
@@ -465,6 +471,7 @@ class TransactionsViewModel(
             it.copy(
                 transactions = transactions,
                 categories = categories,
+                pendingBookings = pendingBookings,
                 accounts = accounts,
                 groups = groups,
                 grandTotal = grandTotal(accounts, primary),
