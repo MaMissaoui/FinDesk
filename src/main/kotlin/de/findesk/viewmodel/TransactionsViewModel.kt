@@ -305,22 +305,23 @@ class TransactionsViewModel(
     ): Job {
         if (partner != null) return showPartner(partner)
         if (categoryId != null) return showCategory(categoryId, period, month)
+        if (uncategorizedOnly) return showUncategorizedLink(accountId, period, month)
         restoreSelection = accountId == null
-        // Any navigation (a period, an exact month, an account, the uncategorized list) resets to its own period;
+        // Any navigation (a period, an exact month, an account) resets to its own period;
         // only a plain start() keeps a custom From/To that was set from the period menu
-        val navigated = period != null || month != null || accountId != null || uncategorizedOnly
+        val navigated = period != null || month != null || accountId != null
         _state.update {
-            // A deep link into an account or the uncategorized list shouldn't be limited to this month,
+            // A deep link into an account shouldn't be limited to this month,
             // unless the navigation asks for a period itself
             val effectivePeriod = when {
                 period != null -> period
-                accountId != null || uncategorizedOnly -> Period.ALL
+                accountId != null -> Period.ALL
                 else -> it.period
             }
             it.copy(
                 accountId = accountId,
                 selection = accountId?.let { id -> AccountSelection.Account(id) } ?: it.selection,
-                categoryFilter = if (uncategorizedOnly) CategoryFilter.None else CategoryFilter.Any,
+                categoryFilter = CategoryFilter.Any,
                 period = effectivePeriod,
                 // Only an explicit month navigation keeps one; any other start clears it
                 month = month,
@@ -338,21 +339,39 @@ class TransactionsViewModel(
         searchJob?.cancel()
         restoreSelection = false
         _state.update {
-            it.copy(
-                searchQuery = "",
-                period = period ?: Period.ALL,
-                month = month,
-                direction = Direction.ALL,
-                categoryFilter = CategoryFilter.Only(categoryId),
-                selection = AccountSelection.All,
-                accountId = null,
-                minAmount = null,
-                maxAmount = null,
-                customRange = null,
-            ).clearingSelection()
+            it.resetForCategoryLink(CategoryFilter.Only(categoryId)).copy(period = period ?: Period.ALL, month = month)
         }
         return loadTransactions()
     }
+
+    /**
+     * The dashboard's uncategorized link: every uncategorized booking over [period] (default all time) or exactly
+     * [month], whatever the list showed before. The count behind the link counts all accounts without search,
+     * direction or amount filter, so those are cleared and the account selection resets to all — like [showCategory]
+     * does. An [accountId] keeps that account, but still loses the other filters; the saved panel selection is
+     * never restored.
+     */
+    private fun showUncategorizedLink(accountId: Int?, period: Period?, month: YearMonth?): Job {
+        searchJob?.cancel()
+        restoreSelection = false
+        _state.update {
+            val reset = it.resetForCategoryLink(CategoryFilter.None).copy(period = period ?: Period.ALL, month = month)
+            if (accountId == null) reset else reset.copy(selection = AccountSelection.Account(accountId), accountId = accountId)
+        }
+        return loadTransactions()
+    }
+
+    /** The filter reset the category and uncategorized deep links share; the caller supplies period and month. */
+    private fun TransactionsState.resetForCategoryLink(categoryFilter: CategoryFilter): TransactionsState = copy(
+        searchQuery = "",
+        direction = Direction.ALL,
+        categoryFilter = categoryFilter,
+        selection = AccountSelection.All,
+        accountId = null,
+        minAmount = null,
+        maxAmount = null,
+        customRange = null,
+    ).clearingSelection()
 
     /** Every booking from [partner], any time, account, category, direction or amount: the search alone narrows the list. */
     fun showPartner(partner: String): Job {
