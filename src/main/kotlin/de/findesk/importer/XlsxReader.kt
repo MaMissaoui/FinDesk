@@ -2,6 +2,7 @@ package de.findesk.importer
 
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.util.Formats
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
@@ -33,6 +34,9 @@ internal object XlsxReader {
 
     /** Built-in number format ids that display a date. */
     private val BUILT_IN_DATE_FMT_IDS = (14..22).toSet() + (45..47).toSet()
+
+    /** One past the last usable Excel serial: 2958465 is 9999-12-31. */
+    private val MAX_DATE_SERIAL = BigDecimal("2958465")
 
     private fun tooLarge() = IllegalArgumentException(AppStrings[StringKey.ErrorXlsxTooLarge])
 
@@ -223,8 +227,11 @@ internal object XlsxReader {
             "e" -> ""
 
             else -> {
-                // A formula cell (<f>) uses its cached <v> here too
-                val number = value.trim().toBigDecimalOrNull() ?: return ""
+                // A formula cell (<f>) uses its cached <v> here too. An out-of-range number hands on its raw
+                // <v> text (never expanded) so the mapping rejects it like any other unreadable value.
+                val text = value.trim()
+                if (text.toBigDecimalOrNull() == null) return ""
+                val number = Formats.parseDecimal(text) ?: return text
                 if (dateStyles?.get(cell.getAttribute("s").toIntOrNull() ?: 0) == true) {
                     dateOf(number, date1904).orEmpty()
                 } else {
@@ -234,8 +241,13 @@ internal object XlsxReader {
         }
     }
 
-    /** Excel serial number → ISO date (base 1899-12-30, or 1904-01-01 for a 1904 workbook); the fraction is dropped. */
+    /**
+     * Excel serial number → ISO date (base 1899-12-30, or 1904-01-01 for a 1904 workbook); the fraction is dropped.
+     * A serial outside 0..2958465 (9999-12-31) is no date, checked before any scaling so a huge or tiny
+     * fractional serial cannot expand into a huge computation.
+     */
     private fun dateOf(serial: BigDecimal, date1904: Boolean): String? {
+        if (serial.signum() < 0 || serial.compareTo(MAX_DATE_SERIAL) > 0) return null
         val days = runCatching { serial.setScale(0, RoundingMode.FLOOR).toBigInteger().longValueExact() }.getOrNull() ?: return null
         val base = if (date1904) LocalDate.of(1904, 1, 1) else LocalDate.of(1899, 12, 30)
         return runCatching { base.plusDays(days).toString() }.getOrNull()

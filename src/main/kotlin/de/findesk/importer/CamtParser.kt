@@ -1,5 +1,6 @@
 package de.findesk.importer
 
+import de.findesk.util.Formats
 import de.findesk.util.Iban
 import org.w3c.dom.Element
 import org.w3c.dom.Node
@@ -108,7 +109,7 @@ object CamtParser {
     /** A balance's signed value (missing `CdtDbtInd` = credit) and currency; null when anything is malformed. */
     private fun parseBal(bal: Element): ParsedBalance? {
         val amt = bal.child("Amt") ?: return null
-        val value = amt.textContent.trim().toBigDecimalOrNull() ?: return null
+        val value = Formats.parseDecimal(amt.textContent) ?: return null
         return ParsedBalance(
             if (bal.child("CdtDbtInd")?.textContent?.trim() == "DBIT") value.negate() else value,
             amt.getAttribute("Ccy").ifEmpty { null },
@@ -128,7 +129,7 @@ object CamtParser {
     /** The entry's `Amt` with the `CdtDbtInd` sign (the raw entry, not its split `TxDtls` bookings). */
     private fun entrySignedAmount(entry: Element): BigDecimal? {
         val amt = entry.child("Amt") ?: return null
-        val value = amt.textContent.trim().toBigDecimalOrNull() ?: return null
+        val value = Formats.parseDecimal(amt.textContent) ?: return null
         return if (entry.child("CdtDbtInd")?.textContent?.trim() == "DBIT") value.negate() else value
     }
 
@@ -217,7 +218,7 @@ object CamtParser {
         return runCatching { LocalDate.parse(text.take(10)) }.getOrNull()
     }
 
-    private fun amount(el: Element?): BigDecimal? = el?.textContent?.trim()?.toBigDecimalOrNull()?.abs()
+    private fun amount(el: Element?): BigDecimal? = el?.let { Formats.parseDecimal(it.textContent) }?.abs()
 
     private fun parseXml(bytes: ByteArray) = DocumentBuilderFactory.newInstance().apply {
         isNamespaceAware = true

@@ -6,6 +6,7 @@ import de.findesk.util.Formats
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -132,6 +133,26 @@ class XlsxReaderTest {
             ),
         )
         assertEquals("1904-01-01", rows1904[0][0])
+    }
+
+    @Test
+    @Timeout(5)
+    fun `a capped numeric cell stays its raw v text and an out-of-range date serial is empty`() {
+        val sheet = """<?xml version="1.0"?>
+<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <x:sheetData>
+    <x:row r="1">
+      <x:c r="A1"><x:v>1E999999999</x:v></x:c>
+      <x:c r="B1" s="1"><x:v>99999999</x:v></x:c>
+      <x:c r="C1" s="1"><x:v>46237</x:v></x:c>
+    </x:row>
+  </x:sheetData>
+</x:worksheet>"""
+        val rows = XlsxReader.firstSheetRows(xlsx(sheet, styles = dateStylesXml))
+
+        assertEquals("1E999999999", rows[0][0], "the raw v text, never expanded")
+        assertEquals("", rows[0][1], "a serial beyond 9999-12-31 gives no date")
+        assertEquals("2026-08-03", rows[0][2], "a normal date serial still renders")
     }
 
     @Test

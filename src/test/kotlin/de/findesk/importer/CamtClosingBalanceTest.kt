@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.io.TempDir
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -60,6 +61,18 @@ class CamtClosingBalanceTest {
             }
         }
         return out.toByteArray()
+    }
+
+    @Test
+    @Timeout(5)
+    fun `a camt entry with an out-of-range amount is skipped instead of imported`() {
+        val xml = camt(iban, debitedEntry("1E999999999", "2026-02-05", "R1"))
+
+        val s = CamtParser.parse(xml.toByteArray())
+
+        assertTrue(s.bookings.isEmpty())
+        assertEquals(listOf("Entry 1: unreadable amount"), s.skipped)
+        assertNull(s.closingBalance, "a skipped entry makes the balance check unreliable")
     }
 
     @Test

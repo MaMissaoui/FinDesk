@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.math.BigDecimal
@@ -136,6 +137,26 @@ class Mt940ParserTest {
         """.trimIndent()
         val sr = Mt940Parser.parse(mt940Reversal.toByteArray())
         assertEquals(BigDecimal("10.50"), sr.bookings[0].amount, "RC with funds code is still a reversal credit")
+    }
+
+    @Test
+    @Timeout(5)
+    fun `mt940 with a 20-digit amount skips the record instead of importing it`() {
+        val mt940 = """
+            :20:STARTUMS
+            :25:DE89370400440532013000
+            :28C:1
+            :60F:C240102EUR0,00
+            :61:2401020103C99999999999999999999NTRF
+            :86:?20Huge
+            :62F:C240102EUR0,00
+        """.trimIndent()
+
+        val s = Mt940Parser.parse(mt940.toByteArray())
+
+        assertTrue(s.bookings.isEmpty())
+        assertEquals(1, s.skipped.size)
+        assertTrue(s.skipped[0].startsWith("Record 1: invalid amount"), s.skipped.toString())
     }
 
     @Test
@@ -329,6 +350,47 @@ class OfxParserTest {
         assertEquals(BigDecimal("-45.67"), b.amount, "comma decimal accepted")
         assertEquals("Müller & Söhne GmbH", b.partnerName, "&amp; decoded")
         assertEquals("äöü ß &lt;b&gt;", b.purpose, "windows-1252 umlauts decoded, &amp; decoded only once")
+    }
+
+    @Test
+    @Timeout(5)
+    fun `ofx with an out-of-range amount skips the record instead of importing it`() {
+        val sgml = """
+            OFXHEADER:100
+            DATA:OFXSGML
+            VERSION:102
+            SECURITY:NONE
+            ENCODING:USASCII
+            CHARSET:1252
+            COMPRESSION:NONE
+            OLDFILEUID:NONE
+            NEWFILEUID:NONE
+
+            <OFX>
+            <BANKMSGSRSV1>
+            <STMTTRNRS>
+            <STMTRS>
+            <CURDEF>EUR</CURDEF>
+            <BANKTRANLIST>
+            <STMTTRN>
+            <TRNTYPE>DEBIT</TRNTYPE>
+            <DTPOSTED>20261003000000</DTPOSTED>
+            <TRNAMT>1E999999999</TRNAMT>
+            <FITID>REF-1</FITID>
+            <NAME>REWE Markt GmbH</NAME>
+            </STMTTRN>
+            </BANKTRANLIST>
+            </STMTRS>
+            </STMTTRNRS>
+            </BANKMSGSRSV1>
+            </OFX>
+        """.trimIndent()
+
+        val s = OfxParser.parse(sgml.toByteArray())
+
+        assertTrue(s.bookings.isEmpty())
+        assertEquals(1, s.skipped.size)
+        assertTrue(s.skipped[0].contains("invalid amount"), s.skipped.toString())
     }
 
     @Test

@@ -1,5 +1,6 @@
 package de.findesk.importer
 
+import de.findesk.util.Formats
 import de.findesk.util.Iban
 import java.math.BigDecimal
 import java.nio.ByteBuffer
@@ -309,7 +310,7 @@ object Mt940Parser {
 
     private fun parseAmount(text: String): BigDecimal? {
         val normalized = text.replace(".", "").replace(',', '.')
-        return normalized.toBigDecimalOrNull()
+        return Formats.parseDecimal(normalized)
     }
 }
 
