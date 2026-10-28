@@ -118,14 +118,21 @@ class Hbci4JavaGateway : FinTSGateway {
                 null
             }
             val ums = p.umsatz?.jobResult as? GVRKUms
-            val transactions = if (ums != null && ums.isOK) ums.flatData.orEmpty().map { it.toTransaction(account) } else emptyList()
+            val transactions = if (ums != null && ums.isOK) ums.flatData.orEmpty().mapNotNull { toTransaction(it, account) } else emptyList()
+            // The pending (vorgemerkte) lines of the same statement answer. A mapping failure must not fail the
+            // booked import, so it degrades to null = keep what's stored; a not-OK result stays null too.
+            val pending = if (ums != null && ums.isOK) {
+                runCatching { ums.flatDataUnbooked.orEmpty().mapNotNull { toTransaction(it, account) } }.getOrNull()
+            } else {
+                null
+            }
             val error = when {
                 p.from == null -> null
                 p.umsatz == null -> p.statementError ?: AppStrings[StringKey.StatementsNotSupported]
                 ums == null || !ums.isOK -> ums?.jobStatus?.toString()?.trim()?.ifEmpty { null } ?: AppStrings[StringKey.ErrorBankRejectedStatements]
                 else -> null
             }
-            AccountSnapshot(account, balance, transactions, error, balanceCode)
+            AccountSnapshot(account, balance, transactions, error, balanceCode, pending)
         }
     }
 
@@ -519,25 +526,34 @@ class Hbci4JavaGateway : FinTSGateway {
         productName = type,
     )
 
-    private fun GVRKUms.UmsLine.toTransaction(account: FinTSAccount) = FinTSTransaction(
-        account = account,
-        date = (bdate ?: valuta).toLocalDate(),
-        valueDate = (valuta ?: bdate).toLocalDate(),
-        amount = value.bigDecimalValue,
-        currency = value.curr ?: account.currency,
-        partnerName = other?.let { listOfNotNull(it.name, it.name2).joinToString(" ").trim().ifEmpty { null } },
-        partnerIban = other?.iban,
-        partnerBic = other?.bic,
-        purpose = usage.orEmpty().joinToString(" ").trim().ifEmpty { text },
-        transactionCode = gvcode,
-        reference = endToEndId?.takeIf { it != "NOTPROVIDED" } ?: customerref?.takeIf { it != "NONREF" },
-        primaNota = primanota,
-        balanceAfter = saldo?.value?.bigDecimalValue,
-        bankId = id,
-    )
-
     companion object {
         private val LOCK = Any()
+
+        /**
+         * Maps one statement line (booked or pending, the bank's flatData types are the same) to a FinDesk
+         * transaction. Internal top-of-class so tests can call it with constructed `UmsLine`s; pure. A line
+         * with neither `bdate` nor `valuta` maps to null (only pending lines can look like this) — booked
+         * lines always carry a date.
+         */
+        internal fun toTransaction(line: GVRKUms.UmsLine, account: FinTSAccount): FinTSTransaction? {
+            val date = line.bdate ?: line.valuta ?: return null
+            return FinTSTransaction(
+                account = account,
+                date = date.toLocalDate(),
+                valueDate = (line.valuta ?: line.bdate).toLocalDate(),
+                amount = line.value.bigDecimalValue,
+                currency = line.value.curr ?: account.currency,
+                partnerName = line.other?.let { listOfNotNull(it.name, it.name2).joinToString(" ").trim().ifEmpty { null } },
+                partnerIban = line.other?.iban,
+                partnerBic = line.other?.bic,
+                purpose = line.usage.orEmpty().joinToString(" ").trim().ifEmpty { line.text },
+                transactionCode = line.gvcode,
+                reference = line.endToEndId?.takeIf { it != "NOTPROVIDED" } ?: line.customerref?.takeIf { it != "NONREF" },
+                primaNota = line.primanota,
+                balanceAfter = line.saldo?.value?.bigDecimalValue,
+                bankId = line.id,
+            )
+        }
 
         /**
          * Null when the bank accepted the job. Only a bank answer made of error codes (9xxx) without local exceptions is a

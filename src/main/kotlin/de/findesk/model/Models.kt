@@ -113,6 +113,22 @@ data class TransactionItem(
     val countsAsSpending: Boolean get() = amount.signum() < 0 && !isTransfer
 }
 
+/**
+ * One pending line (vorgemerkter Umsatz): the bank named it but has not booked it yet, so it can change or
+ * vanish. Never a booking — shown greyed out above the list, never counted into any total.
+ */
+data class PendingBookingItem(
+    val accountId: Int,
+    val date: LocalDate,
+    val valueDate: LocalDate? = null,
+    val amount: BigDecimal,
+    val currency: String = "EUR",
+    val partnerName: String?,
+    val purpose: String?,
+    /** When the sync that fetched the line ran; the pending block's header shows it. */
+    val fetchedAt: LocalDateTime = LocalDateTime.now(),
+)
+
 data class DocumentItem(
     val id: Int,
     val fileName: String,

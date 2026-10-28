@@ -865,6 +865,9 @@ enum class StringKey {
     BalanceNotProvided,
     BalanceNotProvidedNoCode,
 
+    /** The pending block's header above the booking list; %s is the fetch time (date and time). */
+    PendingHeader,
+
     // Import
     ImportSummary,
     ImportSummaryFiles,

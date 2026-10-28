@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.LocalDateTime
 
 /**
  * High-level banking service coordinating FinTS operations with the local database
@@ -29,6 +30,7 @@ class BankingService(
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
     private val paymentOrderRepository: PaymentOrderRepository = PaymentOrderRepositoryImpl(),
+    private val pendingRepository: PendingBookingRepository = PendingBookingRepositoryImpl(),
     private val today: () -> LocalDate = { LocalDate.now() },
 ) {
     private val _isLoading = MutableStateFlow(false)
@@ -236,6 +238,28 @@ class BankingService(
                     imported += result.imported
                     duplicates += result.duplicates
                     categorized += result.categorized
+                    // Pending (vorgemerkte) lines, kept apart from the bookings: fetched means replace all of
+                    // the account's rows (an empty list clears them), null = not fetched keeps what's stored.
+                    // A failure here must never fail the sync, so it silently counts as a no-op.
+                    snap.pending?.let { lines ->
+                        runCatching {
+                            pendingRepository.replaceForAccount(
+                                accountId,
+                                lines.map { t ->
+                                    de.findesk.model.PendingBookingItem(
+                                        accountId = accountId,
+                                        date = t.date,
+                                        valueDate = t.valueDate,
+                                        amount = t.amount,
+                                        currency = t.currency,
+                                        partnerName = t.partnerName,
+                                        purpose = t.purpose,
+                                    )
+                                },
+                                LocalDateTime.now(),
+                            )
+                        }
+                    }
                 }
                 // If statements failed for any account, keep the old sync date so the next sync re-fetches that window
                 if (warnings.isEmpty()) {

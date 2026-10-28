@@ -394,6 +394,34 @@ class ScreenshotTest {
         render("transactions-chart-collapsed", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
     }
 
+    /** The pending (vorgemerkte) block above the bookings: greyed out rows with the fetch time in the header. */
+    @Test
+    fun `render the transactions screen with pending bookings`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-pending").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(3), BigDecimal("120.00"), "EUR", "Beispiel AG", "Gehalt Oktober", null, "pending-b-1"),
+                NewTransaction(account, today.minusDays(1), BigDecimal("-20.00"), "EUR", "Bäckerei Muster", "Brötchen", null, "pending-b-2"),
+            ),
+        )
+        de.findesk.repository.PendingBookingRepositoryImpl().replaceForAccount(
+            account,
+            listOf(
+                de.findesk.model.PendingBookingItem(account, today, today, BigDecimal("-49.80"), "EUR", "Beispiel Tank GmbH", "Kraftstoff Musterstrasse 12", fetchedAt = java.time.LocalDateTime.of(2026, 10, 27, 9, 30)),
+                de.findesk.model.PendingBookingItem(account, today, today, BigDecimal("-135.00"), "EUR", "Stadtwerke Beispiel", "Abschlag November", fetchedAt = java.time.LocalDateTime.of(2026, 10, 27, 9, 30)),
+            ),
+            java.time.LocalDateTime.of(2026, 10, 27, 9, 30),
+        )
+
+        fun showing(): TransactionsViewModel = TransactionsViewModel()
+        render("transactions-pending", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+        render("transactions-pending-de-dark", 1440, 900) { Frame(Screen.TRANSACTIONS, dark = true, language = AppLanguage.DE, transactions = ::showing, transactionArgs = NavigationArgs(accountId = account)) }
+    }
+
     /** The toolbar's overflow menu open over the (empty) transaction list. */
     @Test
     fun `render the open transactions overflow menu`() {
