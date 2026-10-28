@@ -289,6 +289,25 @@ class TransactionsViewModel(
         else -> s.period.range(today())
     }
 
+    /**
+     * Whether the current state may show pending (vorgemerkte) rows: one selected account, the resolved period
+     * ([dateRange], so an exact month or a custom range containing today counts too) includes today, and no
+     * search text, direction other than ALL, amount bound or category filter is active. Otherwise the pending
+     * rows would sit above a filtered list they are not part of.
+     */
+    private fun showsPendingRows(s: TransactionsState): Boolean {
+        if (s.selection !is AccountSelection.Account) return false
+        val (start, end) = dateRange(s)
+        val today = today()
+        val includesToday = (start == null || !start.isAfter(today)) && (end == null || !end.isBefore(today))
+        return includesToday &&
+            s.searchQuery.isBlank() &&
+            s.direction == Direction.ALL &&
+            s.minAmount == null &&
+            s.maxAmount == null &&
+            s.categoryFilter == CategoryFilter.Any
+    }
+
     /** The selection only ever covers what the list shows, so a change of the filters starts over with an empty one. */
     private fun TransactionsState.clearingSelection(): TransactionsState = copy(selectedIds = emptySet(), selectionAnchorId = null)
 
@@ -453,8 +472,10 @@ class TransactionsViewModel(
             }
         }
         val categories = categoryRepository.findAllItems()
-        // Pending (vorgemerkte) bank lines, loaded together with the bookings; only one selected account shows them
-        val pendingBookings = (selection as? AccountSelection.Account)?.let { pendingRepository.findItems(it.id) } ?: emptyList()
+        // Pending (vorgemerkte) bank lines, loaded together with the bookings. They preview the account's own
+        // current, unfiltered list, so they show only for one selected account whose period includes today and
+        // with no search, direction, amount or category filter active; any filter empties them.
+        val pendingBookings = (selection as? AccountSelection.Account)?.takeIf { showsPendingRows(_state.value) }?.let { pendingRepository.findItems(it.id) } ?: emptyList()
         // The running balance needs every booking of the account, not just the filtered list, so a text or period
         // filter hides rows but never changes their balances. A depot's balance is a market value, not the sum of
         // its bookings, so the column only makes sense for a single non-depot account.

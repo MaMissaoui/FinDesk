@@ -118,7 +118,13 @@ class Hbci4JavaGateway : FinTSGateway {
                 null
             }
             val ums = p.umsatz?.jobResult as? GVRKUms
-            val transactions = if (ums != null && ums.isOK) ums.flatData.orEmpty().mapNotNull { toTransaction(it, account) } else emptyList()
+            // A booked line without a date would silently lose a real booking, so it fails loudly
+            // (message without bank data); only the pending lines may lack a date and be skipped
+            val transactions = if (ums != null && ums.isOK) {
+                ums.flatData.orEmpty().map { requireNotNull(toTransaction(it, account)) { "booked statement line without a date" } }
+            } else {
+                emptyList()
+            }
             // The pending (vorgemerkte) lines of the same statement answer. A mapping failure must not fail the
             // booked import, so it degrades to null = keep what's stored; a not-OK result stays null too.
             val pending = if (ums != null && ums.isOK) {

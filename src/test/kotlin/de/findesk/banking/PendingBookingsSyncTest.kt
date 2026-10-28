@@ -139,7 +139,9 @@ class PendingBookingsSyncTest {
         assertEquals("9680", mapped.transactionCode)
         assertEquals("line-1", mapped.bankId)
 
-        // Neither booking date nor valuta: nothing can be shown, map it to nothing
+        // Neither booking date nor valuta: null. fetchAll maps pending lines with mapNotNull, so this is the
+        // "keep what can be shown" path; the booked path (untestable without a bank) now fails loudly on such
+        // a line instead, so a real booking is never dropped silently — this null return is what it relies on
         assertEquals(null, Hbci4JavaGateway.toTransaction(GVRKUms.UmsLine(), account))
         // A pending line with only a valuta (the booking date unknown) still maps, dated with the valuta
         val onlyValuta = GVRKUms.UmsLine().apply {
