@@ -90,6 +90,20 @@ object Formats {
     /** Groups an IBAN in blocks of four: "DE89 3704 0044 ...". */
     fun iban(iban: String): String = iban.replace(" ", "").chunked(4).joinToString(" ")
 
+    /**
+     * Parses a decimal out of untrusted file text (import parsers): values with more than 15 integer digits
+     * or more than 10 decimal places, or an input longer than 64 characters, are rejected before anything
+     * is expanded — an unchecked 1E999999999 parses cheaply but hangs the app once it is scaled or printed
+     * (amounts are stored as `decimal(15, 2)`).
+     */
+    fun parseDecimal(text: String): BigDecimal? {
+        if (text.length > 64) return null
+        val value = text.trim().toBigDecimalOrNull() ?: return null
+        // precision() - scale() counts the integer digits, so the range check never expands the number
+        if (value.precision() - value.scale() > 15 || value.scale() > 10) return null
+        return value
+    }
+
     /** Parses user input like "1.234,56", "1,234.56", "-12.5" or "12". Returns null if it isn't a number. */
     fun parseAmount(input: String): BigDecimal? {
         var s = input.trim().replace("€", "").replace(" ", "")
@@ -100,7 +114,7 @@ object Formats {
             lastComma > lastDot -> s.replace(".", "").replace(',', '.')
             else -> s.replace(",", "")
         }
-        return s.toBigDecimalOrNull()?.setScale(2, RoundingMode.HALF_UP)
+        return parseDecimal(s)?.setScale(2, RoundingMode.HALF_UP)
     }
 
     private fun symbolFor(currency: String): String = when (currency) {

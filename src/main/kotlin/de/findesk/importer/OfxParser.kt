@@ -1,5 +1,6 @@
 package de.findesk.importer
 
+import de.findesk.util.Formats
 import de.findesk.util.Iban
 import org.w3c.dom.Element
 import org.w3c.dom.Node
@@ -224,7 +225,7 @@ object OfxParser {
         } else {
             t.replace(",", "")
         }
-        return normalized.toBigDecimalOrNull()
+        return Formats.parseDecimal(normalized)
     }
 
     private fun decodeXmlEntities(text: String?): String? {
