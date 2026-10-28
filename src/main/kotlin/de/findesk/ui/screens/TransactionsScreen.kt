@@ -957,8 +957,9 @@ private fun TransactionRow(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (balance.bankDifference != null) {
-                    val message = s.format(StringKey.BalanceBankMismatch, Formats.money(balance.balance, currency))
+                val bankDifference = balance.bankDifference
+                if (bankDifference != null) {
+                    val message = balanceMismatchText(s, balance.balance, bankDifference, currency)
                     TooltipArea(
                         tooltip = {
                             Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 2.dp) {
@@ -1566,3 +1567,13 @@ internal fun taxChoiceLabel(override: Boolean?, s: Strings): String = when (over
     true -> s[StringKey.TaxRelevantChoice]
     false -> s[StringKey.TaxNotRelevantChoice]
 }
+
+/**
+ * Tooltip and content description on a row whose bank balance differs from the reconstructed one: the bank's balance
+ * after the booking and the missing amount (computed − bank, so a bank above the computed balance reads as a loss).
+ */
+internal fun balanceMismatchText(s: Strings, bank: BigDecimal, bankDifference: BigDecimal, currency: String): String = s.format(
+    StringKey.BalanceBankMismatch,
+    Formats.money(bank, currency),
+    Formats.money(bankDifference.negate(), currency, signed = true),
+)

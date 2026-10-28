@@ -237,7 +237,7 @@ enum class StringKey {
     /** Toolbar summary suffix when the running balance column is shown; %s is the account balance. */
     TransactionsBalance,
 
-    /** Tooltip on a row whose bank balance differs from the reconstructed one; %s is the bank's value. */
+    /** Tooltip on a row whose bank balance differs from the reconstructed one; %1$s the bank's value, %2$s the missing amount. */
     BalanceBankMismatch,
     ColDate,
     ColDescription,
