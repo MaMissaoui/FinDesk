@@ -320,15 +320,18 @@ fun TransactionsScreen(
                             )
                         }
                         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            HeaderCell(s[StringKey.ColDate], 1f)
-                            HeaderCell(s[StringKey.ColDescription], 3f)
-                            HeaderCell(s[StringKey.ColCategory], 1.4f)
-                            HeaderCell(s[StringKey.ColAmount], 1.2f, TextAlign.End)
-                            if (state.balances != null) HeaderCell(s[StringKey.ColBalance], 1.2f, TextAlign.End)
-                            Spacer(Modifier.width(40.dp))
+                            HeaderCell(s[StringKey.ColDate], COL_DATE_WEIGHT)
+                            HeaderCell(s[StringKey.ColDescription], COL_DESCRIPTION_WEIGHT)
+                            HeaderCell(s[StringKey.ColCategory], COL_CATEGORY_WEIGHT)
+                            HeaderCell(s[StringKey.ColAmount], COL_AMOUNT_WEIGHT, TextAlign.End)
+                            if (state.balances != null) HeaderCell(s[StringKey.ColBalance], COL_BALANCE_WEIGHT, TextAlign.End)
+                            Spacer(Modifier.width(COL_ACTION_WIDTH))
                         }
                         HorizontalDivider()
-                        if (!state.isLoading && state.transactions.isEmpty()) {
+                        // The pending block above renders its own rows, so the empty state only shows
+                        // without them: a filter can hide every booking while pending lines exist, and a
+                        // "nothing matches" message would contradict the pending rows still rendered
+                        if (!state.isLoading && state.transactions.isEmpty() && state.pendingBookings.isEmpty()) {
                             EmptyState(
                                 Icons.Default.List,
                                 s[StringKey.NoTransactions],
@@ -387,7 +390,7 @@ fun TransactionsScreen(
                                 }
                             }
                             itemsIndexed(state.pendingBookings, key = { i, _ -> "pending-$i" }) { _, line ->
-                                PendingRow(line)
+                                PendingRow(line, showBalanceColumn = state.balances != null)
                             }
                             if (state.pendingBookings.isNotEmpty()) {
                                 item(key = "pending-divider") { HorizontalDivider() }
@@ -799,6 +802,21 @@ private fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = 
     )
 }
 
+/**
+ * The booking list's shared column weights: header, [TransactionRow] and [PendingRow] must stay in one copy,
+ * so a change to one cannot desynchronise the others.
+ */
+private const val COL_DATE_WEIGHT = 1f
+private const val COL_DESCRIPTION_WEIGHT = 3f
+private const val COL_CATEGORY_WEIGHT = 1.4f
+private const val COL_AMOUNT_WEIGHT = 1.2f
+
+/** The Balance column is the amount's width and only present for one account's running balance. */
+private const val COL_BALANCE_WEIGHT = 1.2f
+
+/** The ⋮ menu's cell at the row end: 48 dp touch area around the 32 dp button. */
+private val COL_ACTION_WIDTH = 40.dp
+
 /** The balance chart below the booking list: a foldable card over the running-balance column's own points. */
 @Composable
 private fun BalanceHistoryCard(
@@ -908,7 +926,7 @@ private fun TransactionRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // The dot sits inside the date cell, so a new row's columns stay aligned with the header
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(COL_DATE_WEIGHT), verticalAlignment = Alignment.CenterVertically) {
             if (isNew) {
                 // A booking a bank sync brought in and the user hasn't opened yet: a dot plus bold type
                 Box(
@@ -925,7 +943,7 @@ private fun TransactionRow(
                 fontWeight = if (isNew) FontWeight.Bold else FontWeight.Normal,
             )
         }
-        Column(Modifier.weight(3f)) {
+        Column(Modifier.weight(COL_DESCRIPTION_WEIGHT)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isNew) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (txn.documentCount > 0) {
@@ -937,7 +955,7 @@ private fun TransactionRow(
                 Text(secondary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        Box(Modifier.weight(1.4f)) {
+        Box(Modifier.weight(COL_CATEGORY_WEIGHT)) {
             CategoryBadge(
                 txn.categoryName,
                 txn.categoryColor,
@@ -968,13 +986,13 @@ private fun TransactionRow(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (isNew) FontWeight.Bold else FontWeight.SemiBold,
             color = amountColor(txn.isExpense),
-            modifier = Modifier.weight(1.2f),
+            modifier = Modifier.weight(COL_AMOUNT_WEIGHT),
             textAlign = TextAlign.End,
         )
         if (balance != null) {
             val currency = balanceCurrency ?: txn.currency
             Row(
-                modifier = Modifier.weight(1.2f),
+                modifier = Modifier.weight(COL_BALANCE_WEIGHT),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1011,7 +1029,7 @@ private fun TransactionRow(
                 )
             }
         }
-        Box(Modifier.width(40.dp), contentAlignment = Alignment.CenterEnd) {
+        Box(Modifier.width(COL_ACTION_WIDTH), contentAlignment = Alignment.CenterEnd) {
             IconButton(onClick = { rowMenu = true }, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(18.dp))
             }
@@ -1026,11 +1044,13 @@ private fun TransactionRow(
 }
 
 /**
- * One pending (vorgemerkte) bank line, greyed out like the booking rows around it: date, partner and purpose,
- * and the amount in italics. Not a booking, so no balance, category, action or click.
+ * One pending (vorgemerkte) bank line, greyed out like the booking rows around it and in their columns: date,
+ * partner and purpose, the amount in italics, and empty Category and Balance cells plus the ⋮ menu's spacer, so
+ * everything aligns with [TransactionRow] (the Balance cell follows its column's visibility). Not a booking, so
+ * no category, balance, menu, selection or click.
  */
 @Composable
-private fun PendingRow(line: PendingBookingItem) {
+private fun PendingRow(line: PendingBookingItem, showBalanceColumn: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1039,9 +1059,9 @@ private fun PendingRow(line: PendingBookingItem) {
             Formats.date(line.date),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(COL_DATE_WEIGHT),
         )
-        Column(Modifier.weight(3f)) {
+        Column(Modifier.weight(COL_DESCRIPTION_WEIGHT)) {
             Text(
                 BankText.displayPartner(line.partnerName) ?: BankText.displayPurpose(line.purpose) ?: "—",
                 style = MaterialTheme.typography.bodyMedium,
@@ -1061,14 +1081,18 @@ private fun PendingRow(line: PendingBookingItem) {
                 }
             }
         }
+        // Empty cells, so the pending amount sits under Amount and not under Balance
+        Spacer(Modifier.weight(COL_CATEGORY_WEIGHT))
         Text(
             Formats.money(line.amount, line.currency, signed = true),
             style = MaterialTheme.typography.bodyMedium,
             fontStyle = FontStyle.Italic,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1.2f),
+            modifier = Modifier.weight(COL_AMOUNT_WEIGHT),
             textAlign = TextAlign.End,
         )
+        if (showBalanceColumn) Spacer(Modifier.weight(COL_BALANCE_WEIGHT))
+        Spacer(Modifier.width(COL_ACTION_WIDTH))
     }
 }
 
