@@ -453,11 +453,14 @@ class TransactionRepositoryImpl : TransactionRepository {
 
 /**
  * One auto-apply rule with a tax flag, loaded and compiled once per [TransactionRepositoryImpl.findItems] call:
- * the rule layer of the effective tax relevance. Matching goes through [RuleMatcher.matches], so the tax lookup
- * and categorization can never match differently.
+ * the rule layer of the effective tax relevance. Matching goes through [RuleMatcher.matches] over every view of
+ * [RuleMatcher.views], so a tax-flagged shop rule applies to the PayPal bookings the shop view categorized, and
+ * the tax lookup can never match categorization differently.
  */
 private class TaxRuleSpec(val spec: RuleSpec, val taxRelevant: Boolean) {
     private val test: (String) -> Boolean = RuleMatcher.compile(spec.pattern)
 
-    fun matches(purpose: String?, partnerName: String?, amount: BigDecimal?): Boolean = RuleMatcher.matches(spec, test, purpose, partnerName, amount)
+    fun matches(purpose: String?, partnerName: String?, amount: BigDecimal?): Boolean = RuleMatcher.views(purpose, partnerName).any { (viewPurpose, viewPartner) ->
+        RuleMatcher.matches(spec, test, viewPurpose, viewPartner, amount)
+    }
 }

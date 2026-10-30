@@ -6,7 +6,9 @@ import de.findesk.model.TransactionItem
  * Display-only cleanup of raw bank text for lists.
  *
  * The stored `purpose` and `partnerName` never change: rules, search and duplicate detection are written
- * against the raw text. These functions only render the readable part of it in rows and lists.
+ * against the raw text. These functions only render the readable part of it in rows and lists — and the row
+ * title also goes through [PaymentProviders]: a PayPal booking is titled with the provider and the shop its
+ * purpose names, instead of the partner alone.
  */
 object BankText {
     /**
@@ -56,8 +58,16 @@ object BankText {
         return result?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotBlank() }
     }
 
-    /** The readable row title: the cleaned partner, else the cleaned purpose, else a placeholder. */
-    fun displayDescription(t: TransactionItem): String = displayPartner(t.partnerName) ?: displayPurpose(t.purpose) ?: PLACEHOLDER
+    /**
+     * The readable row title: for a PayPal payment "PayPal · <shop>" ([PaymentProviders.merchantOf]), else the
+     * cleaned partner, else the cleaned purpose, else a placeholder. "PayPal" is a brand name, the same in every
+     * language; the booking detail, search, exports and stored text are untouched.
+     */
+    fun displayDescription(t: TransactionItem): String {
+        val shop = PaymentProviders.merchantOf(t.purpose, t.partnerName)
+        if (shop != null) return "PayPal · $shop"
+        return displayPartner(t.partnerName) ?: displayPurpose(t.purpose) ?: PLACEHOLDER
+    }
 
     /** Each tagged field as `(tag, text up to the next tag or the end)`; text before the first tag is dropped. */
     private fun substrings(text: String, matches: List<MatchResult>): List<Pair<String, String>> = matches

@@ -279,4 +279,33 @@ class TaxRelevanceTest {
         assertTrue(report.taxRelevantTransactions.any { it.id == booking }, "the report reads the effective value")
         assertEquals(BigDecimal("100.00"), report.taxRelevantTotal)
     }
+
+    // 7. PayPal: the rule also matches the shop the purpose names (the shop view of TaxRuleSpec)
+
+    @Test
+    fun `a tax-flagged shop rule makes paypal bookings of its category tax relevant, through the item mapping`() {
+        val byRule = txn(
+            "-10.00",
+            normalCat,
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "EREF+R1 SVWZ+PP.471.PPX . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+        )
+        val otherShop = txn(
+            "-20.00",
+            normalCat,
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "EREF+R2 SVWZ+PP.472.PPX . Anderer Shop GmbH, Ihr Einkauf bei Anderer Shop GmbH",
+        )
+        data.ruleRepo.create("Beispiel Shop", normalCat, matchField = de.findesk.model.RuleField.PARTNER, taxRelevant = true)
+
+        with(item(byRule)) {
+            assertTrue(isTaxRelevant, "the PARTNER rule matches the shop extracted from the purpose")
+            assertEquals(TaxSource.RULE, taxSource)
+            assertEquals("Beispiel Shop", taxRulePattern)
+        }
+        with(item(otherShop)) {
+            assertFalse(isTaxRelevant, "a shop the rule does not name stays on the category layer")
+            assertEquals(TaxSource.CATEGORY, taxSource)
+        }
+    }
 }
