@@ -143,7 +143,7 @@ class OfflineBankGuardTest {
             auditLogRepository = AuditLogRepositoryImpl(),
             credentialStore = { CountingCredentialStore() },
         )
-        bankingService = BankingService(finTSClient = client)
+        bankingService = BankingService(finTSClient = client, today = { today })
         val accounts = AccountRepositoryImpl()
         val banks = BankAccessRepositoryImpl()
         offlineBankId = banks.createOffline("Norwegian Card").id.value
