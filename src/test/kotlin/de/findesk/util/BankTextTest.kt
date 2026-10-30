@@ -94,4 +94,25 @@ class BankTextTest {
         isTaxRelevant = false,
         documentCount = 0,
     )
+
+    @Test
+    fun `a paypal booking is titled with the provider and the shop`() {
+        val paypal = txn(
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "EREF+R1 SVWZ+PP.471.PPX . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+        )
+        assertEquals("PayPal · Beispiel Shop GmbH", BankText.displayDescription(paypal))
+    }
+
+    @Test
+    fun `a non-paypal title is unchanged`() {
+        val plain = txn(
+            partner = "Beispiel Shop GmbH",
+            purpose = "EREF+R1 SVWZ+PP.471.PPX . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+        )
+        assertEquals("Beispiel Shop GmbH", BankText.displayDescription(plain), "partner wins as before; no PayPal partner, no shop title")
+
+        val paypalPurposeOnly = txn(partner = null, purpose = "SVWZ+Ihr Einkauf bei Beispiel Shop GmbH")
+        assertEquals("Ihr Einkauf bei Beispiel Shop GmbH", BankText.displayDescription(paypalPurposeOnly), "no PayPal partner: the purpose is shown as before")
+    }
 }
