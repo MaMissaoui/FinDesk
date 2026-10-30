@@ -308,6 +308,14 @@ class TransactionsViewModel(
             s.categoryFilter == CategoryFilter.Any
     }
 
+    /**
+     * Whether the pending [rows]' fetch stamp is recent enough to show (see [PENDING_MAX_AGE_DAYS]). The cutoff
+     * is on the stamp — the account's last successful fetch ([PendingBookingItem.fetchedAt]) — never on a line's
+     * own [date]: a card hold can stay pending for weeks while the account is synced daily. An old stamp means
+     * the rows are hidden, not deleted; the next successful fetch overwrites them.
+     */
+    private fun pendingRowsAreFresh(rows: List<PendingBookingItem>): Boolean = rows.all { !it.fetchedAt.toLocalDate().isBefore(today().minusDays(PENDING_MAX_AGE_DAYS)) }
+
     /** The selection only ever covers what the list shows, so a change of the filters starts over with an empty one. */
     private fun TransactionsState.clearingSelection(): TransactionsState = copy(selectedIds = emptySet(), selectionAnchorId = null)
 
@@ -474,8 +482,13 @@ class TransactionsViewModel(
         val categories = categoryRepository.findAllItems()
         // Pending (vorgemerkte) bank lines, loaded together with the bookings. They preview the account's own
         // current, unfiltered list, so they show only for one selected account whose period includes today and
-        // with no search, direction, amount or category filter active; any filter empties them.
-        val pendingBookings = (selection as? AccountSelection.Account)?.takeIf { showsPendingRows(_state.value) }?.let { pendingRepository.findItems(it.id) } ?: emptyList()
+        // with no search, direction, amount or category filter active; any filter empties them. Rows whose
+        // fetch stamp is too old are likewise not shown ([pendingRowsAreFresh]) — nothing is deleted, the next
+        // successful fetch overwrites them.
+        val pendingBookings = (selection as? AccountSelection.Account)?.takeIf { showsPendingRows(_state.value) }
+            ?.let { pendingRepository.findItems(it.id) }
+            ?.takeIf { rows -> pendingRowsAreFresh(rows) }
+            ?: emptyList()
         // The running balance needs every booking of the account, not just the filtered list, so a text or period
         // filter hides rows but never changes their balances. A depot's balance is a market value, not the sum of
         // its bookings, so the column only makes sense for a single non-depot account.
@@ -1140,6 +1153,13 @@ class TransactionsViewModel(
 
     companion object {
         const val SEARCH_DEBOUNCE_MS = 250L
+
+        /**
+         * Pending (vorgemerkte) lines are normally booked or dropped within days, so a fetch stamp older than
+         * this means the account has not been fetched since and the lines are no longer reliable: the pending
+         * block then shows nothing. A stamp exactly 7 days old still shows; 8 days old doesn't.
+         */
+        const val PENDING_MAX_AGE_DAYS = 7L
 
         /** Settings keys holding the account panel's selection and collapsed groups, per profile (shared with Accounts). */
         const val KEY_SELECTION = AccountPanelSettings.KEY_SELECTION
