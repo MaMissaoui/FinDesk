@@ -30,6 +30,9 @@ object PaymentProviders {
     /** An id (`PP.<n>.PP`, optionally with the usual one-letter suffix) before a comma and `Ihr`. */
     private val PRE_COMMA = Regex("(?i)PP\\.\\d+\\.PP[A-Z]?\\s*\\.?\\s*(.+?)\\s*,\\s*$IHR")
 
+    /** A pre-comma name at the start of a purpose that begins with a dot instead of a `PP.<n>.PP` id. */
+    private val PRE_COMMA_LEADING_DOT = Regex("(?i)^\\.\\s*(.+?)\\s*,\\s*$IHR")
+
     /** The same id when looking for the pre-comma name before the marker. */
     private val PP_ID_IN_PURPOSE = Regex("(?i)PP\\.\\d+\\.PP[A-Z]?")
 
@@ -41,6 +44,9 @@ object PaymentProviders {
 
     /** One trailing code token, such as `, AB12CD34`, that follows a shop in the marker format. */
     private val CODE_TAIL = Regex(",\\s*\\S*\\d\\S*$")
+
+    /** An upper-case top-up note after the marker shop, e.g. `ABBUCHUNG VOM PAYPAL-KONTO`. */
+    private val TOP_UP = Regex("\\b(?:${flexible("ABBUCHUNG")}\\s+)?${flexible("VOM")}\\b.*")
 
     /** A `PP.<n>.PP` id that must never become a shop. */
     private val PP_ID = Regex("(?i)PP\\.\\d+\\.PP")
@@ -80,7 +86,7 @@ object PaymentProviders {
             val nextTag = BankText.TAG.find(tail)
             val postRaw = if (nextTag == null) tail else tail.substring(0, nextTag.range.first)
             val preRaw = preCommaName(text, marker.range.first)
-            val post = sanitize(postRaw)
+            val post = sanitize(cutTopUp(postRaw))
             val pre = sanitize(preRaw)
             val shop = when {
                 post == null -> pre
@@ -92,7 +98,7 @@ object PaymentProviders {
 
         // 2. A pre-comma name without the marker, e.g. "PP.1234.PP . <Shop>, Ihr Abo"
         if (partnerHasPaypal && marker == null) {
-            PRE_COMMA.find(text)?.let { found ->
+            (PRE_COMMA.find(text) ?: PRE_COMMA_LEADING_DOT.find(text))?.let { found ->
                 sanitize(found.groupValues[1])?.let { return ShopMatch(it, null, partnerName) }
             }
         }
@@ -117,13 +123,22 @@ object PaymentProviders {
     /** The `<name>` between a `PP.<n>.PP` id and the comma immediately before the marker, or null. */
     private fun preCommaName(text: String, markerStart: Int): String? {
         val prefix = text.substring(0, markerStart)
-        val id = PP_ID_IN_PURPOSE.findAll(prefix).lastOrNull() ?: return null
-        val rest = prefix.substring(id.range.last + 1)
-            .trim()
-            .removePrefix(".")
-            .trim()
+        val id = PP_ID_IN_PURPOSE.findAll(prefix).lastOrNull()
+        val rest = if (id != null) {
+            prefix.substring(id.range.last + 1).trim().removePrefix(".").trim()
+        } else {
+            if (!prefix.startsWith(".")) return null
+            prefix.trim().removePrefix(".").trim()
+        }
         if (!rest.endsWith(",")) return null
         return rest.dropLast(1).trim().takeIf { it.isNotEmpty() }
+    }
+
+    /** Cuts an upper-case top-up note from the post-marker text, unless nothing would remain before it. */
+    private fun cutTopUp(text: String): String {
+        val note = TOP_UP.find(text) ?: return text
+        val before = text.substring(0, note.range.first)
+        return if (before.isBlank()) text else before
     }
 
     /** The fuller of the pre-comma name and the post-marker shop when both pass the gate. */
