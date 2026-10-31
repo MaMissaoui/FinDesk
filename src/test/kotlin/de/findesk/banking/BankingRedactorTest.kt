@@ -1,5 +1,6 @@
 package de.findesk.banking
 
+import de.findesk.util.Iban
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
@@ -44,6 +45,69 @@ class BankingRedactorTest {
     fun `escapes every fints syntax character once`() {
         assertEquals("a?+b?:c?'d??e?@f", BankingRedactor.fintsEscaped("a+b:c'd?e@f"))
         assertEquals("plain", BankingRedactor.fintsEscaped("plain"))
+    }
+
+    @Test
+    fun `masks spaced and lower-case IBANs`() {
+        assertEquals("IBAN ${BankingRedactor.MASK} Miete", BankingRedactor.redact("IBAN DE89 3704 0044 0532 0130 00 Miete", emptyList()))
+        assertEquals(BankingRedactor.MASK, BankingRedactor.redact("de89370400440532013000", emptyList()))
+        assertEquals(BankingRedactor.MASK, BankingRedactor.redact("de89 3704 0044 0532 0130 00", emptyList()))
+    }
+
+    @Test
+    fun `masks a spaced IBAN whose regex match swallowed the next word`() {
+        val iban = "ES91 2100 0418 4502 0005 1332"
+        assertTrue(Iban.isValid(iban))
+
+        assertEquals("${BankingRedactor.MASK} EUR", BankingRedactor.redact("$iban EUR", emptyList()))
+    }
+
+    @Test
+    fun `masks a spaced IBAN whose regex match swallowed the next bic`() {
+        val iban = "AT61 1904 3002 3457 3201"
+        assertTrue(Iban.isValid(iban))
+
+        assertEquals("${BankingRedactor.MASK} BIC BKAUATWW", BankingRedactor.redact("$iban BIC BKAUATWW", emptyList()))
+    }
+
+    @Test
+    fun `masks a spaced IBAN whose regex match swallowed the next number`() {
+        val iban = "BE68 5390 0754 7034"
+        assertTrue(Iban.isValid(iban))
+
+        assertEquals("${BankingRedactor.MASK} 2026", BankingRedactor.redact("$iban 2026", emptyList()))
+    }
+
+    @Test
+    fun `masks a spaced IBAN inside a sentence and keeps the surrounding words`() {
+        val iban = "PL61 1090 1014 0000 0712 1981 2874"
+        assertTrue(Iban.isValid(iban))
+
+        assertEquals("Konto ${BankingRedactor.MASK} ok", BankingRedactor.redact("Konto $iban ok", emptyList()))
+    }
+
+    @Test
+    fun `does not mask a spaced token without a valid IBAN prefix`() {
+        val token = "DE00 1234 5678 9012 3456 78 X"
+        assertFalse(Iban.isValid("DE00 1234 5678 9012 3456 78"))
+
+        assertEquals(token, BankingRedactor.redact(token, emptyList()))
+    }
+
+    @Test
+    fun `keeps a typical trace line unchanged`() {
+        val line = "HNHBK:1:3+000000000123+300+DIA4711ABCD12345678+2'HIRMG:2:2+3060::Bitte beachten Sie die enthaltenen Warnungen.'"
+
+        assertEquals(line, BankingRedactor.redact(line, emptyList()))
+    }
+
+    @Test
+    fun `does not mask an IBAN-looking token that fails the check digits`() {
+        val token = "DE00 1234 5678 9012 3456 78"
+
+        assertFalse(Iban.isValid(token))
+
+        assertEquals(token, BankingRedactor.redact(token, emptyList()))
     }
 
     @Test

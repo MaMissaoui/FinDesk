@@ -1,5 +1,7 @@
 package de.findesk.banking
 
+import de.findesk.util.Iban
+
 /**
  * Removes sensitive values from captured FinTS/HBCI dialog lines before they are shown or shared.
  *
@@ -52,7 +54,25 @@ object BankingRedactor {
             .distinct()
             .sortedByDescending { it.length }
             .forEach { result = result.replace(it, MASK) }
-        return IBAN.replace(result, MASK)
+        result = IBAN.replace(result, MASK)
+        // Spaced or lower-case IBANs only when the check digits match, so ids and payloads stay readable
+        return SPACED_IBAN.replace(result) { match -> maskSpacedIban(match.value) }
+    }
+
+    /**
+     * Masks a [SPACED_IBAN] match when it is a valid IBAN. The regex is greedy, so for an IBAN whose length is a
+     * multiple of 4 it can swallow the next word ("ES91 … 1332 EUR"). Then the longest prefix ending at a group
+     * boundary that forms a valid IBAN is masked and the rest of the match is kept verbatim.
+     */
+    private fun maskSpacedIban(match: String): String {
+        if (Iban.isValid(match)) return MASK
+        var cut = match.lastIndexOf(' ')
+        while (cut > 0) {
+            val prefix = match.substring(0, cut)
+            if (Iban.normalize(prefix).length >= 15 && Iban.isValid(prefix)) return MASK + match.substring(cut)
+            cut = match.lastIndexOf(' ', cut - 1)
+        }
+        return match
     }
 
     /**
