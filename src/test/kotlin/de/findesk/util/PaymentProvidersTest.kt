@@ -131,11 +131,42 @@ class PaymentProvidersTest {
         assertNull(PaymentProviders.merchantOf("Ihr Einkauf bei , AB12CD34", paypalPartner))
     }
 
+    // Top-up notes after the marker shop
+
+    @Test
+    fun `an upper-case top-up note after the marker shop is cut`() {
+        val withAbbuchung =
+            "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH ABBUCHUNG VOM PAYPAL-KONTO"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(withAbbuchung, paypalPartner))
+
+        val insertedSpace =
+            "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH ABBU CHUNG VOM PAYPAL-KONTO"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(insertedSpace, paypalPartner))
+
+        val onlyVom = "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH VOM GIROKONTO"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(onlyVom, paypalPartner))
+    }
+
+    @Test
+    fun `a lower-case vom inside the shop name is kept`() {
+        val raw = "PP.1234.PP . Blumen vom Beispielhof, Ihr Einkauf bei Blumen vom Beispielhof"
+        assertEquals("Blumen vom Beispielhof", PaymentProviders.merchantOf(raw, paypalPartner))
+    }
+
     // Pre-comma name without the marker
 
     @Test
     fun `a pre-comma name without the marker is the shop`() {
         assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf("PP.1234.PP . Beispiel Shop GmbH, Ihr Abo", paypalPartner))
+    }
+
+    @Test
+    fun `a leading dot gives the pre-comma name without a PP id`() {
+        val withMarker = ". Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Sh"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(withMarker, paypalPartner))
+
+        val withoutMarker = ". Beispiel Shop GmbH, Ihr Abo"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(withoutMarker, paypalPartner))
     }
 
     // Card format
