@@ -50,21 +50,25 @@ fun DocumentsScreen() {
         val files = FileDialogs.openFiles(s[StringKey.UploadDocuments], DocumentService.SUPPORTED_EXTENSIONS)
         if (files.isNotEmpty()) vm.uploadDocuments(files)
     }
+    // The empty library shows one Upload button, in its empty state; the header's field and button would only repeat it
+    val libraryEmpty = !state.isLoading && state.documents.isEmpty() && state.searchQuery.isBlank() && state.tab == DocumentTab.ALL
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Search is the toolbar's context, Upload its action; the OCR hint rides under the field
             Column(Modifier.weight(1f)) {
-                CompactSearchField(
-                    value = state.searchQuery,
-                    onValueChange = { vm.searchDocuments(it) },
-                    placeholder = s[StringKey.SearchDocuments],
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (!libraryEmpty) {
+                    CompactSearchField(
+                        value = state.searchQuery,
+                        onValueChange = { vm.searchDocuments(it) },
+                        placeholder = s[StringKey.SearchDocuments],
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (!state.isOcrAvailable) {
-                    Spacer(Modifier.height(4.dp))
+                    if (!libraryEmpty) Spacer(Modifier.height(4.dp))
                     Text(
-                        s[StringKey.OcrNeedsTesseract],
+                        s.format(StringKey.OcrNotInstalled, "${s[StringKey.NavSettings]} → ${s[StringKey.DataAndOcr]}"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -75,13 +79,15 @@ fun DocumentsScreen() {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(12.dp))
             }
-            Button(
-                enabled = !state.isUploading,
-                onClick = upload,
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(s[StringKey.Upload])
+            if (!libraryEmpty) {
+                Button(
+                    enabled = !state.isUploading,
+                    onClick = upload,
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(s[StringKey.Upload])
+                }
             }
         }
 

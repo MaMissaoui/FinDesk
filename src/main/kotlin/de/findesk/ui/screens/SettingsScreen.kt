@@ -247,6 +247,13 @@ fun SettingsScreen(
                     modifier = Modifier.widthIn(max = 640.dp),
                 )
                 Spacer(Modifier.height(8.dp))
+                if (state.rules.isEmpty()) {
+                    Text(
+                        if (state.categories.isEmpty()) s[StringKey.HintNeedsCategory] else s[StringKey.NoRulesYet],
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 state.rules.forEach { r ->
                     RowContextMenu(
                         menuItem(s[StringKey.MenuEdit]) { editRule = r },
@@ -583,17 +590,17 @@ private fun SettingsSectionRow(section: SettingsSection, selected: Boolean, labe
     }
 }
 
-/** material-icons-core only: Palette, Category, Storage, Backup, BugReport and History are in the extended set. */
+/** Section icons from [AppIcons]; categories, profiles and the trace keep material-icons-core's own. */
 private val SettingsSection.icon: ImageVector
     get() = when (this) {
-        SettingsSection.APPEARANCE -> Icons.Default.Settings
+        SettingsSection.APPEARANCE -> AppIcons.Palette
         SettingsSection.PROFILES -> Icons.Default.Person
         SettingsSection.CATEGORIES -> Icons.Default.List
-        SettingsSection.RULES -> Icons.Default.Refresh
-        SettingsSection.DATA -> Icons.Default.Info
-        SettingsSection.BACKUP -> Icons.Default.Share
+        SettingsSection.RULES -> AppIcons.AutoFixHigh
+        SettingsSection.DATA -> AppIcons.Storage
+        SettingsSection.BACKUP -> AppIcons.Backup
         SettingsSection.TRACE -> Icons.Default.Build
-        SettingsSection.AUDIT -> Icons.Default.DateRange
+        SettingsSection.AUDIT -> AppIcons.History
     }
 
 /** A flush section header: its title and actions, a hairline divider, then the content. */

@@ -468,6 +468,13 @@ class ScreenshotTest {
         render("reports-tax-bookings-de", 1440, 900, clickAt = Offset(600f, 193f)) { Frame(Screen.REPORTS, dark = false, language = AppLanguage.DE) }
         render("reports-tax-bookings-dark", 1440, 900, clickAt = Offset(600f, 193f)) { Frame(Screen.REPORTS, dark = true) }
         render("reports-tax-bookings-narrow", 1024, 800, clickAt = Offset(475f, 193f)) { Frame(Screen.REPORTS, dark = false) }
+        // The other four tabs, then the same fixture's two linked documents in the library
+        render("reports-tax-summary", 1440, 900) { Frame(Screen.REPORTS, dark = false) }
+        render("reports-monthly", 1440, 900, clickAt = Offset(839f, 193f)) { Frame(Screen.REPORTS, dark = false) }
+        render("reports-category", 1440, 900, clickAt = Offset(1069f, 193f)) { Frame(Screen.REPORTS, dark = false) }
+        render("reports-recurring", 1440, 900, clickAt = Offset(1299f, 193f)) { Frame(Screen.REPORTS, dark = false) }
+        render("documents-list", 1440, 900) { Frame(Screen.DOCUMENTS, dark = false) }
+        render("documents-list-dark", 1440, 900) { Frame(Screen.DOCUMENTS, dark = true) }
     }
 
     /** The tab's empty state: bookings exist, none of them tax relevant; no suggestions either. */
