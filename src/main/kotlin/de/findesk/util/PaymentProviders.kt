@@ -8,8 +8,10 @@ package de.findesk.util
  *
  * The result is the input for rules, not just display: the rule matcher (`RuleMatcher.select` in
  * `de.findesk.repository` and the tax lookup beside it) tests the shop as the partner of its own view, and
- * [BankText.displayDescription] shows it as the row title. A booking that names no shop stays null, so it is
- * categorized and displayed exactly as before.
+ * [BankText.displayDescription] shows it as the title on every screen; the exports also add a separate Shop column
+ * (last in the CSV, after Partner in the tax workbook) and the booking details dialog shows the shop in its own row.
+ * The raw partner and purpose stay unchanged. A booking that names no shop stays null, so it is categorized and
+ * displayed exactly as before.
  *
  * Extraction works on the raw purpose, so rules do not depend on [BankText.displayPurpose]; the partner is only
  * inspected for the provider. Pure text work, no I/O; the regexes are compiled once.

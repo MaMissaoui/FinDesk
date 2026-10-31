@@ -151,24 +151,80 @@ class TaxReportExporterTest {
             val sheet = parse(zip.getInputStream(zip.getEntry("xl/worksheets/sheet2.xml")).readBytes())
             val sheetRows = elements(sheet).filter { it.localName == "row" }
             assertEquals(1 + info.bookingCount, sheetRows.size)
+            assertEquals(
+                listOf("Section", "Category", "Date", "Partner", "Shop", "Purpose", "Account", "Amount", "Currency", "Receipt", "Source"),
+                ('A'..'K').map { cellText(sheet, "$it" + "1") },
+                "the Shop column sits directly after the Partner",
+            )
             val firstDonation = 2 + 4 // after the header and the four income rows
             assertEquals("Deductions", cellText(sheet, "A$firstDonation"))
             assertEquals("Spenden", cellText(sheet, "B$firstDonation"))
             assertEquals("2026-05-31", dateCell(sheet, "C$firstDonation"), "the date is a real date cell")
             assertEquals("3", cellStyle(sheet, "C$firstDonation"), "the date format")
             assertEquals("Beispielhilfe e. V.", cellText(sheet, "D$firstDonation"))
-            assertEquals("-30.00", cellValue(sheet, "G$firstDonation"), "signed amount as a number")
-            assertEquals("2", cellStyle(sheet, "G$firstDonation"), "the money format")
-            assertEquals("EUR", cellText(sheet, "H$firstDonation"))
-            assertEquals("Yes", cellText(sheet, "I$firstDonation"), "the first donation carries a receipt")
-            assertEquals("DE89370400440532013000", cellText(sheet, "F$firstDonation"), "the full IBAN as text")
-            assertTrue(cellText(sheet, "J$firstDonation").contains("from category"), "the source names the deciding layer")
+            assertEquals("Spende 1", cellText(sheet, "F$firstDonation"), "the raw purpose keeps its column")
+            assertEquals("-30.00", cellValue(sheet, "H$firstDonation"), "signed amount as a number")
+            assertEquals("2", cellStyle(sheet, "H$firstDonation"), "the money format")
+            assertEquals("EUR", cellText(sheet, "I$firstDonation"))
+            assertEquals("Yes", cellText(sheet, "J$firstDonation"), "the first donation carries a receipt")
+            assertEquals("DE89370400440532013000", cellText(sheet, "G$firstDonation"), "the full IBAN as text")
+            assertTrue(cellText(sheet, "K$firstDonation").contains("from category"), "the source names the deciding layer")
             val last = sheetRows.size
             assertEquals("Deductions", cellText(sheet, "A$last"), "the deductions come after the income")
             val filter = elements(sheet).first { it.localName == "autoFilter" }
-            assertEquals("A1:J$last", filter.getAttribute("ref"), "the filter spans header and data")
+            assertEquals("A1:K$last", filter.getAttribute("ref"), "the filter spans header and data")
             val pane = elements(sheet).first { it.localName == "pane" }
             assertEquals("frozen", pane.getAttribute("state"))
+        }
+    }
+
+    /** One deduction group with a PayPal booking and a plain one; the PayPal partner stays raw. */
+    private fun paypalBookings(): ReportService.TaxBookings {
+        val paypal = item(
+            id = 1,
+            amount = "-19.99",
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+        )
+        val plain = item(id = 2, amount = "-4.50", partner = "Beispiel Bäckerei", purpose = "Brötchen")
+        val group = ReportService.TaxGroup(
+            categoryId = 20,
+            name = "Spenden",
+            color = "#9C27B0",
+            bookings = listOf(paypal, plain),
+            income = BigDecimal.ZERO,
+            expenses = BigDecimal("24.49"),
+        )
+        return ReportService.TaxBookings(
+            from = LocalDate.of(2026, 1, 1),
+            to = LocalDate.of(2026, 12, 31),
+            currency = "EUR",
+            deductionGroups = listOf(group),
+            bookingCount = 2,
+        )
+    }
+
+    @Test
+    fun `excel shows the shop after the partner and keeps the raw partner`() {
+        val info = paypalBookings()
+        val file = File(tmp, "tax-shop.xlsx")
+        exporter.exportXlsx(info, file)
+
+        ZipFile(file).use { zip ->
+            val sheet = parse(zip.getInputStream(zip.getEntry("xl/worksheets/sheet2.xml")).readBytes())
+            assertEquals("PayPal Europe S.a.r.l. et Cie S.C.A", cellText(sheet, "D2"), "the raw partner")
+            assertEquals("Beispiel Shop GmbH", cellText(sheet, "E2"), "the shop follows the partner")
+            assertEquals("", cellText(sheet, "E3"), "a non-PayPal booking has an empty shop")
+            val filter = elements(sheet).first { it.localName == "autoFilter" }
+            assertEquals("A1:K3", filter.getAttribute("ref"))
+        }
+    }
+
+    @Test
+    fun `pdf titles a PayPal booking with the provider and the shop`() {
+        exporter.buildPdf(paypalBookings()).use { doc ->
+            val text = PDFTextStripper().getText(doc)
+            assertTrue(text.contains("PayPal · Beispiel Shop GmbH"), "the WinAnsi periodcentered survives: $text")
         }
     }
 

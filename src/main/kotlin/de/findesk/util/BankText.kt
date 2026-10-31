@@ -65,9 +65,11 @@ object BankText {
     }
 
     /**
-     * The readable row title: for a PayPal payment "PayPal · <shop>" ([PaymentProviders.titleOf]), else the
-     * cleaned partner, else the cleaned purpose, else a placeholder. "PayPal" is a brand name, the same in every
-     * language; the booking detail, search, exports and stored text are untouched.
+     * The readable title on every screen: for a PayPal payment "PayPal · <shop>" ([PaymentProviders.titleOf]),
+     * else the cleaned partner, else the cleaned purpose, else a placeholder. Used by lists, the details dialog
+     * title, confirmations, tax bookings, the document picker, the account panel and the report PDFs. "PayPal" is
+     * a brand name, the same in every language. Search, stored text and the raw Partner/Purpose of exports and of
+     * the details rows are untouched; exports add a separate Shop column.
      */
     fun displayDescription(t: TransactionItem): String = PaymentProviders.titleOf(t.purpose, t.partnerName)
         ?: displayPartner(t.partnerName)

@@ -458,6 +458,14 @@ class ScreenshotTest {
         booked(today.minusDays(60), "-45.00", "Beispielhilfe e. V.", "Spendemonat", donations)
         val receipt2 = booked(today.minusDays(50), "-320.00", "Beispiel Werk GmbH", "Renovierung Bad", craft)
         documents.create("beispielbedank-2.pdf", "documents/beispielbedank-2.pdf", "application/pdf", linkedTransactionId = receipt2)
+        // A PayPal booking: the tax row shows its provider and shop title
+        booked(
+            today.minusDays(45),
+            "-210.00",
+            "PayPal Europe S.a.r.l. et Cie S.C.A",
+            "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+            craft,
+        )
         // Two suggestions: not tax relevant, matched by keyword
         booked(today.minusDays(40), "-25.50", "Apotheke am Ring", "Medikamente", null)
         booked(today.minusDays(30), "-98.90", "Beispiel-Krankenkasse", "Beitrag", null)
@@ -688,6 +696,43 @@ class ScreenshotTest {
 
         render("transactions-tax-details", 1440, 900, afterStable = ::openDetails) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing) }
         render("transactions-tax-details-de", 1440, 900, afterStable = ::openDetails) { Frame(Screen.TRANSACTIONS, dark = false, language = AppLanguage.DE, transactions = ::showing) }
+    }
+
+    /** The details dialog of a PayPal booking: the "PayPal · <shop>" title and the extra Shop row. */
+    @Test
+    fun `render the details dialog of a PayPal booking`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-paypal-details").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val online = de.findesk.repository.CategoryRepositoryImpl().create("Online shopping", "#3BC7B0")
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(
+                    account,
+                    today.minusDays(2),
+                    BigDecimal("-19.99"),
+                    "EUR",
+                    "PayPal Europe S.a.r.l. et Cie S.C.A",
+                    "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+                    online.id.value,
+                    "paypal-1",
+                ),
+                NewTransaction(account, today.minusDays(1), BigDecimal("-4.50"), "EUR", "Bäckerei", "Brötchen", null, "paypal-2"),
+            ),
+        )
+
+        val created = arrayOfNulls<TransactionsViewModel>(1)
+        fun showing(): TransactionsViewModel = TransactionsViewModel().also { created[0] = it }
+        fun openDetails() {
+            val model = created[0] ?: error("the view model should exist once the screen settled")
+            val rows = model.state.value.transactions
+            check(rows.size == 2) { "the list should show the two bookings" }
+            model.selectTransaction(rows.first { it.partnerName?.contains("PayPal") == true })
+        }
+
+        render("transactions-paypal-details", 1440, 900, afterStable = ::openDetails) { Frame(Screen.TRANSACTIONS, dark = false, transactions = ::showing) }
     }
 
     /** The rule dialog with its Tax selector, editing a rule that carries a tax flag. */
