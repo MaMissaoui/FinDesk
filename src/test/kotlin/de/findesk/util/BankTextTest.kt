@@ -79,6 +79,36 @@ class BankTextTest {
         assertEquals("—", withNothing)
     }
 
+    @Test
+    fun `the second line is null when a paypal booking names a shop`() {
+        val paypal = txn(
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "Ihr Einkauf bei Beispiel Shop GmbH",
+        )
+        assertNull(BankText.secondaryLine(paypal), "the title already names the provider and the shop")
+    }
+
+    @Test
+    fun `a shopless paypal booking keeps its cleaned purpose on the second line`() {
+        val paypal = txn(
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "PP.1234.PP ABBUCHUNG VOM GIROKONTO",
+        )
+        assertEquals("PP.1234.PP ABBUCHUNG VOM GIROKONTO", BankText.secondaryLine(paypal))
+    }
+
+    @Test
+    fun `a plain booking's second line is the cleaned purpose`() {
+        val plain = txn(partner = "Beispiel Inc.", purpose = "EREF+R1 SVWZ+Rechnung 4711")
+        assertEquals("Rechnung 4711", BankText.secondaryLine(plain))
+    }
+
+    @Test
+    fun `a booking without a partner has no second line`() {
+        val noPartner = txn(partner = null, purpose = "SVWZ+Rechnung 4711")
+        assertNull(BankText.secondaryLine(noPartner))
+    }
+
     private fun txn(partner: String?, purpose: String?) = TransactionItem(
         id = 1,
         accountId = 1,

@@ -5,8 +5,8 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import de.findesk.util.BankText
 import de.findesk.util.Currencies
-import de.findesk.util.PaymentProviders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +16,7 @@ import java.io.File
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
+import java.util.Locale
 
 /**
  * Service for generating tax reports and financial analytics
@@ -321,15 +322,34 @@ class ReportService(
         .sortedByDescending { it.value }
         .associate { it.key to it.value }
 
-    private fun topVendors(expenses: List<TransactionItem>, limit: Int = 5): List<Pair<String, BigDecimal>> = expenses
-        .groupBy {
-            // A PayPal purchase is titled like its row: "PayPal · <shop>" so the purchases don't collapse into
-            // one PayPal entry; everything else keeps its description
-            PaymentProviders.titleOf(it.purpose, it.partnerName) ?: it.description
+    /**
+     * The period's expenses grouped into vendors, largest first. A vendor's bookings are matched case- and
+     * whitespace-insensitively on [BankText.displayDescription] (so a PayPal purchase groups by "PayPal · <shop>"
+     * and bank padding or casing never splits a vendor). A group shows the spelling most of its bookings use; on a
+     * tie, the spelling of its most recent booking (latest date, then highest id).
+     */
+    private fun topVendors(expenses: List<TransactionItem>, limit: Int = 5): List<Pair<String, BigDecimal>> {
+        fun key(name: String): String = name.replace(Regex("\\s+"), " ").trim().lowercase(Locale.ROOT)
+
+        // Each group is a non-empty list of (booking, display name); the name is computed once per booking
+        fun label(named: List<Pair<TransactionItem, String>>): String {
+            val counts = named.groupingBy { it.second }.eachCount()
+            val mostUsed = counts.values.max()
+            val candidates = counts.filterValues { it == mostUsed }.keys
+            if (candidates.size == 1) return candidates.first()
+            return named
+                .filter { it.second in candidates }
+                .maxWith(compareBy<Pair<TransactionItem, String>> { it.first.date }.thenBy { it.first.id })
+                .second
         }
-        .map { (name, txns) -> name to txns.sumOf { it.amount.abs() } }
-        .sortedByDescending { it.second }
-        .take(limit)
+
+        return expenses
+            .map { it to BankText.displayDescription(it) }
+            .groupBy { key(it.second) }
+            .map { (_, named) -> label(named) to named.sumOf { it.first.amount.abs() } }
+            .sortedByDescending { it.second }
+            .take(limit)
+    }
 
     // Data classes for reports
     data class TaxReport(

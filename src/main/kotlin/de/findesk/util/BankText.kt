@@ -74,6 +74,17 @@ object BankText {
         ?: displayPurpose(t.purpose)
         ?: PLACEHOLDER
 
+    /**
+     * The row's second line: null when [PaymentProviders.merchantOf] names a shop (the title already names the
+     * provider and the shop, and the full purpose stays in the details dialog), else the cleaned purpose when the
+     * booking has a partner, exactly as before.
+     */
+    fun secondaryLine(t: TransactionItem): String? = if (PaymentProviders.merchantOf(t.purpose, t.partnerName) != null) {
+        null
+    } else {
+        displayPurpose(t.purpose).takeIf { t.partnerName != null }
+    }
+
     /** Each tagged field as `(tag, text up to the next tag or the end)`; text before the first tag is dropped. */
     private fun substrings(text: String, matches: List<MatchResult>): List<Pair<String, String>> = matches
         .mapIndexed { index, match ->
