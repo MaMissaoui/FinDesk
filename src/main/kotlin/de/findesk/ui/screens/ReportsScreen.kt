@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -118,6 +118,37 @@ fun ReportsScreen(
                     }
                 }
                 DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
+                    // The tax bookings tab brings its own export actions into this one menu
+                    if (selectedTab == ReportsTab.TAX_BOOKINGS) {
+                        val tax = state.taxBookings
+                        val enabled = !state.isExporting && tax != null && tax.bookingCount > 0
+                        val suffix = fileSuffix(state.customRange, state.selectedYear)
+                        DropdownMenuItem(
+                            text = { Text(s[StringKey.ExportExcel]) },
+                            enabled = enabled,
+                            onClick = {
+                                exportMenu = false
+                                FileDialogs.saveFile(s[StringKey.ExportExcel], "tax-bookings-$suffix.xlsx")?.let(vm::exportTaxXlsx)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(s[StringKey.ExportPdf]) },
+                            enabled = enabled,
+                            onClick = {
+                                exportMenu = false
+                                FileDialogs.saveFile(s[StringKey.ExportPdf], "tax-bookings-$suffix.pdf")?.let(vm::exportTaxPdf)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(s[StringKey.Print]) },
+                            enabled = enabled,
+                            onClick = {
+                                exportMenu = false
+                                vm.printTax()
+                            },
+                        )
+                        HorizontalDivider()
+                    }
                     DropdownMenuItem(
                         text = { Text(s[StringKey.ExportPdf]) },
                         onClick = {
@@ -289,12 +320,23 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
             itemsIndexed(report.monthlyBreakdown) { _, m ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Text(monthName(m.month, TextStyle.FULL, s) + if (report.isCalendarYear) "" else " ${m.year}", modifier = Modifier.weight(1f))
-                    Text(Formats.money(m.income, report.currency), color = amountColor(false), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-                    Text(Formats.money(m.expenses, report.currency), color = amountColor(true), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    // A quiet month: its zero amounts stay grey and the net carries no sign and no emphasis
                     Text(
-                        Formats.money(m.net, report.currency, signed = true),
-                        fontWeight = FontWeight.SemiBold,
-                        color = amountColor(m.net.signum() < 0),
+                        Formats.money(m.income, report.currency),
+                        color = if (m.income.signum() == 0) MaterialTheme.colorScheme.onSurfaceVariant else amountColor(false),
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.End,
+                    )
+                    Text(
+                        Formats.money(m.expenses, report.currency),
+                        color = if (m.expenses.signum() == 0) MaterialTheme.colorScheme.onSurfaceVariant else amountColor(true),
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.End,
+                    )
+                    Text(
+                        Formats.money(m.net, report.currency, signed = m.net.signum() != 0),
+                        fontWeight = if (m.net.signum() == 0) FontWeight.Normal else FontWeight.SemiBold,
+                        color = if (m.net.signum() == 0) MaterialTheme.colorScheme.onSurfaceVariant else amountColor(m.net.signum() < 0),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
                     )
@@ -458,34 +500,6 @@ private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState,
     val s = strings()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            // The tab's actions, right-aligned above its cards; disabled while exporting or without bookings
-            val enabled = !state.isExporting && info.bookingCount > 0
-            val suffix = fileSuffix(state.customRange, state.selectedYear)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                if (state.isExporting) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(12.dp))
-                }
-                OutlinedButton(
-                    enabled = enabled,
-                    onClick = { FileDialogs.saveFile(s[StringKey.ExportExcel], "tax-bookings-$suffix.xlsx")?.let(vm::exportTaxXlsx) },
-                ) {
-                    Text(s[StringKey.ExportExcel])
-                }
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(
-                    enabled = enabled,
-                    onClick = { FileDialogs.saveFile(s[StringKey.ExportPdf], "tax-bookings-$suffix.pdf")?.let(vm::exportTaxPdf) },
-                ) {
-                    Text(s[StringKey.ExportPdf])
-                }
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(enabled = enabled, onClick = { vm.printTax() }) {
-                    Text(s[StringKey.Print])
-                }
-            }
-        }
-        item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f), valueColor = amountColor(false))
                 StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
@@ -497,7 +511,30 @@ private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState,
                     Modifier.weight(1f),
                     valueColor = balanceToneColor(balanceTone(info.netTotal, isLoan = false)),
                 )
-                StatCard(s[StringKey.TaxReceipts], s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount), Icons.Default.Info, Warning, Modifier.weight(1f))
+                // Receipts: the card says what's missing and turns the missing-receipts filter on in one click
+                val missing = info.bookingCount - info.withReceipt
+                if (missing > 0) {
+                    StatCard(
+                        s[StringKey.TaxReceipts],
+                        s.format(StringKey.ReceiptsMissing, missing),
+                        Icons.Default.Warning,
+                        Warning,
+                        Modifier.weight(1f).clickable(
+                            role = Role.Button,
+                            onClickLabel = s[StringKey.MissingReceiptsOnly],
+                        ) { vm.setMissingReceiptsOnly(true) },
+                        subtitle = s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount),
+                    )
+                } else {
+                    StatCard(
+                        s[StringKey.TaxReceipts],
+                        s[StringKey.ReceiptsComplete],
+                        Icons.Default.CheckCircle,
+                        Success,
+                        Modifier.weight(1f),
+                        subtitle = s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount),
+                    )
+                }
             }
         }
         if (info.otherCurrencyBookings > 0) {
@@ -663,7 +700,7 @@ private fun TaxSuggestionsCard(suggestions: List<TaxSuggestion>, vm: ReportsView
     }
 }
 
-/** One suggestion: date, partner-text display, the matched keyword as a chip, amount and the two actions. */
+/** One suggestion: date, partner-text display, the matched keyword, amount and the two actions. */
 @Composable
 private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
     val s = strings()
@@ -677,14 +714,13 @@ private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                taxStateLine(txn, s),
+                s.format(StringKey.MatchesKeyword, suggestion.keyword),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        KeywordChip(suggestion.keyword)
         Text(
             Formats.money(txn.amount, txn.currency, signed = true),
             color = amountColor(txn.amount.signum() < 0),
@@ -694,18 +730,5 @@ private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
         )
         TextButton(onClick = { vm.acceptSuggestion(txn.id) }) { Text(s[StringKey.Accept]) }
         TextButton(onClick = { vm.dismissSuggestion(txn.id) }) { Text(s[StringKey.DismissSuggestion]) }
-    }
-}
-
-/** The matched keyword as a small badge. */
-@Composable
-private fun KeywordChip(keyword: String) {
-    Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.padding(horizontal = 8.dp)) {
-        Text(
-            keyword,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
     }
 }
