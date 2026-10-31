@@ -126,6 +126,15 @@ enum class StringKey {
     ExpensesByCategoryInMonth,
     NoBookingsSixMonthsTo,
 
+    /** First stat card's title for a past month; %s is the balance's date ("Available on 30.09.2026"). */
+    AvailableAsOf,
+
+    /** First stat card's first subtitle line; %1$s is the previous month's name, %2$s the carried-over amount. */
+    CarryForwardFrom,
+
+    /** First stat card's subtitle line for money moved outside income and expenses; %s is the signed amount. */
+    OtherMovements,
+
     // Accounts
     AccountsTotal,
     AccountsTotalLabel,

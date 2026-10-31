@@ -94,9 +94,9 @@ class DashboardMonthTest {
         assertEquals(1, s.lastMonths.single { it.month == 8 }.income.signum(), "the August bar shows August")
         assertEquals(listOf("Donations"), s.taxDeductionsByCategory.map { it.label }, "January 1 to August 31")
         assertEquals(BigDecimal("100.00"), s.taxDeductionsByCategory.single().amount, "the September donation stays out")
-        // Unchanged, always "now"
-        assertEquals(before.totalBalance, s.totalBalance)
-        assertEquals(before.availableBalance, s.availableBalance)
+        // Month-aware: August's balance is reconstructed from today's 1,000.00 minus the later bookings (+1,350.00)
+        assertEquals(BigDecimal("-350.00"), s.totalBalance)
+        assertEquals(BigDecimal("-350.00"), s.availableBalance)
         assertEquals(before.loanBalance, s.loanBalance)
         assertEquals(before.recentTransactions.map { it.id }, s.recentTransactions.map { it.id })
         assertEquals(before.unlinkedDocumentCount, s.unlinkedDocumentCount)

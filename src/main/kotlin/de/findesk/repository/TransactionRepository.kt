@@ -145,6 +145,9 @@ interface TransactionRepository {
      * Null when there is no booking at all.
      */
     fun oldestDate(currency: String? = null): LocalDate?
+
+    /** Date of each account's oldest booking, by account id; accounts without bookings are absent. */
+    fun oldestDateByAccount(): Map<Int, LocalDate>
 }
 
 class TransactionRepositoryImpl : TransactionRepository {
@@ -428,6 +431,15 @@ class TransactionRepositoryImpl : TransactionRepository {
             if (currency != null) TransactionsTable.currency eq currency else Op.TRUE
         }
         TransactionsTable.select(oldest).where { condition }.firstOrNull()?.get(oldest)
+    }
+
+    override fun oldestDateByAccount(): Map<Int, LocalDate> = transaction {
+        val oldest = TransactionsTable.date.min()
+        TransactionsTable
+            .select(TransactionsTable.accountId, oldest)
+            .groupBy(TransactionsTable.accountId)
+            .mapNotNull { row -> row[oldest]?.let { row[TransactionsTable.accountId].value to it } }
+            .toMap()
     }
 
     override fun countNew(): Map<Int, Int> = transaction {

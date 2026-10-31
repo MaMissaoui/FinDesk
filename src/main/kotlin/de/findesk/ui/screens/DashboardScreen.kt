@@ -123,30 +123,49 @@ fun DashboardScreen(
             }
             val loanColor = MaterialTheme.colorScheme.onSurfaceVariant
             val netColor = balanceToneColor(netTone)
-            // Keep the formatted sentence exactly; colour only the two amounts found inside it
-            val subtitleText = loansText?.let { text ->
-                buildAnnotatedString {
-                    append(text)
-                    val loanStart = text.indexOf(loanAmountText)
-                    if (loanStart >= 0) addStyle(SpanStyle(color = loanColor), loanStart, loanStart + loanAmountText.length)
-                    val netStart = text.indexOf(netAmountText)
-                    if (netStart >= 0) addStyle(SpanStyle(color = netColor), netStart, netStart + netAmountText.length)
-                    if (otherText != null) {
-                        append("\n")
-                        append(otherText)
-                    }
+            // One AnnotatedString in reading order: carry-forward, other movements, loans, other currencies. An empty
+            // one still keeps the card as tall as its neighbours when no line applies.
+            val subtitleText = buildAnnotatedString {
+                val carryForward = state.carryForward
+                if (carryForward != null) {
+                    val amountText = Formats.money(carryForward, state.currency)
+                    val line = s.format(StringKey.CarryForwardFrom, s.month(state.selectedMonth.minusMonths(1)), amountText)
+                    val base = length
+                    append(line)
+                    val start = line.indexOf(amountText)
+                    if (start >= 0) addStyle(SpanStyle(color = balanceToneColor(balanceTone(carryForward, isLoan = false))), base + start, base + start + amountText.length)
+                }
+                val otherMovements = state.otherMovements
+                if (otherMovements != null && otherMovements.signum() != 0) {
+                    if (length > 0) append("\n")
+                    append(s.format(StringKey.OtherMovements, Formats.money(otherMovements, state.currency, signed = true)))
+                }
+                if (loansText != null) {
+                    if (length > 0) append("\n")
+                    // Keep the formatted sentence exactly; colour only the two amounts found inside it
+                    val base = length
+                    append(loansText)
+                    val loanStart = loansText.indexOf(loanAmountText)
+                    if (loanStart >= 0) addStyle(SpanStyle(color = loanColor), base + loanStart, base + loanStart + loanAmountText.length)
+                    val netStart = loansText.indexOf(netAmountText)
+                    if (netStart >= 0) addStyle(SpanStyle(color = netColor), base + netStart, base + netStart + netAmountText.length)
+                }
+                if (otherText != null) {
+                    if (length > 0) append("\n")
+                    append(otherText)
                 }
             }
+            val balanceDate = state.balanceDate
+            val title = if (balanceDate == null) s[StringKey.AvailableBalance] else s.format(StringKey.AvailableAsOf, Formats.date(balanceDate))
             // Equal heights even when a subtitle wraps in a narrow window
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(
-                    s[StringKey.AvailableBalance],
+                    title,
                     Formats.money(state.availableBalance, state.currency),
                     AppIcons.AccountBalance,
                     PrimaryBlue,
                     Modifier.weight(1f).fillMaxHeight(),
-                    // Loans and other currencies can both apply; neither line hides the other
-                    subtitle = if (subtitleText == null) otherText else null,
+                    subtitle = null,
                     valueColor = balanceToneColor(balanceTone(state.availableBalance, isLoan = false)),
                     subtitleText = subtitleText,
                 )

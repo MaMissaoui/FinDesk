@@ -1,6 +1,7 @@
 package de.findesk.viewmodel
 
 import de.findesk.document.ReportService
+import de.findesk.model.AccountItem
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
@@ -57,6 +58,18 @@ data class DashboardState(
     val availableBalance: BigDecimal = BigDecimal.ZERO,
     /** Sum of the loan accounts' balances; only shown when [hasLoans] says there are loans at all. */
     val loanBalance: BigDecimal = BigDecimal.ZERO,
+    /**
+     * Money available at the end of the previous month, reconstructed from today's balances and the bookings after
+     * that month. Null when the available accounts' booking history doesn't reach back before the selected month.
+     */
+    val carryForward: BigDecimal? = null,
+    /**
+     * What the available accounts moved outside income and expenses (transfers to loans or depots, interest on a
+     * loan), so [carryForward] and the monthly figures add up to [availableBalance]. Null when [carryForward] is null.
+     */
+    val otherMovements: BigDecimal? = null,
+    /** The day the available balance is stated for: a past month's last day; null in the current month. */
+    val balanceDate: LocalDate? = null,
     /** Whether the accounts include loans, so the balance card can show what they do to [totalBalance]. */
     val hasLoans: Boolean = false,
     /** Balances of accounts in other currencies, per currency (never added to [totalBalance]). */
@@ -124,10 +137,27 @@ class DashboardViewModel(
             val sixMonthsStart = monthStart.minusMonths(5)
             val yearStart = LocalDate.of(month.year, 1, 1)
             val accounts = accountRepository.findAllItems()
-            val balances = Currencies.totals(accounts, currency, { it.currency }, { it.balance })
+            // One query for every month-aware balance: from the selected month on, in every currency (the other
+            // currencies' totals are reconstructed the same way). Pending bookings are not bookings and stay out.
+            val monthBookings = transactionRepository.findItems(TransactionFilter(startDate = monthStart)).groupBy { it.accountId }
+            val currentMonth = month == nowMonth
+
+            // A depot's balance is a market value, not the sum of its bookings; the current month uses the bank's
+            // balance as is (future-dated bookings included), so only a past month is reconstructed backwards.
+            fun balanceAt(account: AccountItem): BigDecimal = when {
+                account.accountType == DEPOT_TYPE || currentMonth -> account.balance
+                else -> account.balance - monthBookings[account.id].orEmpty().filter { it.date.isAfter(monthEnd) }.sumOf { it.amount }
+            }
+
+            // The current month's movement includes future-dated bookings, matching the balance the bank reports.
+            fun movement(account: AccountItem): BigDecimal = monthBookings[account.id].orEmpty()
+                .filter { currentMonth || !it.date.isAfter(monthEnd) }
+                .sumOf { it.amount }
+            val balances = Currencies.totals(accounts, currency, { it.currency }, { balanceAt(it) })
             // Loans are money owed and depots are neither, so only the other account types are money available to spend
-            val availableBalance = Currencies.totals(accounts.filter { it.accountType != LOAN_TYPE && it.accountType != DEPOT_TYPE }, currency, { it.currency }, { it.balance })[currency] ?: BigDecimal.ZERO
-            val loanBalance = Currencies.totals(accounts.filter { it.accountType == LOAN_TYPE }, currency, { it.currency }, { it.balance })[currency] ?: BigDecimal.ZERO
+            val availableAccounts = accounts.filter { it.accountType != LOAN_TYPE && it.accountType != DEPOT_TYPE && it.currency == currency }
+            val availableBalance = Currencies.totals(availableAccounts, currency, { it.currency }, { balanceAt(it) })[currency] ?: BigDecimal.ZERO
+            val loanBalance = Currencies.totals(accounts.filter { it.accountType == LOAN_TYPE }, currency, { it.currency }, { balanceAt(it) })[currency] ?: BigDecimal.ZERO
             val recent = transactionRepository.findItems(limit = 8)
             // One query covering both the 6-month chart and the year-to-date tax chart
             val window = transactionRepository.findItems(
@@ -135,6 +165,18 @@ class DashboardViewModel(
             )
             val thisMonth = window.filter { !it.date.isBefore(monthStart) && !it.date.isAfter(monthEnd) }
             val thisMonthExpenses = thisMonth.filter { it.countsAsSpending }
+            val monthlyIncome = thisMonth.filter { it.countsAsIncome }.sumOf { it.amount }
+            val monthlyExpenses = thisMonthExpenses.sumOf { it.amount.abs() }
+
+            // The carry-forward is only reliable when the booking history reaches back before the month: otherwise
+            // money from earlier bookings is missing from today's balance and would look like a movement.
+            val oldestByAccount = transactionRepository.oldestDateByAccount()
+            val carryForwardKnown = availableAccounts.all { account ->
+                oldestByAccount[account.id]?.isBefore(monthStart) ?: true
+            }
+            val carryForward = if (carryForwardKnown) availableAccounts.sumOf { balanceAt(it) - movement(it) } else null
+            // By construction carryForward + monthlyIncome - monthlyExpenses + otherMovements == availableBalance
+            val otherMovements = carryForward?.let { availableAccounts.sumOf { movement(it) } - (monthlyIncome - monthlyExpenses) }
 
             val lastMonths = (0 until 6).map { i ->
                 val m = sixMonthsStart.plusMonths(i.toLong())
@@ -153,11 +195,14 @@ class DashboardViewModel(
                 currency = currency,
                 totalBalance = balances[currency] ?: BigDecimal.ZERO,
                 availableBalance = availableBalance,
+                carryForward = carryForward,
+                otherMovements = otherMovements,
+                balanceDate = if (currentMonth) null else monthEnd,
                 loanBalance = loanBalance,
                 hasLoans = accounts.any { it.accountType == LOAN_TYPE },
                 otherBalances = balances - currency,
-                monthlyIncome = thisMonth.filter { it.countsAsIncome }.sumOf { it.amount },
-                monthlyExpenses = thisMonthExpenses.sumOf { it.amount.abs() },
+                monthlyIncome = monthlyIncome,
+                monthlyExpenses = monthlyExpenses,
                 // All currencies: the card opens the uncategorized list, which isn't limited to one currency
                 uncategorizedCount = transactionRepository.findItems(TransactionFilter(startDate = monthStart, endDate = monthEnd, uncategorizedOnly = true)).size,
                 unlinkedDocumentCount = documentRepository.findItems(unlinkedOnly = true).size,

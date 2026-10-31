@@ -780,6 +780,36 @@ class ScreenshotTest {
         render("dashboard-past-month-dark", 1440, 900) { Frame(Screen.DASHBOARD, dark = true, dashboard = ::pastMonth) }
     }
 
+    /** The month-aware balance card: carry-forward, a loan repayment as other movements and the loans line. */
+    @Test
+    fun `render the dashboard carry-forward card`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-carry-forward").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        val checking = accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        val loan = accounts.create(bank, "DE44500105175407324001", balance = BigDecimal("-12000.00"), accountType = "loan").id.value
+        val transfers = de.findesk.repository.CategoryRepositoryImpl().create("Own transfers", "#4CAF50", isTransfer = true).id.value
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(checking, today.minusMonths(2).withDayOfMonth(1), BigDecimal("-120.00"), "EUR", "Supermarket", "Weekly shop", null, "cf-1"),
+                NewTransaction(checking, today.minusMonths(1).withDayOfMonth(3), BigDecimal("2500.00"), "EUR", "Employer GmbH", "Salary", null, "cf-2"),
+                NewTransaction(checking, today.minusMonths(1).withDayOfMonth(8), BigDecimal("-800.00"), "EUR", "Landlord", "Rent", null, "cf-3"),
+                NewTransaction(checking, today.minusMonths(1).withDayOfMonth(15), BigDecimal("-500.00"), "EUR", "Loan repayment", "Repayment", transfers, "cf-4"),
+                NewTransaction(loan, today.minusMonths(1).withDayOfMonth(15), BigDecimal("500.00"), "EUR", "Loan repayment", "Repayment", transfers, "cf-5"),
+            ),
+        )
+
+        fun pastMonth(): DashboardViewModel = DashboardViewModel().apply {
+            runBlocking {
+                loadDashboard().join()
+                selectMonth(java.time.YearMonth.from(today).minusMonths(1)).join()
+            }
+        }
+        render("dashboard-carry-forward", 1440, 900) { Frame(Screen.DASHBOARD, dark = false, dashboard = ::pastMonth) }
+        render("dashboard-carry-forward-fr", 1440, 900) { Frame(Screen.DASHBOARD, dark = true, language = AppLanguage.FR, dashboard = ::pastMonth) }
+    }
+
     /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */
     @Test
     fun `render accounts with a central bank code hint`() {
