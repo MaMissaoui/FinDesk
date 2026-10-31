@@ -71,13 +71,14 @@ import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.platform.Platform
 import de.findesk.ui.theme.amountColor
-import de.findesk.ui.theme.balanceColor
+import de.findesk.ui.theme.balanceToneColor
 import de.findesk.util.AccountGroupView
 import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
 import de.findesk.util.Iban
+import de.findesk.util.balanceTone
 import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.CategoryFilter
 import de.findesk.viewmodel.ImportPreview
@@ -166,7 +167,7 @@ fun TransactionsScreen(
                 val headerBalance = state.currentBalance
                 // The header's and the running column's balances both belong to [state.accountId]'s account,
                 // so a loan's negative balance there never warns red (see currentBalanceIsLoan)
-                val headerBalanceColor = if (headerBalance != null) balanceColor(headerBalance.signum() < 0 && !state.currentBalanceIsLoan) else MaterialTheme.colorScheme.onSurfaceVariant
+                val headerBalanceColor = if (headerBalance != null) balanceToneColor(balanceTone(headerBalance, state.currentBalanceIsLoan)) else MaterialTheme.colorScheme.onSurfaceVariant
                 // The sentence the strip replaces, so a screen reader hears one summary instead of every figure twice
                 val summaryText = buildString {
                     append(
@@ -1098,7 +1099,7 @@ private fun TransactionRow(
                 Text(
                     Formats.money(balance.balance, currency),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = balanceColor(balance.balance.signum() < 0 && !balanceIsLoan),
+                    color = balanceToneColor(balanceTone(balance.balance, balanceIsLoan)),
                     textAlign = TextAlign.End,
                 )
             }

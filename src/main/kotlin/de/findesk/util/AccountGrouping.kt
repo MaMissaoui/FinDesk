@@ -94,6 +94,28 @@ fun isWarningBalance(accounts: List<AccountItem>, currency: String): Boolean {
     return withoutLoans.signum() < 0
 }
 
+/** How an account balance or a total of balances is coloured (see `balanceToneColor` in the theme). */
+enum class BalanceTone { POSITIVE, NEGATIVE, LOAN, ZERO }
+
+/** Tone of [accounts]' total in [currency]; the red/grey split follows [isWarningBalance]. */
+fun balanceTone(accounts: List<AccountItem>, currency: String): BalanceTone {
+    val total = accounts.filter { it.currency == currency }.sumOf { it.balance }
+    return when {
+        total.signum() > 0 -> BalanceTone.POSITIVE
+        total.signum() == 0 -> BalanceTone.ZERO
+        isWarningBalance(accounts, currency) -> BalanceTone.NEGATIVE
+        else -> BalanceTone.LOAN
+    }
+}
+
+/** Tone of one balance that is not a list of accounts (a single account's running balance, a dashboard figure). */
+fun balanceTone(value: BigDecimal, isLoan: Boolean): BalanceTone = when {
+    value.signum() > 0 -> BalanceTone.POSITIVE
+    value.signum() == 0 -> BalanceTone.ZERO
+    isLoan -> BalanceTone.LOAN
+    else -> BalanceTone.NEGATIVE
+}
+
 private fun totals(accounts: List<AccountItem>, primary: String): Map<String, BigDecimal> = Currencies.totals(accounts, primary, { it.currency }, { it.balance })
 
 /** The custom group [key] stands for, or null for a type group (clearing the group sends an account back to its type). */

@@ -38,9 +38,9 @@ import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
-import de.findesk.ui.theme.balanceColor
+import de.findesk.ui.theme.balanceToneColor
 import de.findesk.util.Formats
-import de.findesk.util.isWarningBalance
+import de.findesk.util.balanceTone
 
 /**
  * The Payments screen's "From" picker: an outlined field that opens a readable menu instead of a list of one-line
@@ -90,7 +90,7 @@ fun AccountPicker(
                     Text(
                         Formats.money(selected.balance, selected.currency),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = balanceColor(isWarningBalance(listOf(selected), selected.currency)),
+                        color = balanceToneColor(balanceTone(listOf(selected), selected.currency)),
                         maxLines = 1,
                         modifier = Modifier.padding(start = 12.dp),
                     )
@@ -154,7 +154,7 @@ private fun AccountPickerItem(account: AccountItem, isSelected: Boolean, onSelec
                     Spacer(Modifier.width(12.dp))
                     Text(
                         balance,
-                        color = balanceColor(isWarningBalance(listOf(account), account.currency)),
+                        color = balanceToneColor(balanceTone(listOf(account), account.currency)),
                     )
                 }
                 // The type prefix tells named accounts apart; an unnamed one already says its type

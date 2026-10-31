@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -39,13 +40,13 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
-import de.findesk.ui.theme.balanceColor
+import de.findesk.ui.theme.balanceToneColor
 import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AccountIds
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.LOAN_TYPE
-import de.findesk.util.isWarningBalance
+import de.findesk.util.balanceTone
 import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
 import java.math.BigDecimal
@@ -91,6 +92,10 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                     if (loans.isNotEmpty()) append(", $loansLabel $loanText")
                 }
                 if (showHeader) {
+                    // One currency: the total follows the balance tone; several: the combined line keeps plain text
+                    val totalColor = state.totals.entries.singleOrNull()
+                        ?.let { (currency, _) -> balanceToneColor(balanceTone(state.accounts, currency)) }
+                        ?: MaterialTheme.colorScheme.onSurface
                     Row(
                         modifier = Modifier.weight(1f, fill = false).clearAndSetSemantics { contentDescription = description },
                         horizontalArrangement = Arrangement.spacedBy(32.dp),
@@ -100,9 +105,10 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                             label = s.format(if (loans.isEmpty()) StringKey.AccountsTotalLabel else StringKey.AccountsNetLabel, state.accounts.size),
                             value = totalText,
                             secondary = false,
+                            valueColor = totalColor,
                         )
                         if (loans.isNotEmpty()) {
-                            FigureGroup(label = loansLabel, value = loanText, secondary = true)
+                            FigureGroup(label = loansLabel, value = loanText, secondary = true, valueColor = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -310,7 +316,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
 
 /** One labelled figure of the accounts header: a small label above a strong amount. */
 @Composable
-private fun FigureGroup(label: String, value: String, secondary: Boolean) {
+private fun FigureGroup(label: String, value: String, secondary: Boolean, valueColor: Color) {
     Column {
         Text(
             label,
@@ -322,7 +328,7 @@ private fun FigureGroup(label: String, value: String, secondary: Boolean) {
             value,
             style = if (secondary) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
-            color = if (secondary) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            color = valueColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -357,7 +363,7 @@ private fun BankCard(
     val s = strings()
     // The collapsed header shows the connection's total, coloured by the loan rule when it is a single currency
     val totals = Currencies.totals(accounts, primaryCurrency, { it.currency }, { it.balance })
-    val totalColor = if (totals.size == 1) balanceColor(isWarningBalance(accounts, totals.keys.first())) else MaterialTheme.colorScheme.onSurfaceVariant
+    val totalColor = if (totals.size == 1) balanceToneColor(balanceTone(accounts, totals.keys.first())) else MaterialTheme.colorScheme.onSurfaceVariant
     FinDeskCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             RowContextMenu(
@@ -550,7 +556,7 @@ private fun BankCard(
                                 Formats.money(account.balance, account.currency),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = balanceColor(isWarningBalance(listOf(account), account.currency)),
+                                color = balanceToneColor(balanceTone(listOf(account), account.currency)),
                             )
                             Spacer(Modifier.width(8.dp))
                             IconButton(onClick = { onTransactions(account) }) {
@@ -1164,7 +1170,7 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                             Formats.money(a.balance, a.currency),
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = balanceColor(isWarningBalance(listOf(a), a.currency)),
+                            color = balanceToneColor(balanceTone(listOf(a), a.currency)),
                         )
                     }
                     SingleChoiceRow(

@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
@@ -29,9 +31,12 @@ import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.balanceToneColor
+import de.findesk.util.BalanceTone
 import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
+import de.findesk.util.balanceTone
 import de.findesk.viewmodel.BudgetStatus
 import de.findesk.viewmodel.DashboardViewModel
 import de.findesk.viewmodel.Period
@@ -101,9 +106,39 @@ fun DashboardScreen(
         }
 
         item {
+            // Loans are money owed: the first card shows what is available, and squeezes the loans in as its subtitle
+            val loanAmountText = Formats.money(state.loanBalance, state.currency)
+            val netAmountText = Formats.money(state.totalBalance, state.currency)
+            val loansText = state.hasLoans.takeIf { it }?.let {
+                s.format(StringKey.LoansSubtitle, loanAmountText, netAmountText)
+            }
+            val otherText = state.otherBalances.takeIf { it.isNotEmpty() }
+                ?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) }
+            // A total negative only because of loans is calm grey, not the warning red
+            val netTone = when {
+                state.totalBalance.signum() > 0 -> BalanceTone.POSITIVE
+                state.totalBalance.signum() == 0 -> BalanceTone.ZERO
+                state.availableBalance.signum() < 0 -> BalanceTone.NEGATIVE
+                else -> BalanceTone.LOAN
+            }
+            val loanColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val netColor = balanceToneColor(netTone)
+            // Keep the formatted sentence exactly; colour only the two amounts found inside it
+            val subtitleText = loansText?.let { text ->
+                buildAnnotatedString {
+                    append(text)
+                    val loanStart = text.indexOf(loanAmountText)
+                    if (loanStart >= 0) addStyle(SpanStyle(color = loanColor), loanStart, loanStart + loanAmountText.length)
+                    val netStart = text.indexOf(netAmountText)
+                    if (netStart >= 0) addStyle(SpanStyle(color = netColor), netStart, netStart + netAmountText.length)
+                    if (otherText != null) {
+                        append("\n")
+                        append(otherText)
+                    }
+                }
+            }
             // Equal heights even when a subtitle wraps in a narrow window
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Loans are money owed: the first card shows what is available, and squeezes the loans in as its subtitle
                 StatCard(
                     s[StringKey.AvailableBalance],
                     Formats.money(state.availableBalance, state.currency),
@@ -111,16 +146,9 @@ fun DashboardScreen(
                     PrimaryBlue,
                     Modifier.weight(1f).fillMaxHeight(),
                     // Loans and other currencies can both apply; neither line hides the other
-                    subtitle = listOfNotNull(
-                        state.hasLoans.takeIf { it }?.let {
-                            s.format(
-                                StringKey.LoansSubtitle,
-                                Formats.money(state.loanBalance, state.currency),
-                                Formats.money(state.totalBalance, state.currency),
-                            )
-                        },
-                        state.otherBalances.takeIf { it.isNotEmpty() }?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) },
-                    ).joinToString("\n").ifEmpty { null },
+                    subtitle = if (subtitleText == null) otherText else null,
+                    valueColor = balanceToneColor(balanceTone(state.availableBalance, isLoan = false)),
+                    subtitleText = subtitleText,
                 )
                 StatCard(
                     if (state.isCurrentMonth) s[StringKey.IncomeThisMonth] else s.format(StringKey.IncomeInMonth, s.month(state.selectedMonth)),
@@ -128,6 +156,7 @@ fun DashboardScreen(
                     AppIcons.AddCircleOutline,
                     Success,
                     Modifier.weight(1f).fillMaxHeight(),
+                    valueColor = amountColor(false),
                 )
                 StatCard(
                     if (state.isCurrentMonth) s[StringKey.ExpensesThisMonth] else s.format(StringKey.ExpensesInMonth, s.month(state.selectedMonth)),
@@ -135,6 +164,7 @@ fun DashboardScreen(
                     AppIcons.RemoveCircleOutline,
                     Error,
                     Modifier.weight(1f).fillMaxHeight(),
+                    valueColor = amountColor(true),
                 )
                 PendingTasksCard(
                     pendingTasks = state.pendingTasks,
