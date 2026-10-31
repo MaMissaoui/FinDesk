@@ -35,9 +35,11 @@ import de.findesk.ui.theme.PrimaryBlue
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.balanceToneColor
 import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
+import de.findesk.util.balanceTone
 import de.findesk.viewmodel.Period
 import de.findesk.viewmodel.ReportsState
 import de.findesk.viewmodel.ReportsViewModel
@@ -106,10 +108,14 @@ fun ReportsScreen(
                 Spacer(Modifier.width(12.dp))
             }
             Box {
-                Button(enabled = !state.isExporting, onClick = { exportMenu = true }) {
-                    Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(s[StringKey.Export])
+                // An empty period has nothing to export; the disabled button says so
+                val nothingToExport = report?.takeIf { it.transactionCount == 0 }
+                DisabledReason(nothingToExport?.let { s.format(StringKey.NothingToExport, it.title) }) {
+                    Button(enabled = !state.isExporting && nothingToExport == null, onClick = { exportMenu = true }) {
+                        Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(s[StringKey.Export])
+                    }
                 }
                 DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
                     DropdownMenuItem(
@@ -214,9 +220,16 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f))
-                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f))
-                StatCard(s[StringKey.NetIncome], Formats.money(report.netIncome, report.currency), AppIcons.BarChart, PrimaryBlue, Modifier.weight(1f))
+                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f), valueColor = amountColor(false))
+                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(
+                    s[StringKey.NetIncome],
+                    Formats.money(report.netIncome, report.currency),
+                    AppIcons.BarChart,
+                    PrimaryBlue,
+                    Modifier.weight(1f),
+                    valueColor = balanceToneColor(balanceTone(report.netIncome, isLoan = false)),
+                )
                 StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), Icons.Default.Info, Warning, Modifier.weight(1f))
             }
         }
@@ -243,7 +256,7 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.StatTransactions], report.transactionCount.toString(), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
                 StatCard(s[StringKey.CategoriesUsed], report.categoriesUsed.toString(), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
-                StatCard(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
+                StatCard(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight(), valueColor = amountColor(true))
                 StatCard(
                     s[StringKey.HighestMonth],
                     highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses, report.currency)}" } ?: "—",
@@ -399,8 +412,8 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.RecurringPayments], payments.size.toString(), Icons.Default.Refresh, PrimaryBlue, Modifier.weight(1f))
-                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, Currencies.DEFAULT), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f))
-                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, Currencies.DEFAULT), Icons.Default.DateRange, Warning, Modifier.weight(1f))
+                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, Currencies.DEFAULT), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, Currencies.DEFAULT), Icons.Default.DateRange, Warning, Modifier.weight(1f), valueColor = amountColor(true))
             }
         }
         item {
@@ -474,9 +487,16 @@ private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState,
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f))
-                StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f))
-                StatCard(s[StringKey.NetIncome], Formats.money(info.netTotal, info.currency), AppIcons.BarChart, PrimaryBlue, Modifier.weight(1f))
+                StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f), valueColor = amountColor(false))
+                StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(
+                    s[StringKey.NetIncome],
+                    Formats.money(info.netTotal, info.currency),
+                    AppIcons.BarChart,
+                    PrimaryBlue,
+                    Modifier.weight(1f),
+                    valueColor = balanceToneColor(balanceTone(info.netTotal, isLoan = false)),
+                )
                 StatCard(s[StringKey.TaxReceipts], s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount), Icons.Default.Info, Warning, Modifier.weight(1f))
             }
         }
@@ -539,13 +559,14 @@ private fun TaxSectionHeader(title: String) {
 
 @Composable
 private fun TaxGroupCard(group: ReportService.TaxGroup, rows: List<TransactionItem>, currency: String, vm: ReportsViewModel) {
+    val s = strings()
     FinDeskCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).background(categoryColor(group.color, group.name), CircleShape))
                 Spacer(Modifier.width(12.dp))
                 Text(group.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text(rows.size.toString() + " · " + Formats.money(group.net, currency, signed = true), style = MaterialTheme.typography.bodyMedium)
+                Text(s.format(StringKey.BookingsCountTotal, rows.size, Formats.money(group.net, currency, signed = true)), style = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.height(8.dp))
             rows.forEachIndexed { index, txn ->

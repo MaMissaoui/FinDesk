@@ -488,6 +488,9 @@ enum class StringKey {
 
     // Documents
     OcrNeedsTesseract,
+
+    /** Hint when OCR isn't installed; %s is the Settings location ("Settings → Data & OCR"). */
+    OcrNotInstalled,
     Upload,
     UploadDocuments,
     SearchDocuments,
@@ -517,6 +520,12 @@ enum class StringKey {
     Export,
     ExportPdf,
     ExportReport,
+
+    /** Disabled hint on the export button when the period has no bookings; %s is the report's title. */
+    NothingToExport,
+
+    /** A tax group's row count and net: "%1$d bookings · %2$s". */
+    BookingsCountTotal,
     TaxYear,
     CustomRange,
     PreviousYear,
@@ -642,6 +651,9 @@ enum class StringKey {
     AutoCategorizationRules,
     AddRule,
     RulesHint,
+
+    /** Empty rules list once categories exist. */
+    NoRulesYet,
     Prio,
     Manual,
     RuleSearchIn,
