@@ -675,7 +675,7 @@ class ViewModelsTest {
         val withBalance = File(tmp, "with-balance.csv")
         vm.start(accountId = account).join()
         vm.exportCsv(withBalance).join()
-        assertTrue(withBalance.readLines().first().endsWith(",Balance"), "shown column is exported")
+        assertTrue(withBalance.readLines().first().endsWith(",Balance,Shop"), "shown columns are exported, with the shop last")
 
         val withoutBalance = File(tmp, "without-balance.csv")
         vm.start().join()

@@ -4,7 +4,9 @@ import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.model.TaxSource
 import de.findesk.model.TransactionItem
+import de.findesk.util.BankText
 import de.findesk.util.Formats
+import de.findesk.util.PaymentProviders
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.PDPageContentStream
@@ -120,7 +122,7 @@ class TaxReportExporter {
     private fun bookingsSheet(writer: XlsxWriter, bookings: ReportService.TaxBookings) {
         writer.sheet(
             AppStrings[StringKey.XlsxSheetBookings],
-            listOf(13.0, 24.0, 12.0, 30.0, 34.0, 26.0, 12.0, 10.0, 10.0, 44.0),
+            listOf(13.0, 24.0, 12.0, 30.0, 18.0, 34.0, 26.0, 12.0, 10.0, 10.0, 44.0),
             freezeHeader = true,
             autoFilter = true,
         ) {
@@ -129,6 +131,7 @@ class TaxReportExporter {
                 bold(AppStrings[StringKey.ColCategory]),
                 bold(AppStrings[StringKey.ColDate]),
                 bold(AppStrings[StringKey.ColPartner]),
+                bold(AppStrings[StringKey.ColShop]),
                 bold(AppStrings[StringKey.ColPurpose]),
                 bold(AppStrings[StringKey.ColAccount]),
                 bold(AppStrings[StringKey.ColAmount]),
@@ -147,6 +150,7 @@ class TaxReportExporter {
             text(group.name),
             date(txn.date),
             text(txn.partnerName.orEmpty()),
+            text(PaymentProviders.merchantOf(txn.purpose, txn.partnerName).orEmpty()),
             text(txn.purpose.orEmpty()),
             text(txn.accountIban),
             money(txn.amount),
@@ -255,7 +259,7 @@ class TaxReportExporter {
             ensure(ROW_HEIGHT)
             y -= ROW_HEIGHT
             drawFitted(Formats.date(txn.date), regular, 9f, X_DATE, W_DATE)
-            drawFitted(txn.description, regular, 9f, X_DESC, W_DESC)
+            drawFitted(BankText.displayDescription(txn), regular, 9f, X_DESC, W_DESC)
             drawFitted(shortAccount(txn), regular, 9f, X_ACCOUNT, W_ACCOUNT)
             drawRightFitted(pdfAmount(txn.amount, signed = true), regular, 9f, AMOUNT_RIGHT_EDGE, W_AMOUNT)
             drawRightFitted(

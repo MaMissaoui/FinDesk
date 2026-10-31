@@ -5,6 +5,7 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
+import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.PaymentProviders
 import kotlinx.coroutines.Dispatchers
@@ -188,7 +189,7 @@ class ReportService(
             .take(10)
             .map {
                 ExpenseItem(
-                    description = it.description,
+                    description = BankText.displayDescription(it),
                     amount = it.amount.abs(),
                     category = it.categoryName ?: UNCATEGORIZED,
                     date = it.date,
@@ -283,7 +284,8 @@ class ReportService(
                     de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAmount],
                     de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColCurrency],
                     de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColAccount],
-                ) + if (balances != null) listOf(de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColBalance]) else emptyList()
+                ) + (if (balances != null) listOf(de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColBalance]) else emptyList()) +
+                    listOf(de.findesk.i18n.AppStrings[de.findesk.i18n.StringKey.ColShop])
                 writer.write(CsvFormat.row(*header.toTypedArray()))
                 transactions.forEach { txn ->
                     val fields = listOf(
@@ -294,7 +296,8 @@ class ReportService(
                         txn.amount.toPlainString(),
                         CsvFormat.text(txn.currency),
                         CsvFormat.text(txn.accountIban.orEmpty()),
-                    ) + if (balances != null) listOf(balances[txn.id]?.toPlainString().orEmpty()) else emptyList()
+                    ) + (if (balances != null) listOf(balances[txn.id]?.toPlainString().orEmpty()) else emptyList()) +
+                        listOf(CsvFormat.text(PaymentProviders.merchantOf(txn.purpose, txn.partnerName).orEmpty()))
                     writer.write(CsvFormat.row(*fields.toTypedArray()))
                 }
             }

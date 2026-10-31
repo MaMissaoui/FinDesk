@@ -78,6 +78,7 @@ import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
 import de.findesk.util.Iban
+import de.findesk.util.PaymentProviders
 import de.findesk.util.balanceTone
 import de.findesk.viewmodel.AccountSelection
 import de.findesk.viewmodel.CategoryFilter
@@ -548,7 +549,7 @@ fun TransactionsScreen(
     confirmDelete?.let { txn ->
         ConfirmDialog(
             title = s[StringKey.DeleteTransactionTitle],
-            text = "${Formats.date(txn.date)} ${txn.description} ${Formats.money(txn.amount, txn.currency)}",
+            text = "${Formats.date(txn.date)} ${BankText.displayDescription(txn)} ${Formats.money(txn.amount, txn.currency)}",
             onConfirm = { vm.deleteTransaction(txn.id) },
             onDismiss = { confirmDelete = null },
         )
@@ -607,7 +608,7 @@ internal fun MultiDeleteDialogContent(bookings: List<TransactionItem>) {
                 .entries.joinToString(" · ") { (currency, value) -> Formats.money(value, currency, signed = true) },
         )
         bookings.take(5).forEach { txn ->
-            Text("${Formats.date(txn.date)} ${txn.description} ${Formats.money(txn.amount, txn.currency)}")
+            Text("${Formats.date(txn.date)} ${BankText.displayDescription(txn)} ${Formats.money(txn.amount, txn.currency)}")
         }
         if (bookings.size > 5) Text(s.format(StringKey.AndMore, bookings.size - 5))
         Text(
@@ -1631,7 +1632,7 @@ internal fun TransactionDetailDialog(
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(txn.description) },
+        title = { Text(BankText.displayDescription(txn)) },
         text = {
             Column(Modifier.width(560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -1643,6 +1644,7 @@ internal fun TransactionDetailDialog(
                 DetailRow(s[StringKey.DetailDate], Formats.date(txn.date))
                 DetailRow(s[StringKey.DetailAccount], account?.let { accountLabel(it) } ?: Formats.iban(txn.accountIban))
                 txn.partnerName?.let { DetailRow(s[StringKey.DetailPartner], it) }
+                PaymentProviders.merchantOf(txn.purpose, txn.partnerName)?.let { DetailRow(s[StringKey.DetailShop], it) }
                 txn.purpose?.let { DetailRow(s[StringKey.DetailPurpose], it) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(s[StringKey.DetailCategory], fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))

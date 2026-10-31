@@ -43,6 +43,7 @@ import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceToneColor
 import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AccountIds
+import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
 import de.findesk.util.LOAN_TYPE
@@ -1191,7 +1192,7 @@ private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, on
                 detail.recent.forEach { t ->
                     Row(Modifier.fillMaxWidth()) {
                         Text(Formats.date(t.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
-                        Text(t.description, style = MaterialTheme.typography.bodySmall, maxLines = 1, modifier = Modifier.weight(1f))
+                        Text(BankText.displayDescription(t), style = MaterialTheme.typography.bodySmall, maxLines = 1, modifier = Modifier.weight(1f))
                         Text(
                             Formats.money(t.amount, t.currency, signed = true),
                             style = MaterialTheme.typography.bodySmall,
