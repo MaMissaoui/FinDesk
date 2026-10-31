@@ -909,6 +909,9 @@ enum class StringKey {
     SyncSummaryHistoryFrom,
     BalanceNotProvided,
     BalanceNotProvidedNoCode,
+    SyncGapNotFetched,
+    SyncAccountWithoutIban,
+    SyncBalanceOtherCurrency,
 
     /** The pending block's header above the booking list; %s is the fetch time (date and time). */
     PendingHeader,

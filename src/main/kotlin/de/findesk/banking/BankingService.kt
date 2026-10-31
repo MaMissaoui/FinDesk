@@ -206,15 +206,35 @@ class BankingService(
                 var categorized = 0
                 val warnings = mutableListOf<String>()
                 val notes = mutableListOf<String>()
-                snapshots.filter { it.account.iban.isNotBlank() }.forEachIndexed { i, snap ->
-                    finTSClient.reportProgress(AppStrings.format(StringKey.ProgressSavingAccount, snap.account.iban.takeLast(4)), 0.5f + 0.5f * i / snapshots.size, i, snapshots.size)
+                val stored = snapshots.filter { it.account.iban.isNotBlank() }
+                // The known account's window is deliberately coerced to defaultStart (banks ask for a TAN beyond
+                // 90 days). When that cuts into the time since the last sync, those bookings would never be fetched
+                // and lastSync still advances, so tell the user once, as a note rather than a warning.
+                val gapStart = bankAccess.lastSync?.toLocalDate()?.minusDays(SYNC_OVERLAP_DAYS)
+                if (gapStart != null && gapStart.isBefore(defaultStart) &&
+                    (historyFrom == null || historyFrom.isAfter(gapStart)) &&
+                    stored.any { snap -> known.any { it.iban.equals(Iban.normalize(snap.account.iban), true) } }
+                ) {
+                    val gapEnd = minOf(historyFrom ?: defaultStart, defaultStart).minusDays(1)
+                    notes += AppStrings.format(StringKey.SyncGapNotFetched, Formats.date(gapStart), Formats.date(gapEnd))
+                }
+                // Accounts without an IBAN are still dropped (they can't be matched or stored yet), but silently
+                // losing them is not acceptable: name each one by at most its last four characters.
+                snapshots.filter { it.account.iban.isBlank() }.forEach { snap ->
+                    notes += AppStrings.format(StringKey.SyncAccountWithoutIban, noteSuffix(snap.account))
+                }
+                stored.forEachIndexed { i, snap ->
+                    finTSClient.reportProgress(AppStrings.format(StringKey.ProgressSavingAccount, snap.account.iban.takeLast(4)), 0.5f + 0.5f * i / stored.size, i, stored.size)
                     val iban = Iban.normalize(snap.account.iban)
                     val existing = known.firstOrNull { it.iban.equals(iban, true) }
+                    val accountCurrency = existing?.currency ?: snap.account.currency
+                    val balance = snap.balance
+                    val balanceMatchesCurrency = balance == null || balance.currency.equals(accountCurrency, ignoreCase = true)
                     val accountId = existing?.id ?: accountRepository.create(
                         bankAccessId = bankAccessId,
                         iban = iban,
                         accountNumber = snap.account.accountNumber.ifEmpty { null },
-                        balance = snap.balance?.balance ?: BigDecimal.ZERO,
+                        balance = if (balance != null && !balance.currency.equals(snap.account.currency, ignoreCase = true)) BigDecimal.ZERO else balance?.balance ?: BigDecimal.ZERO,
                         currency = snap.account.currency,
                         accountType = snap.account.accountType,
                     ).id.value.also { added++ }
@@ -223,10 +243,16 @@ class BankingService(
                         accountRepository.update(existing.id, accountType = "loan")
                         auditLogRepository.log("CORRECT_ACCOUNT_TYPE", "user", "Account …${iban.takeLast(4)}: depot -> loan")
                     }
-                    snap.balance?.let { accountRepository.updateBalance(accountId, it.balance) }
+                    if (balance != null) {
+                        if (balanceMatchesCurrency) {
+                            accountRepository.updateBalance(accountId, balance.balance)
+                        } else {
+                            notes += AppStrings.format(StringKey.SyncBalanceOtherCurrency, iban.takeLast(4), balance.currency, accountCurrency)
+                        }
+                    }
                     snap.statementError?.let { warnings += "${iban.takeLast(4)}: $it" }
                     // No balance and nothing entered yet: tell the user, but never gate the sync on it
-                    if (snap.balance == null && (existing == null || existing.balance.compareTo(BigDecimal.ZERO) == 0)) {
+                    if (balance == null && (existing == null || existing.balance.compareTo(BigDecimal.ZERO) == 0)) {
                         notes += if (snap.balanceCode != null) {
                             AppStrings.format(StringKey.BalanceNotProvided, iban.takeLast(4), snap.balanceCode)
                         } else {
@@ -267,7 +293,7 @@ class BankingService(
                     // The chosen history start is one-shot: a fully successful sync clears it, a failure keeps it
                     if (historyFrom != null) bankAccessRepository.setSyncFrom(bankAccessId, null)
                 }
-                val report = SyncReport(snapshots.size, added, imported, duplicates, categorized, warnings, notes, historyFrom = historyFrom)
+                val report = SyncReport(stored.size, added, imported, duplicates, categorized, warnings, notes, historyFrom = historyFrom)
                 auditLogRepository.log("SYNC_BANK", "user", "${bankAccess.bankName}: ${report.summary()}")
                 BankingResult.Success(report)
             }
@@ -278,6 +304,11 @@ class BankingService(
             _isLoading.value = false
         }
     }
+
+    /** At most the last four characters identifying an account in a note; never a full number. */
+    private fun noteSuffix(account: FinTSAccount): String = account.accountNumber.ifBlank { account.productName?.takeIf { it.isNotBlank() } ?: account.accountType }
+        .takeLast(4)
+        .ifBlank { "?" }
 
     /**
      * Import bank bookings into the local database, skipping ones already imported (stored or remembered as
