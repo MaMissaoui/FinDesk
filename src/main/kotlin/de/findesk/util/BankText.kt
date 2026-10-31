@@ -65,7 +65,7 @@ object BankText {
      */
     fun displayDescription(t: TransactionItem): String {
         val shop = PaymentProviders.merchantOf(t.purpose, t.partnerName)
-        if (shop != null) return "PayPal · $shop"
+        if (shop != null) return PaymentProviders.label(shop)
         return displayPartner(t.partnerName) ?: displayPurpose(t.purpose) ?: PLACEHOLDER
     }
 

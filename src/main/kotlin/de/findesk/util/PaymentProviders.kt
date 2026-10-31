@@ -22,6 +22,11 @@ object PaymentProviders {
 
     private const val MAX_SHOP_LENGTH = 70
 
+    private const val PROVIDER = "PayPal"
+
+    /** The display label for a [shop] found by [merchantOf]: "PayPal · <shop>", used by every row title. */
+    fun label(shop: String): String = "$PROVIDER · $shop"
+
     /** The shop the [purpose] buys from, when the cleaned [partnerName] is PayPal; null otherwise (class doc). */
     fun merchantOf(purpose: String?, partnerName: String?): String? {
         val partner = BankText.displayPartner(partnerName) ?: return null

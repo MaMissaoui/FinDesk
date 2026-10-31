@@ -6,6 +6,7 @@ import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
 import de.findesk.util.Currencies
+import de.findesk.util.PaymentProviders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -321,7 +322,12 @@ class ReportService(
         .associate { it.key to it.value }
 
     private fun topVendors(expenses: List<TransactionItem>, limit: Int = 5): List<Pair<String, BigDecimal>> = expenses
-        .groupBy { it.description }
+        .groupBy {
+            // A PayPal purchase is titled like its row: "PayPal · <shop>" so the purchases don't collapse into
+            // one PayPal entry; everything else keeps its description
+            PaymentProviders.merchantOf(it.purpose, it.partnerName)?.let { shop -> PaymentProviders.label(shop) }
+                ?: it.description
+        }
         .map { (name, txns) -> name to txns.sumOf { it.amount.abs() } }
         .sortedByDescending { it.second }
         .take(limit)
