@@ -1058,7 +1058,7 @@ class ScreenshotTest {
                         Sidebar(currentScreen = screen, onScreenSelected = {}, lockedOn = lockedOn, collapsed = sidebarCollapsed)
                         Column(Modifier.fillMaxSize()) {
                             TopBar(
-                                title = stringsFor(screen),
+                                title = screen.title(Translations.of(language)),
                                 isDarkTheme = dark,
                                 onThemeToggle = {},
                                 sidebarCollapsed = sidebarCollapsed,
@@ -1083,15 +1083,5 @@ class ScreenshotTest {
                 }
             }
         }
-    }
-
-    private fun stringsFor(screen: Screen): String = when (screen) {
-        Screen.DASHBOARD -> "Dashboard"
-        Screen.ACCOUNTS -> "Accounts"
-        Screen.TRANSACTIONS -> "Transactions"
-        Screen.PAYMENTS -> "Payments"
-        Screen.DOCUMENTS -> "Documents"
-        Screen.REPORTS -> "Reports"
-        Screen.SETTINGS -> "Settings"
     }
 }
