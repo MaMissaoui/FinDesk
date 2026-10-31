@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.findesk.banking.BankCapabilities
@@ -116,23 +117,26 @@ fun PaymentsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
-                        bic,
-                        { bic = it.uppercase() },
-                        label = { Text(s[StringKey.BicOptional]) },
-                        placeholder = { suggestedBic?.let { Text(it) } },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        amount,
-                        { amount = it },
-                        label = { Text(s[StringKey.AmountEuro]) },
-                        isError = amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
-                        supportingText = if (amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) ({ Text(s[StringKey.EnterAmountGreaterThan0]) }) else null,
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            bic,
+                            { bic = it.uppercase() },
+                            label = { Text(s[StringKey.BicOptional]) },
+                            placeholder = { suggestedBic?.let { Text(it) } },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            amount,
+                            { amount = it },
+                            label = { Text(s[StringKey.AmountEuro]) },
+                            textStyle = MaterialTheme.typography.titleLarge.copy(textAlign = TextAlign.End, fontFeatureSettings = "tnum"),
+                            isError = amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0),
+                            supportingText = if (amount.isNotBlank() && (parsedAmount == null || parsedAmount.signum() <= 0)) ({ Text(s[StringKey.EnterAmountGreaterThan0]) }) else null,
+                            singleLine = true,
+                            modifier = Modifier.width(220.dp),
+                        )
+                    }
                     OutlinedTextField(
                         purpose,
                         { purpose = it.take(BankingService.MAX_PURPOSE_LENGTH) },
@@ -200,33 +204,47 @@ fun PaymentsScreen(
                             )
                         }
                     }
-                    Button(
-                        enabled = from != null && name.isNotBlank() && ibanOk && parsedAmount != null && parsedAmount.signum() > 0 && scheduleOk && !state.isSending &&
-                            (execution != Execution.ON_DATE || scheduledOk) && (execution != Execution.STANDING || standingOk) &&
-                            (execution != Execution.INSTANT || instantOk),
-                        onClick = {
-                            val order = TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose)
-                            when (execution) {
-                                Execution.NOW -> vm.review(from!!, order)
+                    val canReview = from != null && name.isNotBlank() && ibanOk && parsedAmount != null && parsedAmount.signum() > 0 && scheduleOk && !state.isSending &&
+                        (execution != Execution.ON_DATE || scheduledOk) && (execution != Execution.STANDING || standingOk) &&
+                        (execution != Execution.INSTANT || instantOk)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(
+                            enabled = canReview,
+                            onClick = {
+                                val order = TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose)
+                                when (execution) {
+                                    Execution.NOW -> vm.review(from!!, order)
 
-                                Execution.INSTANT -> vm.review(from!!, order, instant = true)
+                                    Execution.INSTANT -> vm.review(from!!, order, instant = true)
 
-                                Execution.ON_DATE -> vm.review(from!!, order, date = date)
+                                    Execution.ON_DATE -> vm.review(from!!, order, date = date)
 
-                                // The execution day follows the first date (day of month, or weekday for weekly orders)
-                                Execution.STANDING -> vm.review(
-                                    from!!,
-                                    order,
-                                    schedule = StandingOrderSchedule.of(
-                                        date!!,
-                                        interval,
-                                        if (interval == StandingOrderInterval.WEEKLY) date.dayOfWeek.value else date.dayOfMonth,
-                                        lastDate,
-                                    ),
-                                )
+                                    // The execution day follows the first date (day of month, or weekday for weekly orders)
+                                    Execution.STANDING -> vm.review(
+                                        from!!,
+                                        order,
+                                        schedule = StandingOrderSchedule.of(
+                                            date!!,
+                                            interval,
+                                            if (interval == StandingOrderInterval.WEEKLY) date.dayOfWeek.value else date.dayOfMonth,
+                                            lastDate,
+                                        ),
+                                    )
+                                }
+                            },
+                        ) { Text(s[StringKey.ReviewTransfer]) }
+                        if (!canReview && !state.isSending) {
+                            val hint = when {
+                                from == null -> s[StringKey.HintNeedsAccount]
+                                name.isBlank() -> s[StringKey.EnterRecipientName]
+                                !ibanOk -> if (iban.isNotBlank()) s[StringKey.IbanNotValid] else s[StringKey.EnterRecipientIban]
+                                parsedAmount == null || parsedAmount.signum() <= 0 -> s[StringKey.EnterAmountGreaterThan0]
+                                !scheduleOk -> s[StringKey.EnterValidDate]
+                                else -> null
                             }
-                        },
-                    ) { Text(s[StringKey.ReviewTransfer]) }
+                            hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
+                    }
                 }
             }
         }
@@ -274,12 +292,17 @@ fun PaymentsScreen(
                                 else -> null
                             },
                         ) {
-                            IconButton(enabled = o.canChange && o.schedule.interval != null && !state.isSending, onClick = { vm.requestEdit(o) }) {
+                            IconButton(enabled = o.canChange && o.schedule.interval != null && !state.isSending, onClick = { vm.requestEdit(o) }, colors = mutedIconColors()) {
                                 Icon(Icons.Default.Edit, contentDescription = s[StringKey.Edit])
                             }
                         }
-                        IconButton(enabled = o.canDelete && !state.isSending, onClick = { vm.requestDelete(o) }) {
-                            Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteStandingOrderTo, o.order.recipientName))
+                        DisabledReason(if (!o.canDelete) s[StringKey.DeleteNotAllowedByBank] else null) {
+                            IconButton(enabled = o.canDelete && !state.isSending, onClick = { vm.requestDelete(o) }, colors = mutedIconColors()) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = s.format(StringKey.DeleteStandingOrderTo, o.order.recipientName),
+                                )
+                            }
                         }
                     }
                 }
@@ -319,8 +342,13 @@ fun PaymentsScreen(
                             )
                         }
                         Text(Formats.money(t.order.amount), fontWeight = FontWeight.SemiBold)
-                        IconButton(enabled = t.canDelete && !state.isSending, onClick = { vm.requestScheduledDelete(t) }) {
-                            Icon(Icons.Default.Delete, contentDescription = s.format(StringKey.DeleteScheduledTransferTo, t.order.recipientName))
+                        DisabledReason(if (!t.canDelete) s[StringKey.DeleteNotAllowedByBank] else null) {
+                            IconButton(enabled = t.canDelete && !state.isSending, onClick = { vm.requestScheduledDelete(t) }, colors = mutedIconColors()) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = s.format(StringKey.DeleteScheduledTransferTo, t.order.recipientName),
+                                )
+                            }
                         }
                     }
                 }
@@ -357,14 +385,25 @@ fun PaymentsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             order.bankOrderId?.let { Text("${s[StringKey.PaymentOrderId]}: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                            order.message?.let {
-                                // An accepted order's stored detail is its raw bank status code, not an error
-                                val accepted = order.status == PaymentOrderStatus.ACCEPTED
-                                Text(
-                                    if (accepted) s.format(StringKey.PaymentBankStatus, it) else it,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (accepted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
-                                )
+                            if (order.status == PaymentOrderStatus.UNKNOWN) {
+                                Text(s[StringKey.PaymentUnknownHint], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                order.message?.let {
+                                    Text(
+                                        s.format(StringKey.PaymentDetail, it),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            } else {
+                                order.message?.let {
+                                    // An accepted order's stored detail is its raw bank status code, not an error
+                                    val accepted = order.status == PaymentOrderStatus.ACCEPTED
+                                    Text(
+                                        if (accepted) s.format(StringKey.PaymentBankStatus, it) else it,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (accepted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             }
                         }
                     }
@@ -409,9 +448,14 @@ fun PaymentsScreen(
                     // An edit's change rows share the label column, so their labels size it too
                     val changeLabels = if (review.editOf != null) listOf(s[StringKey.AmountEuro], s[StringKey.IntervalLabel], s[StringKey.ScheduleDay], s[StringKey.LastExecution]) else emptyList()
                     val labels = labelColumnWidth(s[StringKey.From], s[StringKey.To], s[StringKey.Iban], "BIC", s[StringKey.Purpose], s[StringKey.Execution], *changeLabels.toTypedArray())
-                    ReviewRow(s[StringKey.From], accountLabel(account), labels)
+                    ReviewRow(
+                        s[StringKey.From],
+                        account.name?.let { "${account.bankName} · $it" } ?: account.bankName,
+                        labels,
+                        secondary = Formats.iban(account.iban),
+                    )
                     ReviewRow(s[StringKey.To], order.recipientName, labels)
-                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)), labels)
+                    ReviewRow(s[StringKey.Iban], Formats.iban(Iban.normalize(order.recipientIban)), labels, emphasis = true)
                     order.recipientBic?.let { ReviewRow("BIC", it, labels) }
                     ReviewRow(s[StringKey.Purpose], order.purpose.ifBlank { "—" }, labels)
                     ReviewRow(
@@ -450,7 +494,15 @@ fun PaymentsScreen(
                 }
             },
             confirmButton = {
-                Button(enabled = acknowledged && !state.isSending, onClick = { vm.confirmAndSend() }) { Text(s[StringKey.ConfirmAndSend]) }
+                Button(enabled = acknowledged && !state.isSending, onClick = { vm.confirmAndSend() }) {
+                    Text(
+                        when {
+                            review.editOf != null -> s[StringKey.SaveChangesToBank]
+                            review.schedule != null -> s[StringKey.CreateStandingOrderAction]
+                            else -> s.format(StringKey.SendAmount, Formats.money(order.amount))
+                        },
+                    )
+                }
             },
             dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelReview) { Text(s[StringKey.Back]) } },
         )
@@ -581,7 +633,7 @@ fun PaymentsScreen(
                     onClick = {
                         account?.let { vm.reviewEdit(it, o, order!!, schedule!!) }
                     },
-                ) { Text(s[StringKey.ReviewTransfer]) }
+                ) { Text(s[StringKey.ReviewChanges]) }
             },
             dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelEdit) { Text(s[StringKey.Back]) } },
         )
@@ -722,6 +774,7 @@ internal fun ReviewHeader(amount: String, recipient: String, warning: String?) {
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer,
                 shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -738,11 +791,25 @@ internal fun ReviewHeader(amount: String, recipient: String, warning: String?) {
     }
 }
 
+/** Muted row-action icons; Material derives the dimmed disabled colour from this, which an explicit tint would override. */
 @Composable
-private fun ReviewRow(label: String, value: String, labelWidth: Dp) {
+private fun mutedIconColors() = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+
+@Composable
+private fun ReviewRow(label: String, value: String, labelWidth: Dp, emphasis: Boolean = false, secondary: String? = null) {
     Row {
         Text(label, fontWeight = FontWeight.Medium, softWrap = false, modifier = Modifier.width(labelWidth))
-        Text(value)
+        Column {
+            Text(
+                value,
+                style = if (emphasis) MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum") else LocalTextStyle.current,
+                fontWeight = if (emphasis) FontWeight.SemiBold else null,
+                color = if (emphasis) MaterialTheme.colorScheme.onSurface else androidx.compose.ui.graphics.Color.Unspecified,
+            )
+            secondary?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
