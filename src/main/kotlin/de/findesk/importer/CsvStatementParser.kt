@@ -44,6 +44,13 @@ object CsvStatementParser {
     private val CURRENCY = listOf("waehrung", "currency", "whrg")
     private val BALANCE = listOf("saldonachbuchung", "saldo", "kontostand", "balance")
 
+    // FinDesk's own export headers, matched exactly and only when no bank alias matched (see ReportService.exportToCsv)
+    private val OWN_PARTNER = listOf("partner", "partenaire")
+    private val OWN_AMOUNT = listOf("montant")
+    private val OWN_PURPOSE = listOf("libell", "libelle")
+    private val OWN_CURRENCY = listOf("devise")
+    private val OWN_BALANCE = listOf("solde")
+
     private val dateFormats = listOf("dd.MM.yyyy", "d.M.yyyy", "dd.MM.yy", "yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy").map { DateTimeFormatter.ofPattern(it) }
 
     fun parse(file: File, override: CsvMapping? = null): ParsedStatement = parse(file.readBytes(), override)
@@ -231,17 +238,24 @@ object CsvStatementParser {
         val date = find(DATE)
         val debit = find(DEBIT, exact = true)
         val credit = find(CREDIT, exact = true)
-        val balance = find(BALANCE)
-        val amount = find(AMOUNT)
+        var balance = find(BALANCE)
+        var amount = find(AMOUNT)
         val partnerIban = find(PARTNER_IBAN)
         val payer = find(PAYER)
-        val partner = find(PARTNER)
-        val purpose = find(PURPOSE)
+        var partner = find(PARTNER)
+        var purpose = find(PURPOSE)
         var currency = find(CURRENCY)
+        val currencyAliasFound = currency != null
         // With both an "Amount" and a "Currency Amount" column (Bank Norwegian card exports) the "Currency" column
         // describes the original purchase amount, not the booked one; no currency column is mapped then, so the
         // booking takes the account currency.
         if (currency != null && norm.any { it == "currencyamount" } && norm.any { it == "amount" }) currency = null
+        // FinDesk's own exports: exact fallbacks, used only where no bank alias matched.
+        if (partner == null && payer == null) partner = find(OWN_PARTNER, exact = true)
+        if (amount == null && debit == null && credit == null) amount = find(OWN_AMOUNT, exact = true)
+        if (purpose == null) purpose = find(OWN_PURPOSE, exact = true)
+        if (currency == null && !currencyAliasFound) currency = find(OWN_CURRENCY, exact = true)
+        if (balance == null) balance = find(OWN_BALANCE, exact = true)
         return CsvMapping(
             date = date,
             valueDate = valueDate,
