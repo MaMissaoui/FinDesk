@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
@@ -109,12 +111,28 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             }
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text(
-                            s.format(StringKey.AccountsTotal, Currencies.format(state.totals, state.primaryCurrency), state.accounts.size),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    val loans = state.accounts.filter { it.accountType == LOAN_TYPE }
+                    val totalText = Currencies.format(state.totals, state.primaryCurrency)
+                    val loanText = Currencies.format(Currencies.totals(loans, state.primaryCurrency, { it.currency }, { it.balance }), state.primaryCurrency)
+                    val loansLabel = s[StringKey.AccountsLoansLabel]
+                    // One sentence for screen readers instead of the sentence plus each figure
+                    val description = buildString {
+                        append(s.format(StringKey.AccountsTotal, totalText, state.accounts.size))
+                        if (loans.isNotEmpty()) append(", $loansLabel $loanText")
+                    }
+                    Row(
+                        modifier = Modifier.weight(1f, fill = false).clearAndSetSemantics { contentDescription = description },
+                        horizontalArrangement = Arrangement.spacedBy(32.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        FigureGroup(
+                            label = s.format(if (loans.isEmpty()) StringKey.AccountsTotalLabel else StringKey.AccountsNetLabel, state.accounts.size),
+                            value = totalText,
+                            secondary = false,
                         )
+                        if (loans.isNotEmpty()) {
+                            FigureGroup(label = loansLabel, value = loanText, secondary = true)
+                        }
                     }
                     if (!showPanel && state.accounts.isNotEmpty()) {
                         Spacer(Modifier.width(12.dp))
@@ -332,6 +350,27 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
             text = s[StringKey.RemoveBankText],
             onConfirm = { vm.deleteBankAccess(bank.id) },
             onDismiss = { confirmDeleteBank = null },
+        )
+    }
+}
+
+/** One labelled figure of the accounts header: a small label above a strong amount. */
+@Composable
+private fun FigureGroup(label: String, value: String, secondary: Boolean) {
+    Column {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        Text(
+            value,
+            style = if (secondary) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (secondary) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -559,8 +598,9 @@ private fun BankCard(
                                 color = balanceColor(isWarningBalance(listOf(account), account.currency)),
                             )
                             Spacer(Modifier.width(8.dp))
-                            IconButton(onClick = { onTransactions(account) }) { Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions]) }
-                            IconButton(onClick = { onEditBalance(account) }) { Icon(Icons.Default.Edit, contentDescription = s[StringKey.EditBalance]) }
+                            IconButton(onClick = { onTransactions(account) }) {
+                                Icon(Icons.Default.List, contentDescription = s[StringKey.Transactions], tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             AccountRowMenu(
                                 onTransactions = { onTransactions(account) },
                                 onDetails = { onOpenAccount(account) },
@@ -593,7 +633,7 @@ internal fun AccountRowMenu(
     val s = strings()
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
+        IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text(s[StringKey.ShowTransactions]) },

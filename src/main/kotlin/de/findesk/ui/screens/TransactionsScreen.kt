@@ -1,5 +1,6 @@
 package de.findesk.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
@@ -40,17 +41,15 @@ import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
@@ -166,34 +165,57 @@ fun TransactionsScreen(
                 // The header's and the running column's balances both belong to [state.accountId]'s account,
                 // so a loan's negative balance there never warns red (see currentBalanceIsLoan)
                 val headerBalanceColor = if (headerBalance != null) balanceColor(headerBalance.signum() < 0 && !state.currentBalanceIsLoan) else MaterialTheme.colorScheme.onSurfaceVariant
+                // The sentence the strip replaces, so a screen reader hears one summary instead of every figure twice
+                val summaryText = buildString {
+                    append(
+                        s.format(
+                            StringKey.TransactionsSummary,
+                            state.transactions.size,
+                            Currencies.format(state.totalIncome, Currencies.DEFAULT),
+                            Currencies.format(state.totalExpenses, Currencies.DEFAULT),
+                        ),
+                    )
+                    if (headerBalance != null) {
+                        append(s.format(StringKey.TransactionsBalance, Formats.money(headerBalance, state.balanceCurrency ?: "EUR")))
+                    }
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // The top bar names the screen; this row holds its summary and actions
-                    Text(
-                        buildAnnotatedString {
-                            append(
-                                s.format(
-                                    StringKey.TransactionsSummary,
-                                    state.transactions.size,
-                                    Currencies.format(state.totalIncome, Currencies.DEFAULT),
-                                    Currencies.format(state.totalExpenses, Currencies.DEFAULT),
-                                ),
+                    Row(
+                        modifier = Modifier.weight(1f).clearAndSetSemantics { contentDescription = summaryText },
+                        horizontalArrangement = Arrangement.spacedBy(24.dp),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        SummaryFigure(
+                            label = s[StringKey.SummaryCount],
+                            value = state.transactions.size.toString(),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        SummaryFigure(
+                            label = s[StringKey.SummaryIn],
+                            value = Currencies.format(state.totalIncome, Currencies.DEFAULT),
+                            color = amountColor(false),
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        SummaryFigure(
+                            label = s[StringKey.SummaryOut],
+                            value = Currencies.format(state.totalExpenses, Currencies.DEFAULT),
+                            color = amountColor(true),
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (headerBalance != null) {
+                            SummaryFigure(
+                                label = s[StringKey.SummaryBalance],
+                                value = Formats.money(headerBalance, state.balanceCurrency ?: "EUR"),
+                                color = headerBalanceColor,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
-                            if (headerBalance != null) {
-                                withStyle(SpanStyle(color = headerBalanceColor)) {
-                                    append(s.format(StringKey.TransactionsBalance, Formats.money(headerBalance, state.balanceCurrency ?: "EUR")))
-                                }
-                            }
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                        }
+                    }
                     OverflowMenu(
                         items = buildList {
                             add(
@@ -306,7 +328,7 @@ fun TransactionsScreen(
 
                 // With the chart below, the list takes the remaining height so the chart stays in view; otherwise
                 // the card wraps its rows as before
-                FinDeskCard(modifier = if (state.balanceChart != null) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth()) {
+                FinDeskCard(modifier = if (state.balanceChart != null) Modifier.fillMaxWidth().weight(1f, fill = false) else Modifier.fillMaxWidth()) {
                     Column {
                         if (state.selectedIds.isNotEmpty()) {
                             SelectionBar(
@@ -740,7 +762,7 @@ private fun SelectionBar(
         )
         Spacer(Modifier.weight(1f))
         Box {
-            OutlinedButton(onClick = { categoryMenu = true }) {
+            Button(onClick = { categoryMenu = true }) {
                 Text(s[StringKey.CategoryMenu], maxLines = 1, softWrap = false)
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null)
             }
@@ -781,7 +803,32 @@ private fun SelectionBar(
             }
         }
         OutlinedButton(onClick = onClear) { Text(s[StringKey.ClearSelection]) }
-        Button(onClick = onDelete) { Text(s[StringKey.DeleteSelected]) }
+        OutlinedButton(
+            onClick = onDelete,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+        ) { Text(s[StringKey.DeleteSelected]) }
+    }
+}
+
+/** One labelled figure of the transactions summary strip: a small label above a strong value. */
+@Composable
+private fun SummaryFigure(label: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -956,15 +1003,23 @@ private fun TransactionRow(
             }
         }
         Box(Modifier.weight(COL_CATEGORY_WEIGHT)) {
-            CategoryBadge(
-                txn.categoryName,
-                txn.categoryColor,
-                Modifier.clickable(
-                    onClick = { categoryMenu = true },
-                    onClickLabel = s.format(StringKey.ChangeCategory, txn.categoryName ?: s[StringKey.Uncategorized]),
-                    role = Role.Button,
-                ),
+            val categoryClick = Modifier.clickable(
+                onClick = { categoryMenu = true },
+                onClickLabel = s.format(StringKey.ChangeCategory, txn.categoryName ?: s[StringKey.Uncategorized]),
+                role = Role.Button,
             )
+            if (txn.categoryName == null) {
+                // Quiet, background-free text with the badge's text padding, so the columns still line up
+                Text(
+                    s[StringKey.Uncategorized],
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = categoryClick.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            } else {
+                CategoryBadge(txn.categoryName, txn.categoryColor, categoryClick)
+            }
             DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                 DropdownMenuItem(text = { Text(s[StringKey.Uncategorized]) }, onClick = {
                     categoryMenu = false
