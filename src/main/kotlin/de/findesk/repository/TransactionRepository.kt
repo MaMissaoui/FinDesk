@@ -381,11 +381,17 @@ class TransactionRepositoryImpl : TransactionRepository {
         val docCounts = if (ids.isEmpty()) {
             emptyMap()
         } else {
-            DocumentsTable.select(DocumentsTable.linkedTransactionId)
-                .where { DocumentsTable.linkedTransactionId inList ids }
-                .mapNotNull { it[DocumentsTable.linkedTransactionId]?.value }
-                .groupingBy { it }
-                .eachCount()
+            // The whole result can hold a full history, so the counts are collected per chunk and merged
+            buildMap {
+                ids.chunked(DELETE_CHUNK).forEach { chunk ->
+                    DocumentsTable.select(DocumentsTable.linkedTransactionId)
+                        .where { DocumentsTable.linkedTransactionId inList chunk }
+                        .mapNotNull { it[DocumentsTable.linkedTransactionId]?.value }
+                        .groupingBy { it }
+                        .eachCount()
+                        .forEach { (id, count) -> merge(id, count, Int::plus) }
+                }
+            }
         }
         val items = transactions.map { txn ->
             // A stored override wins without looking at the rules; a rule must own the booking's current category.
@@ -466,7 +472,7 @@ class TransactionRepositoryImpl : TransactionRepository {
         }
     }
 
-    private companion object {
+    internal companion object {
         /** Batch-delete chunk size: SQLite's bound-parameter limit is at least 999, so 500 ids per statement is safe. */
         const val DELETE_CHUNK = 500
 
