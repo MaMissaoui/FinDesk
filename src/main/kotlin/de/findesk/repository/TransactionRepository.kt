@@ -389,14 +389,14 @@ class TransactionRepositoryImpl : TransactionRepository {
             // The shop is extracted once per booking and the selection is the matcher's, so tax and categorization agree.
             val ruleTax = if (txn.taxOverride == null) {
                 val categoryRules = taxRules.filter { it.spec.categoryId == txn.category?.id?.value }
-                val shop = PaymentProviders.merchantOf(txn.purpose, txn.partnerName)
+                val match = PaymentProviders.match(txn.purpose, txn.partnerName)
                 val selected = RuleMatcher.select(
                     categoryRules.map { it.spec },
                     categoryRules.map { it.test },
                     txn.purpose,
                     txn.partnerName,
                     txn.amount,
-                    shop,
+                    match,
                 )
                 selected?.let { categoryRules[it] }
             } else {

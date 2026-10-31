@@ -235,4 +235,42 @@ class RuleMatcherTest {
         assertEquals(5, matcher.categoryFor("Kauf bei Beispiel", "Beispiel Shop GmbH", expense), "no PayPal partner, no shop view")
         assertNull(matcher.categoryFor("Ihr Einkauf bei Beispiel", null, expense), "a PayPal-like purpose without a PayPal partner stays rule-less")
     }
+
+    // Card format: the shop in the descriptor displaces only the provider rule.
+
+    @Test
+    fun `a shop rule beats the paypal rule for a card booking with a blank partner`() {
+        val matcher = RuleMatcher(
+            listOf(
+                one("PayPal", categoryId = 10),
+                one("BEISPIELSHOP", categoryId = 20),
+            ),
+        )
+
+        assertEquals(20, matcher.categoryFor("PAYPAL *BEISPIELSHOP", null, expense))
+    }
+
+    @Test
+    fun `a shop rule beats the paypal rule for a card booking with a paypal partner`() {
+        val matcher = RuleMatcher(
+            listOf(
+                one("PayPal", RuleField.PARTNER, categoryId = 10),
+                one("BEISPIELSHOP", RuleField.PARTNER, categoryId = 20),
+            ),
+        )
+
+        assertEquals(20, matcher.categoryFor("PAYPAL *BEISPIELSHOP", "PAYPAL *BEISPIELSHOP", expense))
+    }
+
+    @Test
+    fun `a purpose rule for other card words keeps winning`() {
+        val matcher = RuleMatcher(
+            listOf(
+                one("RETURN", RuleField.PURPOSE, categoryId = 10),
+                one("BEISPIELSHOP", RuleField.PARTNER, categoryId = 20),
+            ),
+        )
+
+        assertEquals(10, matcher.categoryFor("PAYPAL *BEISPIELSHOP 12345678 RETURN", "PAYPAL *BEISPIELSHOP", income))
+    }
 }

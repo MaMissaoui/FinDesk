@@ -326,4 +326,21 @@ class TaxRelevanceTest {
             assertEquals("Beispiel Shop", taxRulePattern)
         }
     }
+
+    @Test
+    fun `a tax-flagged shop rule applies to a blank-partner card booking of its category`() {
+        val booking = txn("-10.00", normalCat, partner = null, purpose = "PAYPAL *BEISPIELSHOP")
+        data.ruleRepo.create(
+            "BEISPIELSHOP",
+            normalCat,
+            matchField = de.findesk.model.RuleField.PARTNER,
+            taxRelevant = true,
+        )
+
+        with(item(booking)) {
+            assertTrue(isTaxRelevant, "the PARTNER rule matches the shop in the card descriptor")
+            assertEquals(TaxSource.RULE, taxSource)
+            assertEquals("BEISPIELSHOP", taxRulePattern)
+        }
+    }
 }
