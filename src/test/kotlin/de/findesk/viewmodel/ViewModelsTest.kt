@@ -714,6 +714,23 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `rule from a paypal transaction suggests the shop`() = runBlocking {
+        val vm = TransactionsViewModel(today = { today })
+        data.txn(
+            account,
+            LocalDate.of(2026, 3, 6),
+            "-12.99",
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "EREF+R1 SVWZ+PP.471.PPX . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+        )
+        vm.loadTransactions().join()
+        val paypal = vm.state.value.transactions.first { it.partnerName!!.startsWith("PayPal") }
+
+        assertEquals("Beispiel Shop GmbH", vm.rulePatternFor(paypal), "the shop's words replace the provider's")
+        vm.close()
+    }
+
+    @Test
     fun `receipts attached from the detail panel are linked to the transaction`() = runBlocking {
         val docsDir = File(tmp, "docs")
         val documentService = de.findesk.document.DocumentService(ocrService = de.findesk.document.OcrService(engine = null), documentsDir = docsDir)

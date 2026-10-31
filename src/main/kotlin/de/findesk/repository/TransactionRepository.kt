@@ -15,6 +15,7 @@ import de.findesk.model.RuleField
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.model.toItem
+import de.findesk.util.PaymentProviders
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SortOrder
@@ -384,9 +385,20 @@ class TransactionRepositoryImpl : TransactionRepository {
                 .eachCount()
         }
         val items = transactions.map { txn ->
-            // A stored override wins without looking at the rules; a rule must own the booking's current category
+            // A stored override wins without looking at the rules; a rule must own the booking's current category.
+            // The shop is extracted once per booking and the selection is the matcher's, so tax and categorization agree.
             val ruleTax = if (txn.taxOverride == null) {
-                taxRules.firstOrNull { it.spec.categoryId == txn.category?.id?.value && it.matches(txn.purpose, txn.partnerName, txn.amount) }
+                val categoryRules = taxRules.filter { it.spec.categoryId == txn.category?.id?.value }
+                val shop = PaymentProviders.merchantOf(txn.purpose, txn.partnerName)
+                val selected = RuleMatcher.select(
+                    categoryRules.map { it.spec },
+                    categoryRules.map { it.test },
+                    txn.purpose,
+                    txn.partnerName,
+                    txn.amount,
+                    shop,
+                )
+                selected?.let { categoryRules[it] }
             } else {
                 null
             }
@@ -453,14 +465,10 @@ class TransactionRepositoryImpl : TransactionRepository {
 
 /**
  * One auto-apply rule with a tax flag, loaded and compiled once per [TransactionRepositoryImpl.findItems] call:
- * the rule layer of the effective tax relevance. Matching goes through [RuleMatcher.matches] over every view of
- * [RuleMatcher.views], so a tax-flagged shop rule applies to the PayPal bookings the shop view categorized, and
- * the tax lookup can never match categorization differently.
+ * the rule layer of the effective tax relevance. The lookup selects through the same [RuleMatcher.select] as
+ * categorization, so a tax-flagged shop rule applies to the PayPal bookings the shop view categorized, and the
+ * tax lookup can never select differently from categorization.
  */
 private class TaxRuleSpec(val spec: RuleSpec, val taxRelevant: Boolean) {
-    private val test: (String) -> Boolean = RuleMatcher.compile(spec.pattern)
-
-    fun matches(purpose: String?, partnerName: String?, amount: BigDecimal?): Boolean = RuleMatcher.views(purpose, partnerName).any { (viewPurpose, viewPartner) ->
-        RuleMatcher.matches(spec, test, viewPurpose, viewPartner, amount)
-    }
+    val test: (String) -> Boolean = RuleMatcher.compile(spec.pattern)
 }

@@ -5,17 +5,23 @@ import de.findesk.model.TransactionItem
 /**
  * Display-only cleanup of raw bank text for lists.
  *
- * The stored `purpose` and `partnerName` never change: rules, search and duplicate detection are written
- * against the raw text. These functions only render the readable part of it in rows and lists — and the row
- * title also goes through [PaymentProviders]: a PayPal booking is titled with the provider and the shop its
- * purpose names, instead of the partner alone.
+ * The stored `purpose` and `partnerName` never change: rules, search and duplicate detection work on the raw
+ * text, and [PaymentProviders] extracts a PayPal shop from the raw purpose. These functions only render the
+ * readable part of it in rows and lists — the row title also goes through [PaymentProviders], so a PayPal
+ * booking is titled with the provider and the shop its purpose names instead of the partner alone.
  */
 object BankText {
     /**
      * SEPA structured-field tags: an upper-case code of 4 letters (`BIC` is 3) directly followed by `+`.
      * Banks write them in upper case, but they are matched case-insensitively to be robust.
      */
-    private val TAG = Regex("(?i)(EREF|KREF|MREF|CRED|DEBT|SVWZ|ABWA|ABWE|IBAN|BIC|PURP|COAM|OAMT|SQTP|BREF|RREF)\\+")
+    internal val TAG = Regex("(?i)(EREF|KREF|MREF|CRED|DEBT|SVWZ|ABWA|ABWE|IBAN|BIC|PURP|COAM|OAMT|SQTP|BREF|RREF)\\+")
+
+    /** Runs of 3 or more whitespace characters are the bank's padding. */
+    private val PADDING = Regex("\\s{3,}")
+
+    /** Any whitespace run collapses to one space. */
+    private val WHITESPACE = Regex("\\s+")
 
     private const val PLACEHOLDER = "—"
 
@@ -26,9 +32,9 @@ object BankText {
     fun displayPartner(raw: String?): String? {
         if (raw == null) return null
         val cleaned = raw
-            .split(Regex("\\s{3,}"))
+            .split(PADDING)
             .firstOrNull { it.isNotBlank() }
-            ?.replace(Regex("\\s+"), " ")
+            ?.replace(WHITESPACE, " ")
             ?.trim()
             ?.takeIf { it.isNotBlank() }
         return cleaned
@@ -55,19 +61,18 @@ object BankText {
                 // Only the text before the first tag is outside the tagged fields
                 trimmed.substring(0, matches.first().range.first)
         }
-        return result?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotBlank() }
+        return result?.replace(WHITESPACE, " ")?.trim()?.takeIf { it.isNotBlank() }
     }
 
     /**
-     * The readable row title: for a PayPal payment "PayPal · <shop>" ([PaymentProviders.merchantOf]), else the
+     * The readable row title: for a PayPal payment "PayPal · <shop>" ([PaymentProviders.titleOf]), else the
      * cleaned partner, else the cleaned purpose, else a placeholder. "PayPal" is a brand name, the same in every
      * language; the booking detail, search, exports and stored text are untouched.
      */
-    fun displayDescription(t: TransactionItem): String {
-        val shop = PaymentProviders.merchantOf(t.purpose, t.partnerName)
-        if (shop != null) return PaymentProviders.label(shop)
-        return displayPartner(t.partnerName) ?: displayPurpose(t.purpose) ?: PLACEHOLDER
-    }
+    fun displayDescription(t: TransactionItem): String = PaymentProviders.titleOf(t.purpose, t.partnerName)
+        ?: displayPartner(t.partnerName)
+        ?: displayPurpose(t.purpose)
+        ?: PLACEHOLDER
 
     /** Each tagged field as `(tag, text up to the next tag or the end)`; text before the first tag is dropped. */
     private fun substrings(text: String, matches: List<MatchResult>): List<Pair<String, String>> = matches
