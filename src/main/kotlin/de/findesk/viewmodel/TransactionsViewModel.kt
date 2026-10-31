@@ -220,9 +220,9 @@ class TransactionsViewModel(
     private val settingsRepository: SettingsRepository = SettingsRepositoryImpl(),
     private val pendingRepository: PendingBookingRepository = PendingBookingRepositoryImpl(),
     private val reportService: ReportService = ReportService(),
-    private val importService: StatementImportService = StatementImportService(),
-    private val documentService: de.findesk.document.DocumentService = de.findesk.document.DocumentService(),
     private val today: () -> LocalDate = { LocalDate.now() },
+    private val importService: StatementImportService = StatementImportService(today = today),
+    private val documentService: de.findesk.document.DocumentService = de.findesk.document.DocumentService(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : BaseViewModel(scope) {
     private val _state = MutableStateFlow(TransactionsState())

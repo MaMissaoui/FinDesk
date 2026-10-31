@@ -220,7 +220,7 @@ object Mt940Parser {
         }
 
         // Customer reference after N/S/F + 3-character transaction type code.
-        val detailStart = if (pos < line.length && line[pos] in "NSF") pos + 4 else pos
+        val detailStart = if (pos < line.length && line[pos] in "NSF") (pos + 4).coerceAtMost(line.length) else pos
         val detailTail = line.substring(detailStart).trim()
         val bankRef = detailTail.substringAfter("//", "").trim().takeIf { it.isNotEmpty() }
         val customerRef = detailTail.substringBefore("//", detailTail).trim()

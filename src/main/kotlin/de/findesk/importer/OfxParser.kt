@@ -219,11 +219,18 @@ object OfxParser {
 
     private fun parseOfxAmount(text: String): BigDecimal? {
         val t = text.trim()
+        // With both separators the one that occurs last is the decimal separator ("-1.234,56" and "-1,234.56").
         // European exports may use a comma decimal ("-45,67"); if there is no dot, treat comma as decimal.
-        val normalized = if (!t.contains('.') && t.contains(',')) {
-            t.replace(',', '.')
-        } else {
-            t.replace(",", "")
+        val normalized = when {
+            t.contains('.') && t.contains(',') -> {
+                val decimal = if (t.lastIndexOf(',') > t.lastIndexOf('.')) ',' else '.'
+                val grouping = if (decimal == ',') '.' else ','
+                t.replace(grouping.toString(), "").replace(decimal, '.')
+            }
+
+            !t.contains('.') && t.contains(',') -> t.replace(',', '.')
+
+            else -> t.replace(",", "")
         }
         return Formats.parseDecimal(normalized)
     }
