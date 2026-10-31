@@ -467,6 +467,15 @@ enum class StringKey {
     WaitingForBank,
     ConfirmAndSend,
     PurposeVerwendungszweck,
+    SendAmount,
+    CreateStandingOrderAction,
+    SaveChangesToBank,
+    ReviewChanges,
+    EnterRecipientName,
+    EnterRecipientIban,
+    PaymentUnknownHint,
+    PaymentDetail,
+    DeleteNotAllowedByBank,
 
     // Documents
     OcrNeedsTesseract,

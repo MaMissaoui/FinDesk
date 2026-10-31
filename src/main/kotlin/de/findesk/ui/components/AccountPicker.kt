@@ -1,14 +1,17 @@
 package de.findesk.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
@@ -17,7 +20,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -39,9 +43,9 @@ import de.findesk.util.Formats
 import de.findesk.util.isWarningBalance
 
 /**
- * The Payments screen's "From" picker: a [DropdownSelector]-like pill that opens a readable menu instead of a list
- * of one-line strings. The menu groups the accounts by bank with a header per bank, shows every account on two
- * lines (name, then the grouped IBAN) and keeps the balance right-aligned and coloured like everywhere else.
+ * The Payments screen's "From" picker: an outlined field that opens a readable menu instead of a list of one-line
+ * strings. The menu groups the accounts by bank with a header per bank, shows every account on two lines (name, then
+ * the grouped IBAN) and keeps the balance right-aligned and coloured like everywhere else.
  */
 @Composable
 fun AccountPicker(
@@ -52,18 +56,56 @@ fun AccountPicker(
 ) {
     val s = strings()
     var expanded by remember { mutableStateOf(false) }
+    val description = selected?.let { "${s[StringKey.From]}: ${s.accountName(it)}, ${it.bankName}, ${Formats.money(it.balance, it.currency)}" }
+        ?: s[StringKey.ChooseAccount]
     Box(modifier) {
-        OutlinedButton(
+        Surface(
             onClick = { expanded = true },
-            colors = OutlinedButtonStyle.colors(),
-            border = OutlinedButtonStyle.border(),
+            shape = RoundedCornerShape(4.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = description },
         ) {
-            Text(
-                selected?.let { "${s.accountName(it)} · ${it.bankName} · ${Formats.money(it.balance, it.currency)}" } ?: s[StringKey.ChooseAccount],
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            // The Surface's description already reads the selection; the visible text must not be read a second time
+            Row(
+                Modifier.padding(horizontal = 16.dp).clearAndSetSemantics {},
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (selected != null) {
+                    Text(
+                        s.accountName(selected),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        " · ${selected.bankName}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        Formats.money(selected.balance, selected.currency),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = balanceColor(isWarningBalance(listOf(selected), selected.currency)),
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 12.dp),
+                    )
+                } else {
+                    Text(
+                        s[StringKey.ChooseAccount],
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.widthIn(min = 440.dp)) {
             // The list order is the view model's bank-then-type order, so a bank change starts a new group
