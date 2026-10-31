@@ -816,6 +816,9 @@ object Translations {
         K.SyncSummaryHistoryFrom to " History requested from %s.",
         K.BalanceNotProvided to "…%s: the bank sends no balance for this account (%s). Enter it with “Edit balance”; a loan as a negative amount.",
         K.BalanceNotProvidedNoCode to "…%s: the bank sends no balance for this account. Enter it with “Edit balance”; a loan as a negative amount.",
+        K.SyncGapNotFetched to "Bookings from %s to %s were not fetched: FinDesk fetches at most the last 90 days. Use “Fetch history from…” to get them (the bank may ask for a TAN).",
+        K.SyncAccountWithoutIban to "…%s: the bank lists this account without an IBAN; FinDesk can't store it yet.",
+        K.SyncBalanceOtherCurrency to "…%s: the bank reported the balance in %s, but the account is kept in %s; the balance was not changed.",
         K.PendingHeader to "Pending (not yet booked) · as of %s",
 
         K.ImportSummary to "Imported %d {1:transaction|transactions}",
@@ -1786,6 +1789,9 @@ object Translations {
         K.SyncSummaryHistoryFrom to " Verlauf angefordert ab %s.",
         K.BalanceNotProvided to "…%s: Die Bank liefert für dieses Konto keinen Saldo (%s). Tragen Sie ihn mit „Saldo bearbeiten“ ein, einen Kredit als negativen Betrag.",
         K.BalanceNotProvidedNoCode to "…%s: Die Bank liefert für dieses Konto keinen Saldo. Tragen Sie ihn mit „Saldo bearbeiten“ ein, einen Kredit als negativen Betrag.",
+        K.SyncGapNotFetched to "Buchungen vom %s bis %s wurden nicht abgerufen: FinDesk ruft höchstens die letzten 90 Tage ab. Mit „Verlauf ab Datum abrufen…“ holen Sie sie nach (die Bank fragt eventuell nach einer TAN).",
+        K.SyncAccountWithoutIban to "…%s: Die Bank meldet dieses Konto ohne IBAN; FinDesk kann es noch nicht speichern.",
+        K.SyncBalanceOtherCurrency to "…%s: Die Bank meldet den Saldo in %s, das Konto wird aber in %s geführt; der Saldo wurde nicht geändert.",
         K.PendingHeader to "Vorgemerkt (noch nicht gebucht) · Stand %s",
 
         K.ImportSummary to "%d {1:Buchung|Buchungen} importiert",
@@ -2756,6 +2762,9 @@ object Translations {
         K.SyncSummaryHistoryFrom to " Historique demandé depuis le %s.",
         K.BalanceNotProvided to "…%s : la banque ne fournit pas de solde pour ce compte (%s). Saisissez-le avec « Modifier le solde », un crédit en montant négatif.",
         K.BalanceNotProvidedNoCode to "…%s : la banque ne fournit pas de solde pour ce compte. Saisissez-le avec « Modifier le solde », un crédit en montant négatif.",
+        K.SyncGapNotFetched to "Les opérations du %s au %s n’ont pas été récupérées : FinDesk récupère au plus les 90 derniers jours. Utilisez « Récupérer l'historique depuis… » pour les obtenir (la banque peut demander un TAN).",
+        K.SyncAccountWithoutIban to "…%s : la banque indique ce compte sans IBAN ; FinDesk ne peut pas encore l’enregistrer.",
+        K.SyncBalanceOtherCurrency to "…%s : la banque indique le solde en %s, mais le compte est tenu en %s ; le solde n’a pas été modifié.",
         K.PendingHeader to "En attente (pas encore comptabilisé) · au %s",
 
         K.ImportSummary to "%d {1:opération importée|opérations importées}",

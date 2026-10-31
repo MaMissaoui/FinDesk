@@ -8,6 +8,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.model.TransactionFilter
 import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.SettingsRepositoryImpl
+import de.findesk.util.Formats
 import de.findesk.util.RunningBalance
 import de.findesk.viewmodel.BankingPrompt
 import de.findesk.viewmodel.UiBankingInteraction
@@ -909,6 +910,192 @@ class BankingSyncTest {
         assertEquals(1, corrections.size)
         assertTrue(corrections.single().details!!.contains("depot -> loan"))
     }
+
+    @Test
+    fun `an old last sync notes the skipped window once and still advances`() = runBlocking {
+        val fixed = fixedToday(LocalDate.of(2026, 4, 15), "gap-note")
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        fixed.syncBankConnection(bankId, ScriptedInteraction())
+        val oldSync = LocalDateTime.of(2026, 1, 1, 12, 0)
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = oldSync }
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        val report = (fixed.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val gapStart = LocalDate.of(2025, 12, 22)
+        val gapEnd = LocalDate.of(2026, 1, 14)
+        assertEquals(
+            listOf(AppStrings.format(StringKey.SyncGapNotFetched, Formats.date(gapStart), Formats.date(gapEnd))),
+            report.notes,
+        )
+        assertEquals(LocalDate.of(2026, 1, 15), gateway.sinceRequests[giro], "the normal window itself is unchanged")
+        assertTrue(report.warnings.isEmpty())
+        val lastSync = data.bankAccessRepo.findItem(bankId)!!.lastSync
+        assertNotNull(lastSync)
+        assertTrue(lastSync!!.isAfter(oldSync), "a note must never keep lastSync from advancing")
+    }
+
+    @Test
+    fun `a last sync 85 days back notes the window with the default end`() = runBlocking {
+        val fixed = fixedToday(LocalDate.of(2026, 4, 15), "gap-85-days")
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        fixed.syncBankConnection(bankId, ScriptedInteraction())
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = LocalDateTime.of(2026, 1, 20, 12, 0) }
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        val report = (fixed.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(
+            listOf(
+                AppStrings.format(
+                    StringKey.SyncGapNotFetched,
+                    Formats.date(LocalDate.of(2026, 1, 10)),
+                    Formats.date(LocalDate.of(2026, 1, 14)),
+                ),
+            ),
+            report.notes,
+        )
+    }
+
+    @Test
+    fun `a history start inside the gap ends the note the day before it`() = runBlocking {
+        val fixed = fixedToday(LocalDate.of(2026, 4, 15), "gap-inside-history")
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        fixed.syncBankConnection(bankId, ScriptedInteraction())
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = LocalDateTime.of(2026, 1, 1, 12, 0) }
+        data.bankAccessRepo.setSyncFrom(bankId, LocalDate.of(2026, 1, 5))
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        val report = (fixed.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(
+            listOf(
+                AppStrings.format(
+                    StringKey.SyncGapNotFetched,
+                    Formats.date(LocalDate.of(2025, 12, 22)),
+                    Formats.date(LocalDate.of(2026, 1, 4)),
+                ),
+            ),
+            report.notes,
+        )
+    }
+
+    @Test
+    fun `a last sync inside the initial window does not note a gap`() = runBlocking {
+        val fixed = fixedToday(LocalDate.of(2026, 4, 15), "gap-recent")
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        fixed.syncBankConnection(bankId, ScriptedInteraction())
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = LocalDateTime.of(2026, 3, 16, 12, 0) }
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        val report = (fixed.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertTrue(report.notes.isEmpty())
+    }
+
+    @Test
+    fun `a chosen history start before the gap suppresses the gap note`() = runBlocking {
+        val fixed = fixedToday(LocalDate.of(2026, 4, 15), "gap-history")
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        fixed.syncBankConnection(bankId, ScriptedInteraction())
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = LocalDateTime.of(2026, 1, 1, 12, 0) }
+        data.bankAccessRepo.setSyncFrom(bankId, LocalDate.of(2025, 12, 1))
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        val report = (fixed.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertTrue(report.notes.isEmpty())
+        assertEquals(LocalDate.of(2025, 12, 1), gateway.sinceRequests[giro])
+    }
+
+    @Test
+    fun `an old last sync with only a new account does not note a gap`() = runBlocking {
+        val fixed = fixedToday(LocalDate.of(2026, 4, 15), "gap-new-account")
+        transaction { de.findesk.data.entity.BankAccess.findById(bankId)!!.lastSync = LocalDateTime.of(2026, 1, 1, 12, 0) }
+
+        gateway.snapshots = listOf(snapshot(savings, "100.00"))
+        val report = (fixed.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertTrue(report.notes.isEmpty())
+        assertEquals(1, report.accountsAdded)
+    }
+
+    @Test
+    fun `a first sync does not note a gap`() = runBlocking {
+        val fixed = fixedToday(LocalDate.of(2026, 4, 15), "gap-first")
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+
+        val report = (fixed.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertTrue(report.notes.isEmpty())
+    }
+
+    @Test
+    fun `an account without an IBAN is noted without exposing its number`() = runBlocking {
+        val number = "4111111111111111"
+        val withoutIban = account("").copy(accountNumber = number)
+        gateway.snapshots = listOf(
+            snapshot(giro, "100.00"),
+            AccountSnapshot(withoutIban, FinTSBalance(withoutIban, BigDecimal("5.00")), emptyList()),
+        )
+
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(1, report.accountsSynced, "an account without an IBAN can't be stored or counted as synced")
+        assertEquals(1, report.accountsAdded)
+        assertEquals(1, data.accountRepo.findAllItems().size)
+        assertEquals(listOf(AppStrings.format(StringKey.SyncAccountWithoutIban, "1111")), report.notes)
+        val audit = AuditLogRepositoryImpl().findByAction("SYNC_BANK").single().details!!
+        assertFalse(report.notes.joinToString().contains(number))
+        assertFalse(report.summary().contains(number))
+        assertFalse(audit.contains(number))
+    }
+
+    @Test
+    fun `a balance in another currency is not stored and is noted`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "50.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        val usdBalance = FinTSBalance(account(giro), BigDecimal("100.00"), currency = "USD")
+        gateway.snapshots = listOf(AccountSnapshot(account(giro), usdBalance, emptyList()))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(BigDecimal("50.00"), data.accountRepo.findAllItems().single().balance)
+        assertEquals(
+            listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "USD", "EUR")),
+            report.notes,
+        )
+    }
+
+    @Test
+    fun `a balance in the account currency is stored without a note`() = runBlocking {
+        gateway.snapshots = listOf(snapshot(giro, "50.00"))
+        service.syncBankConnection(bankId, ScriptedInteraction())
+
+        gateway.snapshots = listOf(snapshot(giro, "100.00"))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(BigDecimal("100.00"), data.accountRepo.findAllItems().single().balance)
+        assertTrue(report.notes.isEmpty())
+    }
+
+    @Test
+    fun `a new account with a balance in another currency starts at zero and is noted`() = runBlocking {
+        val usdBalance = FinTSBalance(account(giro), BigDecimal("100.00"), currency = "USD")
+        gateway.snapshots = listOf(AccountSnapshot(account(giro), usdBalance, emptyList()))
+
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val stored = data.accountRepo.findAllItems().single()
+        assertEquals("EUR", stored.currency)
+        assertEquals(0, stored.balance.compareTo(BigDecimal.ZERO))
+        assertEquals(
+            listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "USD", "EUR")),
+            report.notes,
+        )
+    }
+
+    private fun fixedToday(date: LocalDate, name: String) = BankingService(finTSClient = FinTSClient(gateway = gateway, passportDir = File(tmp, name)), today = { date })
 }
 
 class HbciCallbackTest {
