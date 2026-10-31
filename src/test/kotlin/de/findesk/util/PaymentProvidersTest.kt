@@ -77,4 +77,117 @@ class PaymentProvidersTest {
     fun `an empty tail after the marker gives null`() {
         assertNull(PaymentProviders.merchantOf(paypalPurpose("   ., "), paypalPartner))
     }
+
+    // Further marker variants
+
+    @Test
+    fun `the marker is found with an id before the PayPal id`() {
+        val raw = "1234567890123 PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(raw, paypalPartner))
+    }
+
+    @Test
+    fun `the marker tolerates a space inserted inside a word`() {
+        val inFirstWord = "PP.1234.PP . Beispiel Shop GmbH, Ihr Ein kauf bei Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(inFirstWord, paypalPartner))
+
+        val inLastWord = "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf b ei Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(inLastWord, paypalPartner))
+    }
+
+    @Test
+    fun `the upper-case marker is recognised`() {
+        val raw = "PP.1234.PP . Beispiel Shop GmbH, IHR EINKAUF BEI Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(raw, paypalPartner))
+    }
+
+    // Pre-comma name versus post-marker shop
+
+    @Test
+    fun `the fuller of the pre-comma name and the marker shop wins`() {
+        val postShort = "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Sh"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(postShort, paypalPartner))
+
+        val preShort = "PP.1234.PP . Beispiel Sh, Ihr Einkauf bei Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(preShort, paypalPartner))
+
+        val insertedSpace = "PP.1234.PP . Beispiel Sh op GmbH, Ihr Einkauf bei Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(insertedSpace, paypalPartner))
+
+        val differentNames = "PP.1234.PP . Anderer Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(differentNames, paypalPartner))
+    }
+
+    // Code tails
+
+    @Test
+    fun `a code tail after the marker shop is dropped`() {
+        val withShop = "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH, AB12CD34"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(withShop, paypalPartner))
+
+        val withoutShop = "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei , AB12CD34"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(withoutShop, paypalPartner))
+
+        assertNull(PaymentProviders.merchantOf("Ihr Einkauf bei , AB12CD34", paypalPartner))
+    }
+
+    // Pre-comma name without the marker
+
+    @Test
+    fun `a pre-comma name without the marker is the shop`() {
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf("PP.1234.PP . Beispiel Shop GmbH, Ihr Abo", paypalPartner))
+    }
+
+    // Card format
+
+    @Test
+    fun `card descriptors give the shop before the digits`() {
+        assertEquals("BEISPIELSHOP", PaymentProviders.merchantOf("PAYPAL *BEISPIELSHOP", "PAYPAL *BEISPIELSHOP"))
+        assertEquals("BEISPIELSHOP", PaymentProviders.merchantOf("PAYPAL *BEISPIELSHOP", null))
+        assertEquals("BEISPIELSHOP", PaymentProviders.merchantOf("PAYPAL*BEISPIELSHOP", null))
+        assertEquals("BEISPIEL SHOP", PaymentProviders.merchantOf("PAYPAL *BEISPIEL SHOP 12345678", null))
+        assertEquals("BEISPIEL SHOP", PaymentProviders.merchantOf("PAYPAL *BEISPIEL SHOP, 4930123456", null))
+        assertEquals("SHOP24", PaymentProviders.merchantOf("PAYPAL *SHOP24", null))
+    }
+
+    @Test
+    fun `a card purpose with a non-PayPal partner gives no shop`() {
+        assertNull(PaymentProviders.merchantOf("PAYPAL *BEISPIELSHOP", "Beispiel Shop GmbH"))
+    }
+
+    // No shop at all
+
+    @Test
+    fun `ids withdrawals transfers and empty tails give no shop`() {
+        assertNull(PaymentProviders.merchantOf("PP.1234.PP . , Ihr Einkauf bei", paypalPartner))
+        assertNull(PaymentProviders.merchantOf("1234567890123 PP.1234.PP", paypalPartner))
+        assertNull(PaymentProviders.merchantOf("1234567890", paypalPartner))
+        assertNull(PaymentProviders.merchantOf("PP.1234.PP ABBUCHUNG VOM GIROKONTO", paypalPartner))
+        assertNull(PaymentProviders.merchantOf("EREF+123 SVWZ+ABC TRANSFER", paypalPartner))
+        assertNull(
+            PaymentProviders.merchantOf(
+                "PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+                "Beispiel Shop GmbH",
+            ),
+        )
+    }
+
+    // Provider view
+
+    @Test
+    fun `match exposes the provider view for marker and card bookings`() {
+        val marker = PaymentProviders.match("PP.1234.PP . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH", paypalPartner)
+        assertEquals("Beispiel Shop GmbH", marker?.shop)
+        assertNull(marker?.providerPurpose)
+        assertEquals(paypalPartner, marker?.providerPartner)
+
+        val card = PaymentProviders.match("PAYPAL *BEISPIELSHOP", null)
+        assertEquals("BEISPIELSHOP", card?.shop)
+        assertEquals("PAYPAL", card?.providerPurpose)
+        assertNull(card?.providerPartner)
+
+        val cardWithPartner = PaymentProviders.match("PAYPAL *BEISPIELSHOP", "PAYPAL *BEISPIELSHOP")
+        assertEquals("PAYPAL", cardWithPartner?.providerPurpose)
+        assertEquals("PAYPAL", cardWithPartner?.providerPartner)
+    }
 }

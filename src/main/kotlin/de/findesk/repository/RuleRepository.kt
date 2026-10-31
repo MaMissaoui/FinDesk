@@ -203,13 +203,15 @@ class RuleMatcher(val specs: List<RuleSpec>) {
 
         /**
          * The index of the rule that applies to a booking among [specs] in priority order, with [tests] compiled
-         * from their patterns in the same order and [shop] already extracted once by the caller. Shared by
-         * categorization ([RuleMatcher.categoryFor]) and the tax-rule lookup, so they can never select differently.
+         * from their patterns in the same order and the shop [match] already extracted once by the caller. Shared
+         * by categorization ([RuleMatcher.categoryFor]) and the tax-rule lookup, so they can never select
+         * differently.
          *
-         * With no [shop] the first rule matching the original text wins. Otherwise the original text still
-         * decides, except that a provider rule — one that also matches the partner alone — gives way to the first
-         * shop rule whose direction is the provider rule's direction, or to any shop rule when the provider rule's
-         * direction is [RuleDirection.ANY]. A rule that does not hinge on the provider keeps winning.
+         * With no [match] the first rule matching the original text wins. Otherwise the original text still
+         * decides, except that a provider rule — one that also matches the provider view of the booking — gives way
+         * to the first shop rule whose direction is the provider rule's direction, or to any shop rule when the
+         * provider rule's direction is [RuleDirection.ANY]. A rule that does not hinge on the provider keeps
+         * winning.
          */
         fun select(
             specs: List<RuleSpec>,
@@ -217,19 +219,19 @@ class RuleMatcher(val specs: List<RuleSpec>) {
             purpose: String?,
             partnerName: String?,
             amount: BigDecimal?,
-            shop: String?,
+            match: PaymentProviders.ShopMatch?,
         ): Int? {
             val original = specs.indices.firstOrNull { matches(specs[it], tests[it], purpose, partnerName, amount) }
-            if (shop == null) return original
-            if (original == null) return specs.indices.firstOrNull { matches(specs[it], tests[it], null, shop, amount) }
+            if (match == null) return original
+            if (original == null) return specs.indices.firstOrNull { matches(specs[it], tests[it], null, match.shop, amount) }
 
             val winner = specs[original]
-            if (!matches(winner, tests[original], null, partnerName, amount)) return original
+            if (!matches(winner, tests[original], match.providerPurpose, match.providerPartner, amount)) return original
 
             val shopMatch = specs.indices.firstOrNull { index ->
                 val candidate = specs[index]
                 (winner.direction == RuleDirection.ANY || candidate.direction == winner.direction) &&
-                    matches(candidate, tests[index], null, shop, amount)
+                    matches(candidate, tests[index], null, match.shop, amount)
             }
             return shopMatch ?: original
         }
@@ -239,7 +241,7 @@ class RuleMatcher(val specs: List<RuleSpec>) {
 
     /** The category id of the rule [select] picks, or null. */
     fun categoryFor(purpose: String?, partnerName: String?, amount: BigDecimal? = null): Int? {
-        val shop = PaymentProviders.merchantOf(purpose, partnerName)
-        return select(specs, compiled, purpose, partnerName, amount, shop)?.let { specs[it].categoryId }
+        val match = PaymentProviders.match(purpose, partnerName)
+        return select(specs, compiled, purpose, partnerName, amount, match)?.let { specs[it].categoryId }
     }
 }
