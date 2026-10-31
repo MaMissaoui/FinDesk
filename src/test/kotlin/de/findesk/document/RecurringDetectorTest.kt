@@ -19,6 +19,14 @@ class RecurringDetectorTest {
 
     private fun monthly(start: LocalDate, count: Int, amount: (Int) -> String, partner: (Int) -> String, dayJitter: (Int) -> Long = { 0 }) = (0 until count).map { i -> t(start.plusMonths(i.toLong()).plusDays(dayJitter(i)), amount(i), partner(i)) }
 
+    private val paypalPartner = "PayPal Europe S.a.r.l. et Cie S.C.A"
+
+    private fun paypal(date: LocalDate, amount: String, shop: String?) = t(date, amount, paypalPartner).copy(
+        purpose = if (shop == null) "PP.1234.PP . Lastschrift" else "PP.1234.PP . $shop, Ihr Einkauf bei $shop",
+    )
+
+    private fun paypalMonthly(start: LocalDate, count: Int, amount: String, shop: String?) = (0 until count).map { i -> paypal(start.plusMonths(i.toLong()), amount, shop) }
+
     @Test
     fun `detects subscriptions, salary and varying bills`() {
         val txns = monthly(LocalDate.of(2026, 4, 15), 6, { "-12.99" }, { "NETFLIX.COM ${1000 + it}" }) +
@@ -70,5 +78,51 @@ class RecurringDetectorTest {
 
         val upcoming = RecurringDetector.upcoming(recurring, today).map { it.name }
         assertEquals(listOf("Employer", "Vermieter"), upcoming)
+    }
+
+    @Test
+    fun `a paypal subscription is detected by its shop despite other purchases`() {
+        val subscription = paypalMonthly(LocalDate.of(2026, 5, 10), 5, "-9.99", "Beispiel Abo GmbH")
+        val otherPurchases = listOf(
+            paypal(today.minusDays(63), "-24.00", "Beispiel Shop GmbH"),
+            paypal(today.minusDays(40), "-59.00", "Beispiel Shop GmbH"),
+            paypal(today.minusDays(30), "-31.00", "Beispiel Shop GmbH"),
+            paypal(today.minusDays(2), "-18.00", "Beispiel Shop GmbH"),
+            paypal(today.minusDays(80), "-12.00", "Anderer Shop GmbH"),
+            paypal(today.minusDays(45), "-44.00", "Anderer Shop GmbH"),
+            paypal(today.minusDays(20), "-7.00", "Anderer Shop GmbH"),
+            paypal(today.minusDays(70), "-5.00", "Dritter Laden GmbH"),
+            paypal(today.minusDays(10), "-6.00", "Dritter Laden GmbH"),
+        )
+
+        val found = RecurringDetector.detect(subscription + otherPurchases, today)
+
+        val abo = found.single()
+        assertEquals("PayPal · Beispiel Abo GmbH", abo.name)
+        assertEquals(Cadence.MONTHLY, abo.cadence)
+        assertEquals(5, abo.occurrences)
+        assertEquals(BigDecimal("-9.99"), abo.typicalAmount)
+    }
+
+    @Test
+    fun `a partner named like a paypal shop stays a separate payment`() {
+        val viaPaypal = paypalMonthly(LocalDate.of(2026, 5, 10), 5, "-9.99", "Beispiel Abo GmbH")
+        val direct = monthly(LocalDate.of(2026, 5, 12), 5, { "-9.99" }, { "Beispiel Abo GmbH" })
+
+        val found = RecurringDetector.detect(viaPaypal + direct, today)
+
+        assertEquals(listOf("Beispiel Abo GmbH", "PayPal · Beispiel Abo GmbH"), found.map { it.name }.sorted())
+        assertTrue(found.all { it.occurrences == 5 })
+    }
+
+    @Test
+    fun `paypal payments without a shop keep grouping under the partner`() {
+        val payments = paypalMonthly(LocalDate.of(2026, 5, 10), 5, "-4.50", null)
+
+        val recurring = RecurringDetector.detect(payments, today).single()
+
+        assertEquals(paypalPartner, recurring.name)
+        assertEquals(Cadence.MONTHLY, recurring.cadence)
+        assertEquals(5, recurring.occurrences)
     }
 }
