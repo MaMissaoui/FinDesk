@@ -7,6 +7,7 @@ import de.findesk.model.TransactionItem
 import de.findesk.repository.*
 import de.findesk.util.BankText
 import de.findesk.util.Currencies
+import de.findesk.util.PaymentProviders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
