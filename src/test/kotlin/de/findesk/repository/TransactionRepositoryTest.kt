@@ -157,6 +157,26 @@ class TransactionRepositoryTest {
     }
 
     @Test
+    fun `oldestDateByAccount returns each account's oldest date and omits accounts without bookings`() {
+        val bank = bankAccessRepo.create("Oldest Bank", "33333333", "OLDESTDEFF", "user6")
+        val first = accountRepo.create(bank.id.value, "DE11111111111111111111").id.value
+        val second = accountRepo.create(bank.id.value, "DE22222222222222222222").id.value
+        val empty = accountRepo.create(bank.id.value, "DE33333333333333333333").id.value
+        transactionRepo.create(first, LocalDate.of(2026, 5, 10), BigDecimal("-1.00"), hash = "oldest-first-1")
+        transactionRepo.create(first, LocalDate.of(2026, 3, 2), BigDecimal("-2.00"), hash = "oldest-first-2")
+        transactionRepo.create(second, LocalDate.of(2026, 7, 4), BigDecimal("-3.00"), hash = "oldest-second")
+
+        val oldest = transactionRepo.oldestDateByAccount()
+
+        assertEquals(LocalDate.of(2026, 3, 2), oldest[first], "the earliest of the account's bookings")
+        assertEquals(LocalDate.of(2026, 7, 4), oldest[second])
+        assertFalse(oldest.containsKey(empty), "an account without bookings is absent")
+
+        // This class shares one database across its tests, so leave the extra accounts out of it again
+        listOf(first, second, empty).forEach { accountRepo.deleteWithTransactions(it) }
+    }
+
+    @Test
     fun `deleteAll chunks more than the parameter limit in one call and keeps the other bookings`() {
         val bank = bankAccessRepo.create("Fifth Bank", "22222222", "FIVEDEFF", "user5")
         val account = accountRepo.create(bank.id.value, "DE02120300000000202052").id.value
