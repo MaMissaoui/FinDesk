@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -167,6 +168,10 @@ fun StatCard(
     color: Color,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    /** The value's own colour; defaults to the card's content colour, as before. */
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    /** Drawn instead of [subtitle] when given, so parts of it can carry their own colour. */
+    subtitleText: AnnotatedString? = null,
     /** Reports the layout of the value text, e.g. for tests; like @Composable Text's [onTextLayout]. */
     onValueLayout: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null,
 ) {
@@ -187,13 +192,17 @@ fun StatCard(
             // so the colour is passed explicitly (or the value is black on the dark theme's cards)
             BasicText(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, color = LocalContentColor.current),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, color = valueColor),
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.headlineSmall.fontSize),
                 onTextLayout = onValueLayout,
             )
             // Always laid out, empty or not, so a card without one is as tall as its neighbours
-            Text(subtitle.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (subtitleText != null) {
+                Text(subtitleText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Text(subtitle.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }

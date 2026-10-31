@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import de.findesk.model.DefaultCategories
+import de.findesk.util.BalanceTone
 import java.math.BigDecimal
 
 // Primary Colors
@@ -29,6 +30,12 @@ val ErrorOnSelectionLight = Color(0xFFB91C1C)
 
 /** Negative amounts on [SelectionDark], light enough for 4.5:1 contrast. */
 val ErrorOnSelectionDark = Color(0xFFFCA5A5)
+
+/** Positive amounts on [SelectionLight], dark enough for 4.5:1 contrast. */
+val SuccessOnSelectionLight = Color(0xFF065F46)
+
+/** Positive amounts on [SelectionDark], light enough for 4.5:1 contrast. */
+val SuccessOnSelectionDark = Color(0xFF6EE7B7)
 
 /** Light-theme sidebar: neutral, so the logo is the only saturated blue in the panel. */
 val SidebarLight = Color(0xFFECEFF4)
@@ -60,8 +67,9 @@ fun amountColor(isExpense: Boolean): Color = if (MaterialTheme.colorScheme.surfa
 }
 
 /**
- * The colour for a balance: red below zero and the theme's text colour at zero or above. Balances are stocks,
- * so only a negative one is coloured; money flows keep using [amountColor] for income and expenses.
+ * The colour for a balance by its plain sign: red below zero and the theme's text colour at zero or above.
+ * Account balances and their totals use [balanceToneColor] instead, which splits a negative balance into the loan
+ * rule's warning red and its calm grey; money flows keep using [amountColor] for income and expenses.
  */
 @Composable
 fun balanceColor(value: BigDecimal): Color = when (value.signum()) {
@@ -69,13 +77,14 @@ fun balanceColor(value: BigDecimal): Color = when (value.signum()) {
     else -> MaterialTheme.colorScheme.onSurface
 }
 
-/**
- * The colour for an account balance from the loan rule's warning flag ([de.findesk.util.isWarningBalance]): red when
- * the balance warns and the theme's text colour otherwise, so a loan's negative balance keeps its minus sign in the
- * normal colour. [balanceColor] for [BigDecimal] stays the plain sign rule for other screens' non-account amounts.
- */
+/** The colour for a [BalanceTone]: green above zero, red for a warning, grey for a loan and plain text at zero. */
 @Composable
-fun balanceColor(warning: Boolean): Color = if (warning) amountColor(true) else MaterialTheme.colorScheme.onSurface
+fun balanceToneColor(tone: BalanceTone): Color = when (tone) {
+    BalanceTone.POSITIVE -> amountColor(false)
+    BalanceTone.NEGATIVE -> amountColor(true)
+    BalanceTone.LOAN -> MaterialTheme.colorScheme.onSurfaceVariant
+    BalanceTone.ZERO -> MaterialTheme.colorScheme.onSurface
+}
 
 // Category Colors
 // The hex strings (and the one-name-per-line comments) live in `model/DefaultCategories.colors`, because the model

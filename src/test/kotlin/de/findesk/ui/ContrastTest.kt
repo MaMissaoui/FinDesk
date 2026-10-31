@@ -16,6 +16,8 @@ import de.findesk.ui.theme.SidebarDark
 import de.findesk.ui.theme.SidebarLight
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.SuccessDark
+import de.findesk.ui.theme.SuccessOnSelectionDark
+import de.findesk.ui.theme.SuccessOnSelectionLight
 import de.findesk.ui.theme.readableOn
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -108,6 +110,10 @@ class ContrastTest {
             val selection = if (name == "light") SelectionLight else SelectionDark
             val selectionError = if (name == "light") ErrorOnSelectionLight else ErrorOnSelectionDark
             assertContrast(selectionError, selection, "negative balance on selected row ($name)")
+
+            // A positive balance stays green on a selected row, in the selection-safe green
+            val selectionSuccess = if (name == "light") SuccessOnSelectionLight else SuccessOnSelectionDark
+            assertContrast(selectionSuccess, selection, "positive balance on selected row ($name)")
         }
     }
 

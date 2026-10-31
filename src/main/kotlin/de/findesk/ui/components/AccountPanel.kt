@@ -53,13 +53,16 @@ import de.findesk.model.AccountItem
 import de.findesk.repository.MAX_ACCOUNT_GROUP_NAME_LENGTH
 import de.findesk.ui.theme.ErrorOnSelectionDark
 import de.findesk.ui.theme.ErrorOnSelectionLight
-import de.findesk.ui.theme.balanceColor
+import de.findesk.ui.theme.SuccessOnSelectionDark
+import de.findesk.ui.theme.SuccessOnSelectionLight
+import de.findesk.ui.theme.balanceToneColor
 import de.findesk.util.AccountGroupView
+import de.findesk.util.BalanceTone
 import de.findesk.util.Formats
 import de.findesk.util.GroupKey
+import de.findesk.util.balanceTone
 import de.findesk.util.dropTarget
 import de.findesk.util.groupIdFor
-import de.findesk.util.isWarningBalance
 import de.findesk.viewmodel.AccountSelection
 import java.math.BigDecimal
 import kotlin.math.roundToInt
@@ -152,7 +155,7 @@ fun AccountPanel(
                             Spacer(Modifier.width(8.dp))
                             Column(horizontalAlignment = Alignment.End) {
                                 grandTotal.forEach { (currency, amount) ->
-                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = panelAmountColor(isWarningBalance(accounts, currency), selection == AccountSelection.All))
+                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = panelAmountColor(balanceTone(accounts, currency), selection == AccountSelection.All))
                                 }
                             }
                         }
@@ -300,13 +303,15 @@ fun AccountPanel(
 }
 
 /**
- * Red when the loan rule warns (see [balanceColor]), even on the selection highlight: there the selection-safe red
- * keeps 4.5:1 where the plain one falls below (see ContrastTest), so a checking account's red stays red everywhere.
+ * The tone's colour (see [balanceToneColor]) off the selection highlight; on it, positive and warning-negative
+ * balances use the selection-safe green and red, which keep 4.5:1 where the plain ones fall below (see ContrastTest),
+ * so a checking account's red stays red everywhere. Loan grey and zero keep the row's own content colour.
  */
 @Composable
-private fun panelAmountColor(warning: Boolean, selected: Boolean): Color = when {
-    !selected -> balanceColor(warning)
-    warning -> if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) ErrorOnSelectionLight else ErrorOnSelectionDark
+private fun panelAmountColor(tone: BalanceTone, selected: Boolean): Color = when {
+    !selected -> balanceToneColor(tone)
+    tone == BalanceTone.POSITIVE -> if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) SuccessOnSelectionLight else SuccessOnSelectionDark
+    tone == BalanceTone.NEGATIVE -> if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) ErrorOnSelectionLight else ErrorOnSelectionDark
     else -> LocalContentColor.current
 }
 
@@ -414,8 +419,8 @@ private fun GroupHeaderRow(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.End,
-                    // Each currency's own loan rule, so a negative-only-because-of-loans total stays plain
-                    color = panelAmountColor(isWarningBalance(view.accounts, currency), selected),
+                    // Each currency's own loan rule, so a negative-only-because-of-loans total stays calm grey
+                    color = panelAmountColor(balanceTone(view.accounts, currency), selected),
                 )
             }
         }
@@ -492,7 +497,7 @@ private fun AccountRow(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.End,
-            color = panelAmountColor(isWarningBalance(listOf(account), account.currency), selected),
+            color = panelAmountColor(balanceTone(listOf(account), account.currency), selected),
         )
     }
 }
