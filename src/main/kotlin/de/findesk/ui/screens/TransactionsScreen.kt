@@ -952,7 +952,7 @@ private fun TransactionRow(
     val s = strings()
     // Display only: the list shows cleaned bank text, the stored purpose and partner stay raw (see BankText)
     val title = BankText.displayDescription(txn)
-    val secondary = BankText.displayPurpose(txn.purpose).takeIf { txn.partnerName != null }
+    val secondary = BankText.secondaryLine(txn)
     // The bar repeats the selection in a colour that reads in both themes; the tinted background alone is faint in dark mode
     val selectionBarColor = MaterialTheme.colorScheme.primary
 
