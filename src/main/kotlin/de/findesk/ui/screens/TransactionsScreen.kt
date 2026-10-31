@@ -22,8 +22,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -261,8 +263,9 @@ fun TransactionsScreen(
                             )
                         },
                     )
-                    DisabledReason(s[StringKey.HintNeedsAccount].takeIf { state.accounts.isEmpty() }) {
-                        Button(onClick = { showAdd = true }, enabled = state.accounts.isNotEmpty()) {
+                    // Without accounts the empty state's button is the only way to add a bank: no disabled "+ Add" here
+                    if (state.accounts.isNotEmpty()) {
+                        Button(onClick = { showAdd = true }) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text(s[StringKey.Add], maxLines = 1, softWrap = false)
@@ -284,7 +287,7 @@ fun TransactionsScreen(
                         onValueChange = { vm.updateSearchQuery(it) },
                         placeholder = s[StringKey.SearchPartnerPurpose],
                         // The pills keep a 48 dp touch area around their 40 dp outline, so centre the field on them
-                        modifier = Modifier.weight(1f).widthIn(min = 240.dp).align(Alignment.CenterVertically),
+                        modifier = Modifier.weight(1f).widthIn(min = 200.dp).align(Alignment.CenterVertically),
                     )
                     // While a single month is navigated (from the dashboard), its label wins over the period's;
                     // otherwise a custom From/To shows as "from – to" and only then the period's own label
@@ -312,10 +315,10 @@ fun TransactionsScreen(
                             onSelect = { vm.selectAccounts(it) },
                         )
                     }
-                    SingleChoiceRow(
+                    DropdownSelector(
+                        label = if (state.direction == Direction.ALL) s[StringKey.DirectionAnyLabel] else s.direction(state.direction),
                         options = Direction.entries,
-                        selected = state.direction,
-                        label = { s.direction(it) },
+                        optionLabel = { if (it == Direction.ALL) s[StringKey.DirectionAnyLabel] else s.direction(it) },
                         onSelect = { vm.updateDirection(it) },
                     )
                     // Labelled in the primary currency, which the grand total lists first
@@ -357,7 +360,7 @@ fun TransactionsScreen(
                             EmptyState(
                                 Icons.Default.List,
                                 s[StringKey.NoTransactions],
-                                if (state.accounts.isEmpty()) s[StringKey.AddAccountFirstThen] else s[StringKey.NothingMatches],
+                                if (state.accounts.isEmpty()) s[StringKey.NoTransactionsAddBank] else s[StringKey.NothingMatches],
                                 action = if (state.accounts.isEmpty()) {
                                     { Button(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddBank]) } }
                                 } else {
@@ -407,7 +410,7 @@ fun TransactionsScreen(
                                         s.format(StringKey.PendingHeader, Formats.dateTime(state.pendingBookings.first().fetchedAt)),
                                         style = MaterialTheme.typography.titleSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                                        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)).padding(horizontal = 16.dp, vertical = 10.dp),
                                     )
                                 }
                             }
@@ -892,6 +895,19 @@ private fun BalanceHistoryCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                // The chart's axis is chosen from the points; say when it leaves zero out, where money looks like height alone
+                if (!collapsed && points.size >= 2) {
+                    val values = points.map { it.second.toDouble() }
+                    val ticks = niceTicks(values.min(), values.max())
+                    if (ticks.first() > 0.0 || ticks.last() < 0.0) {
+                        Text(
+                            s[StringKey.AxisNotFromZero],
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = 12.dp),
+                        )
+                    }
+                }
             }
             if (!collapsed) {
                 BalanceLineChart(
@@ -935,11 +951,14 @@ private fun TransactionRow(
     // Display only: the list shows cleaned bank text, the stored purpose and partner stay raw (see BankText)
     val title = BankText.displayDescription(txn)
     val secondary = BankText.displayPurpose(txn.purpose).takeIf { txn.partnerName != null }
+    // The bar repeats the selection in a colour that reads in both themes; the tinted background alone is faint in dark mode
+    val selectionBarColor = MaterialTheme.colorScheme.primary
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .drawBehind { if (isSelected) drawRect(selectionBarColor, size = Size(3.dp.toPx(), size.height)) }
             .semantics {
                 contentDescription = listOfNotNull(title, secondary).joinToString(" · ")
                 selected = isSelected
@@ -1107,7 +1126,10 @@ private fun TransactionRow(
 @Composable
 private fun PendingRow(line: PendingBookingItem, showBalanceColumn: Boolean) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

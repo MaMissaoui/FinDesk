@@ -65,6 +65,7 @@ enum class StringKey {
     DirectionAll,
     DirectionIncome,
     DirectionExpenses,
+    DirectionAnyLabel,
 
     // Cadence
     CadenceWeekly,
@@ -252,6 +253,7 @@ enum class StringKey {
     ColAmount,
     NoTransactions,
     AddAccountFirstThen,
+    NoTransactionsAddBank,
     NothingMatches,
     ImportBankStatement,
     AttachReceipt,
@@ -723,6 +725,7 @@ enum class StringKey {
     Max,
     MinAmount,
     BalanceHistory,
+    AxisNotFromZero,
 
     // Status messages (view models & services)
     MessageAdded,
