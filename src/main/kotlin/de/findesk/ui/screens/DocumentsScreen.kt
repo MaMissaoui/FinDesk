@@ -29,7 +29,8 @@ import de.findesk.i18n.strings
 import de.findesk.model.DocumentItem
 import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
-import de.findesk.ui.platform.Platform
+import de.findesk.ui.platform.revealInFileManager
+import de.findesk.ui.platform.revealLabel
 import de.findesk.ui.theme.Success
 import de.findesk.util.Formats
 import de.findesk.viewmodel.DocumentTab
@@ -99,7 +100,10 @@ fun DocumentsScreen() {
         SingleChoiceRow(
             options = DocumentTab.entries,
             selected = state.tab,
-            label = { s.documentTab(it) },
+            label = { tab ->
+                val count = state.counts[tab]
+                if (count != null) s.format(StringKey.TabWithCount, s.documentTab(tab), count) else s.documentTab(tab)
+            },
             onSelect = { vm.selectTab(it) },
         )
         Spacer(Modifier.height(16.dp))
@@ -312,28 +316,6 @@ private fun LinkCandidateRow(txn: TransactionItem, badge: String?, onLink: () ->
         }
         TextButton(onClick = onLink) { Text(strings()[StringKey.Link]) }
     }
-}
-
-/** What the file manager is called here: Finder, Explorer, or a plain folder on Linux. */
-private fun revealLabel(): StringKey = when {
-    Platform.isMac -> StringKey.ShowInFinder
-    Platform.isWindows -> StringKey.ShowInExplorer
-    else -> StringKey.ShowInFolder
-}
-
-/** Shows [file] selected in the file manager; where the JDK can't select it (Linux), opens its folder instead. */
-private fun revealInFileManager(file: File) {
-    if (!file.exists()) return
-    Thread {
-        runCatching {
-            val desktop = Desktop.getDesktop()
-            when {
-                desktop.isSupported(Desktop.Action.BROWSE_FILE_DIR) -> desktop.browseFileDirectory(file)
-                Platform.isWindows -> ProcessBuilder("explorer.exe", "/select,", file.absolutePath).start()
-                else -> desktop.open(file.parentFile)
-            }
-        }
-    }.start()
 }
 
 private fun openExternally(file: File) {

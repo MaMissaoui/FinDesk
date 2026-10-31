@@ -38,6 +38,8 @@ import de.findesk.model.RuleItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.SettingsSection
+import de.findesk.ui.platform.revealInFileManager
+import de.findesk.ui.platform.revealLabel
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.Warning
@@ -45,6 +47,7 @@ import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsState
 import de.findesk.viewmodel.SettingsViewModel
+import java.io.File
 import java.math.BigDecimal
 
 /** Whether two or more categories currently share one colour (hex compared case-insensitively). */
@@ -116,7 +119,7 @@ fun SettingsScreen(
 
             SettingsSection.PROFILES -> SettingsSectionHeader(
                 s[StringKey.Profiles],
-                actions = { TextButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
+                actions = { Button(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
             ) {
                 Text(
                     s[StringKey.ProfilesHint],
@@ -172,16 +175,26 @@ fun SettingsScreen(
             SettingsSection.CATEGORIES -> SettingsSectionHeader(
                 s[StringKey.Categories],
                 actions = {
-                    TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
+                    // The empty state below leads with the first step, so its own two buttons stand alone there
+                    if (state.categories.isNotEmpty()) {
+                        Button(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
+                    }
                     // Only while two or more categories share a colour: otherwise there is nothing to fix
                     if (state.categories.hasSharedColours()) {
                         TextButton(onClick = { vm.fixDuplicateColours() }) { Text(s[StringKey.FixDuplicateColours]) }
                     }
-                    TextButton(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
+                    if (state.categories.isNotEmpty()) {
+                        TextButton(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
+                    }
                 },
             ) {
                 if (state.categories.isEmpty()) {
                     Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
+                        TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
+                    }
                 }
                 state.categories.forEach { c ->
                     RowContextMenu(
@@ -230,7 +243,7 @@ fun SettingsScreen(
                 s[StringKey.AutoCategorizationRules],
                 actions = {
                     DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
-                        TextButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
+                        Button(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
                     }
                     TextButton(onClick = {
                         FileDialogs.openFiles(s[StringKey.ImportRules], setOf("tsv", "txt")).firstOrNull()?.let { vm.chooseRuleImport(it) }
@@ -297,8 +310,8 @@ fun SettingsScreen(
             }
 
             SettingsSection.DATA -> SettingsSectionHeader(s[StringKey.DataAndOcr]) {
-                InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db")
-                InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory)
+                InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db", File(state.dataDirectory, "findesk.db"))
+                InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory, File(state.documentsDirectory))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
                     Icon(
                         if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
@@ -629,10 +642,13 @@ private fun SettingsSectionHeader(
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
-    Row(Modifier.padding(vertical = 6.dp)) {
+private fun InfoRow(label: String, value: String, reveal: File? = null) {
+    Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(120.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium)
+        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        if (reveal != null && reveal.exists()) {
+            TextButton(onClick = { revealInFileManager(reveal) }) { Text(strings()[revealLabel()]) }
+        }
     }
 }
 
@@ -900,18 +916,37 @@ internal fun ruleTaxMarker(rule: RuleItem, s: Strings): String = when (rule.taxR
 @Composable
 private fun TaxSuggestionKeywordsCard(state: SettingsState, vm: SettingsViewModel) {
     val s = strings()
+    var expanded by remember { mutableStateOf(false) }
     // Re-seeded when the stored list changes, so a save/reset shows the cleaned or default value
     var text by remember(state.taxKeywords) { mutableStateOf(state.taxKeywords) }
+    val count = state.taxKeywords.lineSequence().count { it.isNotBlank() }
     SectionCard(s[StringKey.TaxSuggestionKeywords]) {
-        OutlinedTextField(
-            text,
-            { text = it },
-            minLines = 6,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { vm.saveTaxKeywords(text) }) { Text(s[StringKey.Save]) }
-            TextButton(onClick = { vm.resetTaxKeywords() }) { Text(s[StringKey.ResetToDefaults]) }
+        if (!expanded) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(s.format(StringKey.TaxKeywordsCount, count), modifier = Modifier.weight(1f))
+                TextButton(onClick = { expanded = true }) { Text(s[StringKey.Edit]) }
+            }
+        } else {
+            OutlinedTextField(
+                text,
+                { text = it },
+                minLines = 6,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = {
+                    vm.saveTaxKeywords(text)
+                    expanded = false
+                }) { Text(s[StringKey.Save]) }
+                TextButton(onClick = {
+                    vm.resetTaxKeywords()
+                    expanded = false
+                }) { Text(s[StringKey.ResetToDefaults]) }
+                TextButton(onClick = {
+                    text = state.taxKeywords
+                    expanded = false
+                }) { Text(s[StringKey.Cancel]) }
+            }
         }
     }
 }

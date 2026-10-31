@@ -23,6 +23,8 @@ enum class DocumentTab(val label: String) { ALL("All Documents"), UNLINKED("Unli
 
 data class DocumentsState(
     val documents: List<DocumentItem> = emptyList(),
+    /** How many documents each filter shows for the current search. */
+    val counts: Map<DocumentTab, Int> = emptyMap(),
     val tab: DocumentTab = DocumentTab.ALL,
     val searchQuery: String = "",
     val selectedDocument: DocumentItem? = null,
@@ -57,12 +59,21 @@ class DocumentsViewModel(
 
     private suspend fun refresh() {
         val s = _state.value
-        val docs = documentService.listDocuments(
-            query = s.searchQuery,
-            unlinkedOnly = s.tab == DocumentTab.UNLINKED,
-        ).let { list -> if (s.tab == DocumentTab.LINKED) list.filter { it.linkedTransactionId != null } else list }
+        val all = documentService.listDocuments(query = s.searchQuery, unlinkedOnly = false)
+        val unlinked = documentService.listDocuments(query = s.searchQuery, unlinkedOnly = true)
+        val linked = all.filter { it.linkedTransactionId != null }
+        val counts = mapOf(
+            DocumentTab.ALL to all.size,
+            DocumentTab.UNLINKED to unlinked.size,
+            DocumentTab.LINKED to linked.size,
+        )
+        val docs = when (s.tab) {
+            DocumentTab.ALL -> all
+            DocumentTab.UNLINKED -> unlinked
+            DocumentTab.LINKED -> linked
+        }
         val selected = s.selectedDocument?.let { sel -> docs.firstOrNull { it.id == sel.id } }
-        _state.update { it.copy(documents = docs, selectedDocument = selected, isLoading = false) }
+        _state.update { it.copy(documents = docs, counts = counts, selectedDocument = selected, isLoading = false) }
     }
 
     fun selectTab(tab: DocumentTab): Job {

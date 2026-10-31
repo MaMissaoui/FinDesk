@@ -497,6 +497,9 @@ enum class StringKey {
     TabAllDocuments,
     TabUnlinked,
     TabLinked,
+
+    /** A document filter's label with its result count: "%1$s (%2$d)". */
+    TabWithCount,
     NoDocuments,
     NoMatches,
     UploadHint,
@@ -1131,11 +1134,20 @@ enum class StringKey {
     /** Fourth stat card value: "%1$d of %2$d" is "bookings with a receipt of all tax-relevant bookings". */
     TaxReceiptsOf,
 
+    /** Fourth stat card value when receipts are missing; %d is how many. */
+    ReceiptsMissing,
+
+    /** Fourth stat card value when every tax-relevant booking has a receipt. */
+    ReceiptsComplete,
+
     /** Suggestions card title; %1$d is the count, %2$d repeats it for the plural form. */
     TaxSuggestionsTitle,
 
     /** Suggestions card explanation: keyword match, what accept and dismiss do, and where to edit keywords. */
     TaxSuggestionsHint,
+
+    /** A suggestion row's secondary line; %s is the keyword that matched. */
+    MatchesKeyword,
 
     /** Section header above the income groups. */
     TaxSectionIncome,
@@ -1162,6 +1174,9 @@ enum class StringKey {
 
     /** Small card in the categories section with the keyword list behind the tax suggestions. */
     TaxSuggestionKeywords,
+
+    /** Collapsed keyword card line: how many non-blank keywords the list holds. */
+    TaxKeywordsCount,
 
     /** Card button next to Save that removes the custom keyword list. */
     ResetToDefaults,
