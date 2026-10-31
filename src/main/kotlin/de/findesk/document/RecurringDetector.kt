@@ -1,6 +1,7 @@
 package de.findesk.document
 
 import de.findesk.model.TransactionItem
+import de.findesk.util.PaymentProviders
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
@@ -59,13 +60,19 @@ object RecurringDetector {
     /** Bookings in the next [days] days, earliest first. */
     fun upcoming(recurring: List<RecurringPayment>, today: LocalDate = LocalDate.now(), days: Long = 30): List<RecurringPayment> = recurring.filter { !it.nextDate.isAfter(today.plusDays(days)) }
 
-    /** Same counterparty, direction and currency. Partner names are normalised ("NETFLIX.COM 1234" ~ "Netflix.com"). */
+    /**
+     * Same counterparty, direction and currency. Partner names are normalised ("NETFLIX.COM 1234" ~ "Netflix.com").
+     * A PayPal shop from the purpose is the name part instead of the provider, prefixed so it never collides with a
+     * partner of the same name; PayPal bookings without a readable shop stay grouped under the PayPal partner.
+     */
     private fun key(t: TransactionItem): String {
-        val name = (t.partnerName ?: t.purpose ?: "").lowercase()
+        val shop = PaymentProviders.merchantOf(t.purpose, t.partnerName)
+        val name = (shop ?: t.partnerName ?: t.purpose ?: "").lowercase()
             .replace(Regex("\\d+"), " ") // reference numbers, dates
             .replace(Regex("[^\\p{L} ]"), " ")
             .split(' ').filter { it.length > 1 }.take(3).joinToString(" ")
-        return if (name.isBlank()) "" else "$name|${t.amount.signum()}|${t.currency}"
+        val scoped = if (shop == null || name.isBlank()) name else "paypal:$name"
+        return if (scoped.isBlank()) "" else "$scoped|${t.amount.signum()}|${t.currency}"
     }
 
     private fun analyse(group: List<TransactionItem>, today: LocalDate): RecurringPayment? {
@@ -93,7 +100,8 @@ object RecurringDetector {
         if (medianAmount.signum() == 0) return null
         val fixed = amounts.all { (it - medianAmount).abs() <= medianAmount.abs().multiply(BigDecimal("0.01")).max(BigDecimal("0.01")) }
         return RecurringPayment(
-            name = (last.partnerName ?: last.description).replace(Regex("\\s+"), " ").trim(),
+            name = PaymentProviders.titleOf(last.purpose, last.partnerName)
+                ?: (last.partnerName ?: last.description).replace(Regex("\\s+"), " ").trim(),
             cadence = cadence,
             typicalAmount = medianAmount.setScale(2, RoundingMode.HALF_UP),
             fixedAmount = fixed,
