@@ -24,6 +24,17 @@ class ProtocolTraceTest {
     }
 
     @Test
+    fun `recorder masks spaced IBANs in the built trace`() {
+        val recorder = TraceRecorder("Test Bank", "12345678", "300")
+
+        recorder.record(3, "purpose IBAN DE89 3704 0044 0532 0130 00 Miete")
+
+        val line = recorder.build().lines.single().message
+
+        assertEquals("purpose IBAN ${BankingRedactor.MASK} Miete", line)
+    }
+
+    @Test
     fun `store keeps only the last trace and refuses to save when empty`() {
         ProtocolTraceStore.clear()
         val dir = Files.createTempDirectory("findesk-trace").toFile()
