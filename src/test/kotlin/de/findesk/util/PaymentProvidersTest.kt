@@ -29,9 +29,24 @@ class PaymentProvidersTest {
     }
 
     @Test
-    fun `trailing punctuation is stripped`() {
-        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(paypalPurpose("Beispiel Shop GmbH."), paypalPartner))
+    fun `trailing separators are stripped but a trailing dot is kept`() {
+        assertEquals("Beispiel Shop S.a.r.l.", PaymentProviders.merchantOf(paypalPurpose("Beispiel Shop S.a.r.l."), paypalPartner))
         assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(paypalPurpose("Beispiel Shop GmbH,;:"), paypalPartner))
+    }
+
+    @Test
+    fun `the shop is extracted without SVWZ and ends at the next tag`() {
+        val withoutSvWz = "EREF+REF001 PP.0471.PPX . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(withoutSvWz, paypalPartner))
+
+        val followedByTag = "EREF+REF001 Ihr Einkauf bei Beispiel Shop GmbH SVWZ+Rechnung 4711"
+        assertEquals("Beispiel Shop GmbH", PaymentProviders.merchantOf(followedByTag, paypalPartner))
+    }
+
+    @Test
+    fun `titleOf combines the provider and the shop`() {
+        assertEquals("PayPal · Beispiel Shop GmbH", PaymentProviders.titleOf(paypalPurpose("Beispiel Shop GmbH"), paypalPartner))
+        assertNull(PaymentProviders.titleOf(paypalPurpose("Beispiel Shop GmbH"), "Beispiel Shop GmbH"))
     }
 
     @Test

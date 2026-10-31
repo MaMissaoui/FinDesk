@@ -158,12 +158,13 @@ fun validateRulePattern(pattern: String): String? = when {
 }
 
 /**
- * Auto-apply rules compiled once, in priority order. A booking is tested over its views ([RuleMatcher.views]):
- * for a PayPal payment whose purpose names the shop, the shop view first, then always the original text. In the
- * first view that has any match, the first rule whose pattern is found in the rule's text scope (purpose and
- * partner name, partner name only or purpose only) and whose direction matches the money flow wins — so a shop
- * rule beats the provider rule whatever the rule order, and with no shop match the original view decides exactly
- * as before. Matching ignores case, and an invalid regex matches as a plain substring instead of throwing.
+ * Auto-apply rules compiled once, in priority order. The first rule matching the original booking (in its text
+ * scope and direction) wins, with one exception: for a PayPal payment whose purpose names the shop, a provider
+ * rule — one that also matches the partner alone — gives way to the first shop rule whose direction is the
+ * provider rule's direction (or any direction when the provider rule is ANY). Any other rule, such as a
+ * high-priority purpose rule for a refund, keeps winning. [select] is shared with the tax-rule lookup, so the
+ * two can never select differently. Matching ignores case, and an invalid regex matches as a plain substring
+ * instead of throwing.
  */
 class RuleMatcher(val specs: List<RuleSpec>) {
     companion object {
@@ -201,32 +202,44 @@ class RuleMatcher(val specs: List<RuleSpec>) {
         }
 
         /**
-         * The booking's views to test, in order: when [PaymentProviders.merchantOf] names a shop for this PayPal
-         * payment, first the shop view `(purpose = null, partnerName = shop)`, then always the original
-         * `(purpose, partnerName)`. In the shop view the purpose is null, so a PURPOSE rule can never match there
-         * and an ANY rule tests only the shop.
+         * The index of the rule that applies to a booking among [specs] in priority order, with [tests] compiled
+         * from their patterns in the same order and [shop] already extracted once by the caller. Shared by
+         * categorization ([RuleMatcher.categoryFor]) and the tax-rule lookup, so they can never select differently.
+         *
+         * With no [shop] the first rule matching the original text wins. Otherwise the original text still
+         * decides, except that a provider rule — one that also matches the partner alone — gives way to the first
+         * shop rule whose direction is the provider rule's direction, or to any shop rule when the provider rule's
+         * direction is [RuleDirection.ANY]. A rule that does not hinge on the provider keeps winning.
          */
-        fun views(purpose: String?, partnerName: String?): List<Pair<String?, String?>> {
-            val shop = PaymentProviders.merchantOf(purpose, partnerName)
-            return if (shop == null) {
-                listOf(purpose to partnerName)
-            } else {
-                listOf(null to shop, purpose to partnerName)
+        fun select(
+            specs: List<RuleSpec>,
+            tests: List<(String) -> Boolean>,
+            purpose: String?,
+            partnerName: String?,
+            amount: BigDecimal?,
+            shop: String?,
+        ): Int? {
+            val original = specs.indices.firstOrNull { matches(specs[it], tests[it], purpose, partnerName, amount) }
+            if (shop == null) return original
+            if (original == null) return specs.indices.firstOrNull { matches(specs[it], tests[it], null, shop, amount) }
+
+            val winner = specs[original]
+            if (!matches(winner, tests[original], null, partnerName, amount)) return original
+
+            val shopMatch = specs.indices.firstOrNull { index ->
+                val candidate = specs[index]
+                (winner.direction == RuleDirection.ANY || candidate.direction == winner.direction) &&
+                    matches(candidate, tests[index], null, shop, amount)
             }
+            return shopMatch ?: original
         }
     }
 
-    private val compiled: List<Triple<RuleField, RuleDirection, (String) -> Boolean>> =
-        specs.map { (pattern, _, field, direction) -> Triple(field, direction, compile(pattern)) }
+    private val compiled: List<(String) -> Boolean> = specs.map { compile(it.pattern) }
 
-    /** The category id of the first matching rule, or null. */
+    /** The category id of the rule [select] picks, or null. */
     fun categoryFor(purpose: String?, partnerName: String?, amount: BigDecimal? = null): Int? {
-        for ((viewPurpose, viewPartner) in views(purpose, partnerName)) {
-            specs.forEachIndexed { index, spec ->
-                val (_, _, test) = compiled[index]
-                if (matches(spec, test, viewPurpose, viewPartner, amount)) return spec.categoryId
-            }
-        }
-        return null
+        val shop = PaymentProviders.merchantOf(purpose, partnerName)
+        return select(specs, compiled, purpose, partnerName, amount, shop)?.let { specs[it].categoryId }
     }
 }

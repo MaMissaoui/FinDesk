@@ -21,6 +21,7 @@ import de.findesk.util.Currencies
 import de.findesk.util.GroupKey
 import de.findesk.util.Iban
 import de.findesk.util.LOAN_TYPE
+import de.findesk.util.PaymentProviders
 import de.findesk.util.RunningBalance
 import de.findesk.util.grandTotal
 import de.findesk.util.group
@@ -682,10 +683,12 @@ class TransactionsViewModel(
     }
 
     /**
-     * Suggested rule pattern for a transaction: the first words of the partner name, regex-escaped, without
-     * reference numbers ("NETFLIX.COM 1234" -> "NETFLIX\\.COM") so the rule also matches future bookings.
+     * Suggested rule pattern for a transaction: for a PayPal booking the shop named in the purpose, otherwise the
+     * first words of the partner name, regex-escaped, without reference numbers ("NETFLIX.COM 1234" ->
+     * "NETFLIX\\.COM") so the rule also matches future bookings.
      */
-    fun rulePatternFor(txn: TransactionItem): String = (txn.partnerName ?: txn.purpose ?: "").trim()
+    fun rulePatternFor(txn: TransactionItem): String = (PaymentProviders.merchantOf(txn.purpose, txn.partnerName) ?: txn.partnerName ?: txn.purpose ?: "")
+        .trim()
         .split(Regex("\\s+"))
         .filter { w -> w.isNotEmpty() && w.count(Char::isDigit) < 3 }
         .take(3)

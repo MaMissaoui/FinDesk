@@ -308,4 +308,22 @@ class TaxRelevanceTest {
             assertEquals(TaxSource.CATEGORY, taxSource)
         }
     }
+
+    @Test
+    fun `a provider rule gives way to a same-category shop tax rule`() {
+        val booking = txn(
+            "-10.00",
+            taxCat,
+            partner = "PayPal Europe S.a.r.l. et Cie S.C.A",
+            purpose = "EREF+R1 SVWZ+PP.471.PPX . Beispiel Shop GmbH, Ihr Einkauf bei Beispiel Shop GmbH",
+        )
+        data.ruleRepo.create("PayPal", taxCat, priority = 10, matchField = de.findesk.model.RuleField.PARTNER, taxRelevant = false)
+        data.ruleRepo.create("Beispiel Shop", taxCat, priority = 0, matchField = de.findesk.model.RuleField.PARTNER, taxRelevant = true)
+
+        with(item(booking)) {
+            assertTrue(isTaxRelevant, "the shop rule, not the PayPal rule, decides the tax flag")
+            assertEquals(TaxSource.RULE, taxSource)
+            assertEquals("Beispiel Shop", taxRulePattern)
+        }
+    }
 }

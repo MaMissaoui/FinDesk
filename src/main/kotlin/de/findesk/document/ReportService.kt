@@ -325,8 +325,7 @@ class ReportService(
         .groupBy {
             // A PayPal purchase is titled like its row: "PayPal · <shop>" so the purchases don't collapse into
             // one PayPal entry; everything else keeps its description
-            PaymentProviders.merchantOf(it.purpose, it.partnerName)?.let { shop -> PaymentProviders.label(shop) }
-                ?: it.description
+            PaymentProviders.titleOf(it.purpose, it.partnerName) ?: it.description
         }
         .map { (name, txns) -> name to txns.sumOf { it.amount.abs() } }
         .sortedByDescending { it.second }
