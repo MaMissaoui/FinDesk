@@ -171,6 +171,12 @@ The earlier "all phases complete" status was wrong. This is what the code actual
 - [x] photoTAN challenge image (v1.9.0, [#88](https://github.com/MaMissaoui/FinDesk/pull/88)): `TanImage` reads the size from the header with Skia's `Codec`, the decoder that renders it, and refuses more than 16 megapixels before decoding.
 - [x] Spaced account numbers (low): `maskAccountNumbers` now masks digit groups of 6+ digits after an account label (`Konto 9876 5432` → `Konto …5432`, also Kto.-Nr., Girokonto, Empfängerkonto, Account no.). Unlabelled digit groups still pass, since they may be adjacent return codes (`9050 3076`) or amounts. Order messages stored before this aren't re-masked (no cleanup migration).
 
+**Design review 2026-10-31** (Accounts, Transactions, Payments): the figures people come for were the quietest text on screen.
+
+- [x] Figures first (batch 1): the Accounts header shows the total as a large figure, and as "Net" beside "Of which loans" when loans exist. Panel group totals are at least as strong as their accounts. The pencil on account rows is gone (Edit balance stays in ⋮), and row icons are muted. The Transactions summary is a strip of figures (count, in, out, balance), "Uncategorized" is plain text instead of a chip, bulk Delete is outlined in the error colour with Category as the filled action, and the table no longer leaves a gap above the balance chart. Implemented by OpenCode (DeepSeek V4.1 Flash), reviewed by Claude.
+- [ ] Batch 2: hide the account panel on Accounts; one sync button for a single bank; last-sync time in the bank header; no zero total or duplicate "Add bank" in the empty state; Transactions filters on one row; a clearer dark-mode selection; labelled "All accounts" totals; empty-state copy that matches its button; a hint that the chart axis doesn't start at zero; tinted pending rows.
+- [ ] Payments: a compact, prominent amount field and a slip-like field order; the From picker as a form field; a reason when Review is disabled; plain text instead of raw errors ("Read timed out") in Recent transfers; muted delete icons; a prominent, grouped recipient IBAN in the review dialog; full-width warnings; a send button that names the amount.
+
 ---
 
 

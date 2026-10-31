@@ -127,6 +127,9 @@ enum class StringKey {
 
     // Accounts
     AccountsTotal,
+    AccountsTotalLabel,
+    AccountsNetLabel,
+    AccountsLoansLabel,
     AccountCount,
     AddBank,
     NoBanksYet,
@@ -233,6 +236,10 @@ enum class StringKey {
     SearchPartnerPurpose,
     AllAccounts,
     TransactionsSummary,
+    SummaryCount,
+    SummaryIn,
+    SummaryOut,
+    SummaryBalance,
 
     /** Toolbar summary suffix when the running balance column is shown; %s is the account balance. */
     TransactionsBalance,

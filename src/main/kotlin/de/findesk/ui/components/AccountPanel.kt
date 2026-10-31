@@ -152,7 +152,7 @@ fun AccountPanel(
                             Spacer(Modifier.width(8.dp))
                             Column(horizontalAlignment = Alignment.End) {
                                 grandTotal.forEach { (currency, amount) ->
-                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = panelAmountColor(isWarningBalance(accounts, currency), selection == AccountSelection.All))
+                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = panelAmountColor(isWarningBalance(accounts, currency), selection == AccountSelection.All))
                                 }
                             }
                         }
@@ -411,8 +411,8 @@ private fun GroupHeaderRow(
             view.totals.ifEmpty { mapOf(primaryCurrency to BigDecimal.ZERO) }.forEach { (currency, amount) ->
                 Text(
                     Formats.money(amount, currency),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.End,
                     // Each currency's own loan rule, so a negative-only-because-of-loans total stays plain
                     color = panelAmountColor(isWarningBalance(view.accounts, currency), selected),
