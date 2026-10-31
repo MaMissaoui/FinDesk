@@ -153,8 +153,11 @@ internal fun deleteAccountCascade(accountId: Int): Boolean {
         .where { TransactionsTable.accountId eq accountId }
         .map { it[TransactionsTable.id] }
     if (txnIds.isNotEmpty()) {
-        DocumentsTable.update({ DocumentsTable.linkedTransactionId inList txnIds }) {
-            it[linkedTransactionId] = null
+        // One bind per booking would exceed SQLite's parameter limit for a long account history
+        txnIds.chunked(TransactionRepositoryImpl.DELETE_CHUNK).forEach { chunk ->
+            DocumentsTable.update({ DocumentsTable.linkedTransactionId inList chunk }) {
+                it[linkedTransactionId] = null
+            }
         }
         TransactionsTable.deleteWhere { TransactionsTable.accountId eq accountId }
     }
