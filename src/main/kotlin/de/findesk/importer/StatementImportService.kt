@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.math.BigDecimal
+import java.time.LocalDate
 
 /**
  * Imports statement files (CSV, CAMT.052/053/054 XML or ZIP) into an account, skipping bookings imported before.
@@ -19,6 +20,7 @@ open class StatementImportService(
     private val accountRepository: AccountRepository = AccountRepositoryImpl(),
     private val ruleRepository: RuleRepository = RuleRepositoryImpl(),
     private val auditLogRepository: AuditLogRepository = AuditLogRepositoryImpl(),
+    private val today: () -> LocalDate = { LocalDate.now() },
 ) {
     data class ImportReport(
         val imported: Int,
@@ -75,6 +77,12 @@ open class StatementImportService(
 
         /** MB the total-size limit names in the user message. */
         const val MAX_TOTAL_MB = MAX_TOTAL_BYTES / (1024L * 1024L)
+
+        /**
+         * How recent a file must be to set a non-zero balance typed by hand: a monthly card statement is usually
+         * imported within about six weeks.
+         */
+        const val TYPED_BALANCE_RECENT_DAYS = 45L
 
         val EXTENSIONS = setOf("csv", "txt", "xml", "zip", "sta", "mt940", "ofx", "qfx", "qif", "xlsx")
     }
@@ -193,13 +201,24 @@ open class StatementImportService(
      * The file's figures may only replace the account balance if the file is at least as recent as the account's
      * newest booking; back-filling an old statement must not reset today's balance. With running balances the file
      * decides by its newest booking date, otherwise by the closing balance's date.
+     *
+     * An account without bookings has no statement history to compare against, so its own balance state decides: a
+     * zero balance may always be set (the account is still empty); a non-zero balance typed by hand at creation
+     * (`lastUpdate == null`) may be replaced only by a recent file, since that figure is assumed to be current; a
+     * non-zero balance that a bank or earlier import already set is only replaced by a file at least as recent as
+     * `lastUpdate`.
      */
     fun balanceUpdateAllowed(accountId: Int, statement: ParsedStatement): Boolean {
         val hasRunningBalances = statement.bookings.any { it.balanceAfter != null }
         if (!hasRunningBalances && statement.closingBalance == null) return false
         val fileNewest = if (hasRunningBalances) statement.bookings.maxOf { it.date } else statement.closingBalance!!.date
         val accountNewest = transactionRepository.findItems(de.findesk.model.TransactionFilter(accountId = accountId), limit = 1).firstOrNull()?.date
-        return accountNewest == null || !fileNewest.isBefore(accountNewest)
+        if (accountNewest != null) return !fileNewest.isBefore(accountNewest)
+        val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: return false
+        if (account.balance.compareTo(BigDecimal.ZERO) == 0) return true
+        val lastUpdate = account.lastUpdate
+            ?: return !fileNewest.isBefore(today().minusDays(TYPED_BALANCE_RECENT_DAYS))
+        return !fileNewest.isBefore(lastUpdate.toLocalDate())
     }
 
     /**
