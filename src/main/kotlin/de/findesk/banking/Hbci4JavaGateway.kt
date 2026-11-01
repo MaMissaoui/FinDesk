@@ -103,10 +103,12 @@ class Hbci4JavaGateway : FinTSGateway {
         lastCapabilities = BankCapabilities.detect { job -> runCatching { handler.isSupported(job) }.getOrDefault(false) }
 
         pending.map { p ->
-            val account = p.konto.toAccount(connection)
             val info = (p.saldo?.jobResult as? GVRSaldoReq)?.takeIf { it.isOK }?.entries?.firstOrNull()
-            val balance = info?.ready?.value?.let { value ->
-                FinTSBalance(account = account, balance = value.bigDecimalValue, availableBalance = info.available?.bigDecimalValue, currency = value.curr ?: account.currency)
+            // The bank's account data may have no currency; the balance's carries the real one, e.g. CHF
+            val value = info?.ready?.value
+            val account = p.konto.toAccount(connection, accountCurrency(p.konto.curr, value?.curr))
+            val balance = value?.let {
+                FinTSBalance(account = account, balance = it.bigDecimalValue, availableBalance = info.available?.bigDecimalValue, currency = it.curr?.takeIf(String::isNotBlank) ?: account.currency)
             }
             // The job's own return codes (never the message text: it names the full account number)
             val balanceCode = if (balance == null) {
@@ -520,7 +522,7 @@ class Hbci4JavaGateway : FinTSGateway {
     private fun HBCIHandler.findKonto(iban: String): Konto = kontos().firstOrNull { it.iban.equals(iban, ignoreCase = true) }
         ?: throw OrderNotExecutedException("Account ${iban.takeLast(4)} is not available with this bank login")
 
-    private fun Konto.toAccount(connection: FinTSConnection) = FinTSAccount(
+    private fun Konto.toAccount(connection: FinTSConnection, currency: String? = null) = FinTSAccount(
         iban = iban.orEmpty(),
         bic = bic.orEmpty(),
         accountNumber = number.orEmpty(),
@@ -528,7 +530,7 @@ class Hbci4JavaGateway : FinTSGateway {
         bankName = connection.bankName,
         blz = blz ?: connection.blz,
         accountType = accountTypeFor(acctype),
-        currency = curr ?: "EUR",
+        currency = currency ?: accountCurrency(curr, null),
         productName = type,
     )
 
@@ -581,6 +583,16 @@ class Hbci4JavaGateway : FinTSGateway {
             ?: listOfNotNull(blz, iban?.let(BankDirectory::blzFromIban), loginBlz)
                 .firstNotNullOfOrNull { BankDirectory.lookup(it)?.bic?.takeIf(String::isNotBlank) }
             ?: bic
+
+        /**
+         * The account's currency: the bank's account data first, then the balance's (HBCI4Java leaves `Konto.curr`
+         * null when the UPD has no account currency), else EUR. Trimmed and upper-cased, blanks count as missing.
+         */
+        internal fun accountCurrency(kontoCurrency: String?, balanceCurrency: String?): String = listOfNotNull(kontoCurrency, balanceCurrency)
+            .map(String::trim)
+            .firstOrNull(String::isNotEmpty)
+            ?.uppercase()
+            ?: "EUR"
 
         /**
          * FinTS account type codes: 1-9 checking, 10-29 savings (savings, fixed-term), 30-39 depot, 40-49 loan,
