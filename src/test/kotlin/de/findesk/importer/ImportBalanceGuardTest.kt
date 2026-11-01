@@ -57,6 +57,20 @@ class ImportBalanceGuardTest {
     }
 
     @Test
+    fun `a zero balance set today is not empty and rejects an old file`() = runBlocking {
+        val account = data.account(iban = "DE89370400440532013000", balance = "0")
+        data.accountRepo.updateBalance(account, BigDecimal.ZERO)
+        val old = statement(LocalDate.of(2019, 12, 31))
+
+        assertFalse(service.balanceUpdateAllowed(account, old))
+        assertTrue(service.balanceUpdateAllowed(account, statement(LocalDate.now())))
+
+        val report = service.import(account, old, updateBalance = true)
+        assertNull(report.balanceUpdated)
+        assertEquals(0, balance(account).compareTo(BigDecimal.ZERO))
+    }
+
+    @Test
     fun `a balance set by updateBalance only accepts a file at least as recent as the update`() {
         val account = data.account(iban = "DE89370400440532013000", balance = "500.00")
         data.accountRepo.updateBalance(account, BigDecimal("500.00"))

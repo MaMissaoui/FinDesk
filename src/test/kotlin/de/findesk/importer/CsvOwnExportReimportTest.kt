@@ -93,6 +93,36 @@ class CsvOwnExportReimportTest {
     }
 
     @Test
+    fun `own export round trips text that the spreadsheet guard prefixes`() = runBlocking {
+        val guarded = listOf(
+            txn(4, "2026-10-04", "-1.00", "+Shop", "- Rate 3/12"),
+            txn(5, "2026-10-05", "-2.00", "@home", "=SUM(A1)"),
+        )
+        val file = File(tmp, "own-guarded.csv")
+        assertTrue(service.exportToCsv(guarded, file))
+
+        val parsed = CsvStatementParser.parse(file)
+
+        assertEquals(2, parsed.bookings.size, parsed.skipped.toString())
+        guarded.zip(parsed.bookings).forEach { (exported, reimported) ->
+            assertEquals(exported.partnerName, reimported.partnerName)
+            assertEquals(exported.purpose, reimported.purpose)
+        }
+    }
+
+    @Test
+    fun `only the spreadsheet guard apostrophe is removed from text`() {
+        val csv = "Datum;Betrag;Partner;Verwendungszweck\n" +
+            "03.10.2026;-1,00;'abc;'abc\n"
+
+        val parsed = CsvStatementParser.parse(csv.toByteArray())
+
+        assertEquals(1, parsed.bookings.size)
+        assertEquals("'abc", parsed.bookings.single().partnerName)
+        assertEquals("'abc", parsed.bookings.single().purpose)
+    }
+
+    @Test
     fun `bank headers keep their mapping`() {
         assertEquals(
             CsvMapping(date = 0, valueDate = 1, amount = 8, partner = 4, payer = 3, partnerIban = 7, purpose = 5),

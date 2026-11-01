@@ -270,8 +270,9 @@ class ReportService(
     }
 
     /**
-     * Export transactions to CSV (RFC 4180 quoting, UTF-8 with BOM so Excel detects the encoding). [balances] adds a
-     * trailing Balance column when the transactions list shows a running balance; the Reports export leaves it out.
+     * Export transactions to CSV (RFC 4180 quoting, UTF-8 with BOM so Excel detects the encoding). The Shop column is
+     * always last; [balances] adds a Balance column just before it when the transactions list shows a running balance.
+     * The Reports export leaves the Balance column out.
      */
     suspend fun exportToCsv(transactions: List<TransactionItem>, outputFile: File, balances: Map<Int, BigDecimal>? = null): Boolean = withContext(Dispatchers.IO) {
         try {

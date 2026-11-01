@@ -7,6 +7,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
+import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
@@ -55,22 +56,20 @@ object CsvStatementParser {
     private val OWN_BALANCE = listOf("solde")
 
     // Strict, so an impossible date such as 31.02. is rejected instead of becoming the month's last day.
-    // The two-digit pattern resolves 00..27 to 2000..2027 and 28..99 to 1928..1999, the same window as TwoDigitYear.
-    private val dateFormats: List<DateTimeFormatter> = run {
-        val twoDigitBase = LocalDate.now().year + 1 - 99
-        listOf(
-            DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT),
-            DateTimeFormatter.ofPattern("d.M.uuuu").withResolverStyle(ResolverStyle.STRICT),
-            DateTimeFormatterBuilder()
-                .appendPattern("dd.MM.")
-                .appendValueReduced(ChronoField.YEAR, 2, 2, twoDigitBase)
-                .toFormatter()
-                .withResolverStyle(ResolverStyle.STRICT),
-            DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT),
-            DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(ResolverStyle.STRICT),
-            DateTimeFormatter.ofPattern("MM/dd/uuuu").withResolverStyle(ResolverStyle.STRICT),
-        )
-    }
+    private val dateFormats: List<DateTimeFormatter> = listOf(
+        DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT),
+        DateTimeFormatter.ofPattern("d.M.uuuu").withResolverStyle(ResolverStyle.STRICT),
+        DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT),
+        DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(ResolverStyle.STRICT),
+        DateTimeFormatter.ofPattern("MM/dd/uuuu").withResolverStyle(ResolverStyle.STRICT),
+    )
+
+    /** `dd.MM.` plus exactly two year digits; the year goes through [TwoDigitYear] on every parse. */
+    private val twoDigitDate: DateTimeFormatter = DateTimeFormatterBuilder()
+        .appendPattern("dd.MM.")
+        .appendValue(ChronoField.YEAR, 2)
+        .toFormatter()
+        .withResolverStyle(ResolverStyle.STRICT)
 
     fun parse(file: File, override: CsvMapping? = null): ParsedStatement = parse(file.readBytes(), override)
 
@@ -148,9 +147,11 @@ object CsvStatementParser {
             valueDate = parseDate(cell(m.valueDate)),
             amount = amount,
             currency = cell(m.currency)?.uppercase()?.takeIf { it.length == 3 },
-            partnerName = (if (amount.signum() > 0 && m.payer != null) cell(m.payer) else null) ?: cell(m.partner),
+            partnerName = withoutSpreadsheetGuard(
+                (if (amount.signum() > 0 && m.payer != null) cell(m.payer) else null) ?: cell(m.partner),
+            ),
             partnerIban = iban,
-            purpose = cell(m.purpose)?.replace(Regex("\\s+"), " "),
+            purpose = withoutSpreadsheetGuard(cell(m.purpose))?.replace(Regex("\\s+"), " "),
             balanceAfter = cell(m.balance)?.let(::parseMoney),
         )
     }
@@ -169,17 +170,48 @@ object CsvStatementParser {
         return if (negative) value.abs().negate() else value
     }
 
-    internal fun parseDate(s: String?): LocalDate? {
+    /**
+     * FinDesk's own export prefixes a cell that starts like a spreadsheet formula with an apostrophe. Undo only
+     * that guard, so text that merely starts with one (`'abc`, `'quoted'`) stays as it is.
+     */
+    private fun withoutSpreadsheetGuard(value: String?): String? = value?.takeIf { it.length >= 2 && it[0] == '\'' && it[1] in "=+-@\t\r" }?.substring(1) ?: value
+
+    internal fun parseDate(s: String?, today: LocalDate = LocalDate.now()): LocalDate? {
         if (s.isNullOrBlank()) return null
-        val t = s.trim().take(10)
-        for (f in dateFormats) {
-            try {
-                return LocalDate.parse(t, f)
-            } catch (_: DateTimeParseException) {
-                // next
+        val token = s.trim().takeWhile { !it.isWhitespace() }
+        if (token.isEmpty()) return null
+
+        fun parseWithFormats(candidate: String): LocalDate? {
+            for (f in dateFormats) {
+                try {
+                    return LocalDate.parse(candidate, f)
+                } catch (_: DateTimeParseException) {
+                    // next
+                }
             }
+            return null
         }
-        return null
+
+        parseWithFormats(token)?.let { return it }
+        parseTwoDigitDate(token, today)?.let { return it }
+        return if (token.length > 10) parseWithFormats(token.take(10)) else null
+    }
+
+    /** Parses a strict `dd.MM.yy` date and resolves `yy` with [TwoDigitYear] for this call. */
+    private fun parseTwoDigitDate(token: String, today: LocalDate): LocalDate? {
+        val parsed = try {
+            twoDigitDate.parse(token)
+        } catch (_: DateTimeParseException) {
+            return null
+        }
+        val day = parsed.get(ChronoField.DAY_OF_MONTH)
+        val month = parsed.get(ChronoField.MONTH_OF_YEAR)
+        val yy = parsed.get(ChronoField.YEAR)
+        return try {
+            LocalDate.of(TwoDigitYear.resolve(yy, today), month, day)
+        } catch (_: DateTimeException) {
+            null
+        }
     }
 
     /**
