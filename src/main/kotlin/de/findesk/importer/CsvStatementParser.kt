@@ -1,5 +1,8 @@
 package de.findesk.importer
 
+import de.findesk.i18n.AppLanguage
+import de.findesk.i18n.StringKey
+import de.findesk.i18n.Translations
 import de.findesk.util.Formats
 import de.findesk.util.Iban
 import java.io.File
@@ -48,12 +51,13 @@ object CsvStatementParser {
     private val CURRENCY = listOf("waehrung", "currency", "whrg")
     private val BALANCE = listOf("saldonachbuchung", "saldo", "kontostand", "balance")
 
-    // FinDesk's own export headers, matched exactly and only when no bank alias matched (see ReportService.exportToCsv)
-    private val OWN_PARTNER = listOf("partner", "partenaire")
-    private val OWN_AMOUNT = listOf("montant")
-    private val OWN_PURPOSE = listOf("libell", "libelle")
-    private val OWN_CURRENCY = listOf("devise")
-    private val OWN_BALANCE = listOf("solde")
+    // FinDesk's own export headers, matched exactly and only when no bank alias matched (see ReportService.exportToCsv).
+    // Derived from every language's export header, so a new language is picked up without a second literal list.
+    private val OWN_PARTNER = ownHeaders(StringKey.ColPartner)
+    private val OWN_AMOUNT = ownHeaders(StringKey.ColAmount)
+    private val OWN_PURPOSE = (ownHeaders(StringKey.ColPurpose) + "libelle").distinct()
+    private val OWN_CURRENCY = ownHeaders(StringKey.ColCurrency)
+    private val OWN_BALANCE = ownHeaders(StringKey.ColBalance)
 
     // Strict, so an impossible date such as 31.02. is rejected instead of becoming the month's last day.
     private val dateFormats: List<DateTimeFormatter> = listOf(
@@ -256,7 +260,7 @@ object CsvStatementParser {
 
     private fun detectDelimiter(text: String): Char {
         val candidates = listOf(';', ',', '\t', '|')
-        val recordsByDelimiter = candidates.associateWith { splitRecords(text, it) }
+        val recordsByDelimiter = candidates.associateWith { splitRecords(text, it, maxNonBlankRecords = 30) }
         val scores = candidates.associateWith { delimiterScore(recordsByDelimiter.getValue(it)) }
         val best = scores.values.max()
         if (best == 0) return ';'
@@ -283,6 +287,12 @@ object CsvStatementParser {
     internal fun normalize(header: String): String = header.lowercase()
         .replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
         .replace(Regex("[^a-z0-9]"), "")
+
+    /** FinDesk's export header in every language, normalised like every other header alias. */
+    private fun ownHeaders(key: StringKey): List<String> = AppLanguage.entries
+        .map { normalize(Translations.of(it)[key]) }
+        .filter { it.isNotEmpty() } // a header with no Latin letters must never match a blank column
+        .distinct()
 
     fun detectMapping(headers: List<String>): CsvMapping {
         val norm = headers.map(::normalize)
@@ -345,11 +355,13 @@ object CsvStatementParser {
         .firstOrNull { Iban.isValid(it) }
 
     /** RFC 4180 record splitting: quoted fields may contain delimiters, doubled quotes and newlines. */
-    internal fun splitRecords(text: String, delimiter: Char): List<List<String>> {
+    internal fun splitRecords(text: String, delimiter: Char, maxNonBlankRecords: Int = Int.MAX_VALUE): List<List<String>> {
+        if (maxNonBlankRecords <= 0) return emptyList()
         val records = mutableListOf<List<String>>()
         var field = StringBuilder()
         var record = mutableListOf<String>()
         var inQuotes = false
+        var nonBlankRecords = 0
         var i = 0
         while (i < text.length) {
             val c = text[i]
@@ -373,8 +385,10 @@ object CsvStatementParser {
                     if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') i++
                     record += field.toString()
                     records += record
+                    if (record.any { it.isNotBlank() }) nonBlankRecords++
                     record = mutableListOf()
                     field = StringBuilder()
+                    if (nonBlankRecords >= maxNonBlankRecords) return records
                 }
 
                 else -> field.append(c)

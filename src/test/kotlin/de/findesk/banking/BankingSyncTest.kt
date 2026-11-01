@@ -925,7 +925,7 @@ class BankingSyncTest {
         val gapStart = LocalDate.of(2025, 12, 22)
         val gapEnd = LocalDate.of(2026, 1, 14)
         assertEquals(
-            listOf(AppStrings.format(StringKey.SyncGapNotFetched, Formats.date(gapStart), Formats.date(gapEnd))),
+            listOf(AppStrings.format(StringKey.SyncGapNotFetched, Formats.date(gapStart), Formats.date(gapEnd), BankingService.INITIAL_SYNC_DAYS)),
             report.notes,
         )
         assertEquals(LocalDate.of(2026, 1, 15), gateway.sinceRequests[giro], "the normal window itself is unchanged")
@@ -951,6 +951,7 @@ class BankingSyncTest {
                     StringKey.SyncGapNotFetched,
                     Formats.date(LocalDate.of(2026, 1, 10)),
                     Formats.date(LocalDate.of(2026, 1, 14)),
+                    BankingService.INITIAL_SYNC_DAYS,
                 ),
             ),
             report.notes,
@@ -974,6 +975,7 @@ class BankingSyncTest {
                     StringKey.SyncGapNotFetched,
                     Formats.date(LocalDate.of(2025, 12, 22)),
                     Formats.date(LocalDate.of(2026, 1, 4)),
+                    BankingService.INITIAL_SYNC_DAYS,
                 ),
             ),
             report.notes,
@@ -1044,11 +1046,25 @@ class BankingSyncTest {
         assertEquals(1, report.accountsSynced, "an account without an IBAN can't be stored or counted as synced")
         assertEquals(1, report.accountsAdded)
         assertEquals(1, data.accountRepo.findAllItems().size)
-        assertEquals(listOf(AppStrings.format(StringKey.SyncAccountWithoutIban, "1111")), report.notes)
+        assertEquals(listOf(AppStrings.format(StringKey.SyncAccountWithoutIban, "…1111")), report.notes)
         val audit = AuditLogRepositoryImpl().findByAction("SYNC_BANK").single().details!!
         assertFalse(report.notes.joinToString().contains(number))
         assertFalse(report.summary().contains(number))
         assertFalse(audit.contains(number))
+    }
+
+    @Test
+    fun `an account without an IBAN or number is noted by its product name`() = runBlocking {
+        val withoutIban = account("").copy(accountNumber = "", productName = "Girokonto")
+        gateway.snapshots = listOf(
+            snapshot(giro, "100.00"),
+            AccountSnapshot(withoutIban, FinTSBalance(withoutIban, BigDecimal("5.00")), emptyList()),
+        )
+
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val note = report.notes.single()
+        assertTrue(note.startsWith("Girokonto:"), note)
     }
 
     @Test
