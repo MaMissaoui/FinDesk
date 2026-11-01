@@ -29,6 +29,8 @@ data class ReportsState(
     val taxReport: ReportService.TaxReport? = null,
     /** The Tax bookings tab's groups for the selected period. */
     val taxBookings: ReportService.TaxBookings? = null,
+    /** The period [taxReport] and [taxBookings] were generated for; null until a load publishes them. */
+    val loadedRange: Pair<LocalDate, LocalDate>? = null,
     /** Keyword suggestions for the selected period; accepting or dismissing one stores a manual override. */
     val suggestions: List<TaxSuggestion> = emptyList(),
     /** Whether the tab's rows are filtered to bookings without a receipt (totals stay whole-period). */
@@ -68,7 +70,7 @@ class ReportsViewModel(
             // Ignore stale results if the year changed meanwhile
             _state.update {
                 if (it.selectedYear == year && it.customRange == null) {
-                    it.copy(taxReport = report, taxBookings = taxBookings, suggestions = suggestions, isLoading = false)
+                    it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, isLoading = false)
                 } else {
                     it
                 }
@@ -98,7 +100,7 @@ class ReportsViewModel(
             val suggestions = findSuggestions(from, to)
             _state.update {
                 if (it.customRange == from to to) {
-                    it.copy(taxReport = report, taxBookings = taxBookings, suggestions = suggestions, isLoading = false)
+                    it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, isLoading = false)
                 } else {
                     it
                 }
@@ -159,7 +161,7 @@ class ReportsViewModel(
         _state.update {
             val stillCurrent = if (range != null) it.customRange == range else it.customRange == null
             if (stillCurrent) {
-                it.copy(taxReport = report, taxBookings = taxBookings, suggestions = suggestions, isLoading = false)
+                it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, isLoading = false)
             } else {
                 it
             }
@@ -181,7 +183,14 @@ class ReportsViewModel(
     fun exportToPdf(file: File): Job {
         _state.update { it.copy(isExporting = true, error = null) }
         return launchSafely(onError) {
-            val report = _state.value.taxReport ?: reportService.generateTaxReport(_state.value.selectedYear)
+            val range = currentRange()
+            val cached = _state.value.taxReport?.takeIf { _state.value.loadedRange == range }
+            // Never put another period's report into a file named for the current one
+            val report = cached ?: if (_state.value.customRange != null) {
+                reportService.generateRangeReport(range.first, range.second)
+            } else {
+                reportService.generateTaxReport(_state.value.selectedYear)
+            }
             val ok = reportService.exportToPdf(report, file)
             _state.update {
                 it.copy(isExporting = false, message = if (ok) AppStrings.format(StringKey.MessageSavedTo, file.name) else null, error = if (ok) null else AppStrings[StringKey.ErrorPdfExportFailed])
@@ -253,11 +262,11 @@ class ReportsViewModel(
         return LocalDate.of(year, 1, 1) to LocalDate.of(year, 12, 31)
     }
 
-    /** The tab's data, loading it first when the screen has not finished loading yet. */
+    /** The tab's data, loading it first when the screen has not finished loading yet or the period has changed. */
     private suspend fun currentTaxBookings(): ReportService.TaxBookings {
-        _state.value.taxBookings?.let { return it }
-        val (from, to) = currentRange()
-        return reportService.generateTaxBookings(from, to)
+        val range = currentRange()
+        _state.value.taxBookings?.takeIf { _state.value.loadedRange == range }?.let { return it }
+        return reportService.generateTaxBookings(range.first, range.second)
     }
 
     fun clearMessages() {

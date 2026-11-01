@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -237,6 +239,9 @@ class TransactionsViewModel(
     private var collapsedLoaded = false
 
     private var chartCollapsedLoaded = false
+
+    /** One write at a time, each reading the state it saves, so quick toggles are stored in their final order. */
+    private val settingsWriteMutex = Mutex()
 
     private val groupActions = AccountGroupActions(accountGroupRepository, accountRepository, transactionRepository, auditLogRepository, settingsRepository)
 
@@ -615,14 +620,18 @@ class TransactionsViewModel(
         val collapsed = _state.value.collapsed
         val next = if (key.id in collapsed) collapsed - key.id else collapsed + key.id
         _state.update { it.copy(collapsed = next) }
-        return launchSafely(onError) { AccountPanelSettings.saveCollapsed(settingsRepository, next) }
+        return launchSafely(onError) {
+            settingsWriteMutex.withLock { AccountPanelSettings.saveCollapsed(settingsRepository, _state.value.collapsed) }
+        }
     }
 
     /** Collapses or expands the balance chart; view state only, so it is persisted but not audited. */
     fun toggleChart(): Job {
         val next = !_state.value.chartCollapsed
         _state.update { it.copy(chartCollapsed = next) }
-        return launchSafely(onError) { settingsRepository.setValue(KEY_CHART_COLLAPSED, next.toString()) }
+        return launchSafely(onError) {
+            settingsWriteMutex.withLock { settingsRepository.setValue(KEY_CHART_COLLAPSED, _state.value.chartCollapsed.toString()) }
+        }
     }
 
     /** Filters the panel's account rows by name, IBAN or bank; the booking list is unaffected. */
@@ -669,16 +678,24 @@ class TransactionsViewModel(
     }
 
     fun attachDocuments(transactionId: Int, files: List<File>): Job = launchSafely(onError) {
-        val failures = mutableListOf<String>()
-        files.forEach { f ->
-            try {
-                documentService.uploadDocument(f, transactionId)
-            } catch (e: Exception) {
-                failures += "${f.name}: ${e.userMessage()}"
+        Busy.track {
+            val failures = mutableListOf<String>()
+            files.forEach { f ->
+                try {
+                    documentService.uploadDocument(f, transactionId)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    failures += "${f.name}: ${e.userMessage()}"
+                }
+            }
+            val uploaded = documentService.getDocumentsForTransaction(transactionId)
+            val error = failures.takeIf { f -> f.isNotEmpty() }?.joinToString("\n")
+            // Only the booking still open in the panel may show these documents; a changed panel keeps its own
+            _state.update {
+                if (it.selected?.id == transactionId) it.copy(selectedDocuments = uploaded, error = error) else it.copy(error = error)
             }
         }
-        val docs = documentService.getDocumentsForTransaction(transactionId)
-        _state.update { it.copy(selectedDocuments = docs, error = failures.takeIf { f -> f.isNotEmpty() }?.joinToString("\n")) }
         refresh()
     }
 
@@ -1142,9 +1159,19 @@ class TransactionsViewModel(
                 return@launchSafely
             }
             val finalReport = report!!
-            // Show everything that was imported, not just this month; select the imported account.
+            // Show everything that was imported, not just this month; select the imported account. The exact month
+            // and custom range must go too, because dateRange prefers them over Period.ALL.
             _state.update {
-                it.copy(importPreview = null, isImporting = false, period = Period.ALL, selection = AccountSelection.Account(accountId), accountId = accountId, message = finalReport.summary(importedFiles)).clearingSelection()
+                it.copy(
+                    importPreview = null,
+                    isImporting = false,
+                    period = Period.ALL,
+                    month = null,
+                    customRange = null,
+                    selection = AccountSelection.Account(accountId),
+                    accountId = accountId,
+                    message = finalReport.summary(importedFiles),
+                ).clearingSelection()
             }
             refresh()
         }
