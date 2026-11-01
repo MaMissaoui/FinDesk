@@ -1,6 +1,8 @@
 package de.findesk.banking
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class AccountCurrencyTest {
@@ -27,5 +29,13 @@ class AccountCurrencyTest {
     @Test
     fun `defaults to EUR when both currencies are blank`() {
         assertEquals("EUR", Hbci4JavaGateway.accountCurrency(" ", " "))
+    }
+
+    @Test
+    fun `only a currency the bank states counts as stated`() {
+        assertTrue(Hbci4JavaGateway.accountCurrencyStated("CHF"))
+        assertFalse(Hbci4JavaGateway.accountCurrencyStated(null))
+        assertFalse(Hbci4JavaGateway.accountCurrencyStated(""))
+        assertFalse(Hbci4JavaGateway.accountCurrencyStated("  "))
     }
 }

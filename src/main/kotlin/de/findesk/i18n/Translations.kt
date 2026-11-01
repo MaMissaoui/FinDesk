@@ -819,6 +819,7 @@ object Translations {
         K.SyncGapNotFetched to "Bookings from %s to %s were not fetched: FinDesk fetches at most the last %d days. Use “Fetch history from…” to get them (the bank may ask for a TAN).",
         K.SyncAccountWithoutIban to "%s: the bank lists this account without an IBAN; FinDesk can't store it yet.",
         K.SyncBalanceOtherCurrency to "…%s: the bank reported the balance in %s, but the account is kept in %s; the balance was not changed.",
+        K.SyncCurrencyCorrected to "…%s: the account's currency was corrected from %s to %s, as the bank reports its balance in that currency and states no account currency.",
         K.PendingHeader to "Pending (not yet booked) · as of %s",
 
         K.ImportSummary to "Imported %d {1:transaction|transactions}",
@@ -1792,6 +1793,7 @@ object Translations {
         K.SyncGapNotFetched to "Buchungen vom %s bis %s wurden nicht abgerufen: FinDesk ruft höchstens die letzten %d Tage ab. Mit „Verlauf ab Datum abrufen…“ holen Sie sie nach (die Bank fragt eventuell nach einer TAN).",
         K.SyncAccountWithoutIban to "%s: Die Bank meldet dieses Konto ohne IBAN; FinDesk kann es noch nicht speichern.",
         K.SyncBalanceOtherCurrency to "…%s: Die Bank meldet den Saldo in %s, das Konto wird aber in %s geführt; der Saldo wurde nicht geändert.",
+        K.SyncCurrencyCorrected to "…%s: Die Kontowährung wurde von %s auf %s korrigiert, da die Bank den Saldo in dieser Währung meldet und keine Kontowährung angibt.",
         K.PendingHeader to "Vorgemerkt (noch nicht gebucht) · Stand %s",
 
         K.ImportSummary to "%d {1:Buchung|Buchungen} importiert",
@@ -2765,6 +2767,7 @@ object Translations {
         K.SyncGapNotFetched to "Les opérations du %s au %s n’ont pas été récupérées : FinDesk récupère au plus les %d derniers jours. Utilisez « Récupérer l'historique depuis… » pour les obtenir (la banque peut demander un TAN).",
         K.SyncAccountWithoutIban to "%s : la banque indique ce compte sans IBAN ; FinDesk ne peut pas encore l’enregistrer.",
         K.SyncBalanceOtherCurrency to "…%s : la banque indique le solde en %s, mais le compte est tenu en %s ; le solde n’a pas été modifié.",
+        K.SyncCurrencyCorrected to "…%s : la devise du compte a été corrigée de %s en %s, car la banque indique le solde dans cette devise et ne précise pas de devise de compte.",
         K.PendingHeader to "En attente (pas encore comptabilisé) · au %s",
 
         K.ImportSummary to "%d {1:opération importée|opérations importées}",

@@ -79,6 +79,21 @@ class AccountRepositoryTest {
     }
 
     @Test
+    fun `test correct currency stores the currency and the balance together`() {
+        val account = accountRepo.create(testBankAccessId, "DE89370400440532013012", balance = BigDecimal("1000.00"))
+        val corrected = accountRepo.correctCurrency(account.id.value, "CHF", BigDecimal("850.00"))
+
+        assertNotNull(corrected)
+        assertEquals("CHF", corrected!!.currency)
+        assertEquals(BigDecimal("850.00"), corrected.balance)
+        assertNotNull(corrected.lastUpdate)
+        val stored = accountRepo.findById(account.id.value)!!
+        assertEquals("CHF", stored.currency)
+        assertEquals(BigDecimal("850.00"), stored.balance)
+        assertNull(accountRepo.correctCurrency(999999, "CHF", BigDecimal("1.00")), "an unknown id corrects nothing")
+    }
+
+    @Test
     fun `test get total balance`() {
         accountRepo.create(testBankAccessId, "DE89370400440532013005", balance = BigDecimal("2000.00"))
         accountRepo.create(testBankAccessId, "DE89370400440532013006", balance = BigDecimal("3000.00"))

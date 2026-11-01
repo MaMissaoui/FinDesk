@@ -913,6 +913,9 @@ enum class StringKey {
     SyncAccountWithoutIban,
     SyncBalanceOtherCurrency,
 
+    /** A sync corrected an account the old currency fallback had created as EUR; %1$s last 4 digits, %2$s old, %3$s new currency. */
+    SyncCurrencyCorrected,
+
     /** The pending block's header above the booking list; %s is the fetch time (date and time). */
     PendingHeader,
 

@@ -35,6 +35,12 @@ interface AccountRepository {
         accountType: String = "checking",
     ): Account
     fun updateBalance(id: Int, balance: BigDecimal): Account?
+
+    /**
+     * Corrects the account's currency and stores [balance] with it, e.g. when an older version created the account
+     * as EUR although the bank reports the balance in another currency. Returns null for an unknown id.
+     */
+    fun correctCurrency(id: Int, currency: String, balance: BigDecimal): Account?
     fun update(id: Int, iban: String? = null, accountType: String? = null): Account?
 
     /**
@@ -98,6 +104,14 @@ class AccountRepositoryImpl : AccountRepository {
 
     override fun updateBalance(id: Int, balance: BigDecimal): Account? = transaction {
         Account.findById(id)?.apply {
+            this.balance = balance
+            this.lastUpdate = LocalDateTime.now()
+        }
+    }
+
+    override fun correctCurrency(id: Int, currency: String, balance: BigDecimal): Account? = transaction {
+        Account.findById(id)?.apply {
+            this.currency = currency
             this.balance = balance
             this.lastUpdate = LocalDateTime.now()
         }
