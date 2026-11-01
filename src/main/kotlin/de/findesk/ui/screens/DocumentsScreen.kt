@@ -32,7 +32,6 @@ import de.findesk.ui.components.*
 import de.findesk.ui.platform.revealInFileManager
 import de.findesk.ui.platform.revealLabel
 import de.findesk.ui.theme.Success
-import de.findesk.util.BankText
 import de.findesk.util.Formats
 import de.findesk.viewmodel.DocumentTab
 import de.findesk.viewmodel.DocumentsState
@@ -283,9 +282,9 @@ private fun DocumentDetail(
                 if (pickerQuery.isNotBlank()) {
                     state.linkCandidates
                         .filter {
-                            it.description.contains(pickerQuery, true) ||
+                            it.rawDescription.contains(pickerQuery, true) ||
                                 it.purpose.orEmpty().contains(pickerQuery, true) ||
-                                BankText.displayDescription(it).contains(pickerQuery, true) ||
+                                it.displayTitle.contains(pickerQuery, true) ||
                                 Formats.money(it.amount, it.currency).contains(pickerQuery)
                         }
                         .take(8)
@@ -313,7 +312,7 @@ private fun DocumentDetail(
 private fun LinkCandidateRow(txn: TransactionItem, badge: String?, onLink: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
-            Text(BankText.displayDescription(txn), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(txn.displayTitle, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 "${Formats.date(txn.date)} · ${Formats.money(txn.amount, txn.currency)}" + (badge?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.bodySmall,

@@ -628,7 +628,7 @@ private fun TaxBookingRow(txn: TransactionItem, currency: String, vm: ReportsVie
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        BankText.displayDescription(txn),
+                        txn.displayTitle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -709,7 +709,7 @@ private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
         Text(Formats.date(txn.date), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                BankText.displayDescription(txn),
+                txn.displayTitle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

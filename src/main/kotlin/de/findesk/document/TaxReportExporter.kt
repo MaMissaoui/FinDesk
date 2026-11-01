@@ -4,7 +4,6 @@ import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
 import de.findesk.model.TaxSource
 import de.findesk.model.TransactionItem
-import de.findesk.util.BankText
 import de.findesk.util.Formats
 import de.findesk.util.PaymentProviders
 import org.apache.pdfbox.pdmodel.PDDocument
@@ -259,7 +258,7 @@ class TaxReportExporter {
             ensure(ROW_HEIGHT)
             y -= ROW_HEIGHT
             drawFitted(Formats.date(txn.date), regular, 9f, X_DATE, W_DATE)
-            drawFitted(BankText.displayDescription(txn), regular, 9f, X_DESC, W_DESC)
+            drawFitted(txn.displayTitle, regular, 9f, X_DESC, W_DESC)
             drawFitted(shortAccount(txn), regular, 9f, X_ACCOUNT, W_ACCOUNT)
             drawRightFitted(pdfAmount(txn.amount, signed = true), regular, 9f, AMOUNT_RIGHT_EDGE, W_AMOUNT)
             drawRightFitted(

@@ -549,7 +549,7 @@ fun TransactionsScreen(
     confirmDelete?.let { txn ->
         ConfirmDialog(
             title = s[StringKey.DeleteTransactionTitle],
-            text = "${Formats.date(txn.date)} ${BankText.displayDescription(txn)} ${Formats.money(txn.amount, txn.currency)}",
+            text = "${Formats.date(txn.date)} ${txn.displayTitle} ${Formats.money(txn.amount, txn.currency)}",
             onConfirm = { vm.deleteTransaction(txn.id) },
             onDismiss = { confirmDelete = null },
         )
@@ -608,7 +608,7 @@ internal fun MultiDeleteDialogContent(bookings: List<TransactionItem>) {
                 .entries.joinToString(" · ") { (currency, value) -> Formats.money(value, currency, signed = true) },
         )
         bookings.take(5).forEach { txn ->
-            Text("${Formats.date(txn.date)} ${BankText.displayDescription(txn)} ${Formats.money(txn.amount, txn.currency)}")
+            Text("${Formats.date(txn.date)} ${txn.displayTitle} ${Formats.money(txn.amount, txn.currency)}")
         }
         if (bookings.size > 5) Text(s.format(StringKey.AndMore, bookings.size - 5))
         Text(
@@ -951,7 +951,7 @@ private fun TransactionRow(
     }
     val s = strings()
     // Display only: the list shows cleaned bank text, the stored purpose and partner stay raw (see BankText)
-    val title = remember(txn) { BankText.displayDescription(txn) }
+    val title = remember(txn) { txn.displayTitle }
     val secondary = remember(txn) { BankText.secondaryLine(txn) }
     // The bar repeats the selection in a colour that reads in both themes; the tinted background alone is faint in dark mode
     val selectionBarColor = MaterialTheme.colorScheme.primary
@@ -1632,7 +1632,7 @@ internal fun TransactionDetailDialog(
 
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text(BankText.displayDescription(txn)) },
+        title = { Text(txn.displayTitle) },
         text = {
             Column(Modifier.width(560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
