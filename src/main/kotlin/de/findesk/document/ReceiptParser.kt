@@ -1,6 +1,8 @@
 package de.findesk.document
 
+import de.findesk.importer.TwoDigitYear
 import java.math.BigDecimal
+import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
@@ -55,13 +57,36 @@ object ReceiptParser {
         for ((regex, pattern) in dateRegexes) {
             regex.findAll(text).forEach { m ->
                 try {
-                    val date = LocalDate.parse(m.value, DateTimeFormatter.ofPattern(pattern))
-                    if (date.year in 1990..2100) return date
+                    val date = when (pattern) {
+                        "d.M.yy" -> parseTwoDigitYear(m)
+                        "d/M/yyyy" -> parseSlashDate(m)
+                        else -> LocalDate.parse(m.value, DateTimeFormatter.ofPattern(pattern))
+                    }
+                    if (date != null && date.year in 1990..2100) return date
                 } catch (_: DateTimeParseException) {
                     // try next
+                } catch (_: DateTimeException) {
+                    // invalid day/month, try next
                 }
             }
         }
         return null
+    }
+
+    /** `05.03.99`: the formatter would read `yy` as 2099; [TwoDigitYear] maps it to 1999. */
+    private fun parseTwoDigitYear(m: MatchResult): LocalDate {
+        val (day, month, yy) = m.destructured
+        return LocalDate.of(TwoDigitYear.resolve(yy.toInt()), month.toInt(), day.toInt())
+    }
+
+    /**
+     * `d/M/yyyy` is the day-first reading (`01/05/2026` is 1 May 2026). Only when that is invalid, fall back to
+     * month/day, so `05/13/2026` is 13 May 2026.
+     */
+    private fun parseSlashDate(m: MatchResult): LocalDate? {
+        val (first, second, year) = m.destructured
+        val dayFirst = runCatching { LocalDate.of(year.toInt(), second.toInt(), first.toInt()) }.getOrNull()
+        if (dayFirst != null) return dayFirst
+        return runCatching { LocalDate.of(year.toInt(), first.toInt(), second.toInt()) }.getOrNull()
     }
 }
