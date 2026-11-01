@@ -91,6 +91,24 @@ class ImportLimitationsTest {
     }
 
     @Test
+    fun `csv dates with a time and a one-digit day or month are parsed`() {
+        assertEquals(LocalDate.of(2026, 10, 1), CsvStatementParser.parseDate("1.10.2026 12:00"))
+        assertEquals(LocalDate.of(2026, 10, 1), CsvStatementParser.parseDate("01.10.2026 12:00"))
+        assertEquals(LocalDate.of(2026, 10, 1), CsvStatementParser.parseDate("2026-10-01T12:00:00"))
+        assertEquals(LocalDate.of(2026, 10, 1), CsvStatementParser.parseDate("1.10.2026"))
+        assertNull(CsvStatementParser.parseDate("31.02.2026 12:00"))
+    }
+
+    @Test
+    fun `csv two-digit years follow TwoDigitYear at parse time`() {
+        assertEquals(LocalDate.of(1999, 12, 31), CsvStatementParser.parseDate("31.12.99", today))
+        assertEquals(LocalDate.of(2026, 1, 15), CsvStatementParser.parseDate("15.01.26", today))
+        assertEquals(LocalDate.of(1928, 2, 29), CsvStatementParser.parseDate("29.02.28", today))
+        assertNull(CsvStatementParser.parseDate("29.02.27", today))
+        assertNull(CsvStatementParser.parseDate("31.02.26", today))
+    }
+
+    @Test
     fun `csv row with an impossible date is skipped on its own line`() {
         val csv = "Buchungstag;Betrag;Verwendungszweck\n" +
             "03.10.2026;-45,67;ok\n" +

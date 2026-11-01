@@ -202,11 +202,12 @@ open class StatementImportService(
      * newest booking; back-filling an old statement must not reset today's balance. With running balances the file
      * decides by its newest booking date, otherwise by the closing balance's date.
      *
-     * An account without bookings has no statement history to compare against, so its own balance state decides: a
-     * zero balance may always be set (the account is still empty); a non-zero balance typed by hand at creation
-     * (`lastUpdate == null`) may be replaced only by a recent file, since that figure is assumed to be current; a
-     * non-zero balance that a bank or earlier import already set is only replaced by a file at least as recent as
-     * `lastUpdate`.
+     * An account without bookings has no statement history to compare against, so its own balance state decides: if
+     * `lastUpdate == null` and the balance is zero, the account was never set and is still empty, so any file may set
+     * it; if `lastUpdate == null` and the balance is non-zero, it was typed by hand at creation and may be replaced
+     * only by a recent file, since that figure is assumed to be current; if `lastUpdate != null`, a bank or earlier
+     * import already set the balance, which may be replaced only by a file at least as recent as `lastUpdate`,
+     * whatever the balance is (a zero balance set today is not "empty").
      */
     fun balanceUpdateAllowed(accountId: Int, statement: ParsedStatement): Boolean {
         val hasRunningBalances = statement.bookings.any { it.balanceAfter != null }
@@ -215,9 +216,11 @@ open class StatementImportService(
         val accountNewest = transactionRepository.findItems(de.findesk.model.TransactionFilter(accountId = accountId), limit = 1).firstOrNull()?.date
         if (accountNewest != null) return !fileNewest.isBefore(accountNewest)
         val account = accountRepository.findAllItems().firstOrNull { it.id == accountId } ?: return false
-        if (account.balance.compareTo(BigDecimal.ZERO) == 0) return true
         val lastUpdate = account.lastUpdate
-            ?: return !fileNewest.isBefore(today().minusDays(TYPED_BALANCE_RECENT_DAYS))
+        if (lastUpdate == null) {
+            if (account.balance.compareTo(BigDecimal.ZERO) == 0) return true
+            return !fileNewest.isBefore(today().minusDays(TYPED_BALANCE_RECENT_DAYS))
+        }
         return !fileNewest.isBefore(lastUpdate.toLocalDate())
     }
 
