@@ -532,6 +532,7 @@ class Hbci4JavaGateway : FinTSGateway {
         accountType = accountTypeFor(acctype),
         currency = currency ?: accountCurrency(curr, null),
         productName = type,
+        currencyStated = accountCurrencyStated(curr),
     )
 
     companion object {
@@ -593,6 +594,9 @@ class Hbci4JavaGateway : FinTSGateway {
             .firstOrNull(String::isNotEmpty)
             ?.uppercase()
             ?: "EUR"
+
+        /** Whether the bank's account data stated a currency; a blank value counts as missing, like in [accountCurrency]. */
+        internal fun accountCurrencyStated(kontoCurrency: String?): Boolean = !kontoCurrency.isNullOrBlank()
 
         /**
          * FinTS account type codes: 1-9 checking, 10-29 savings (savings, fixed-term), 30-39 depot, 40-49 loan,

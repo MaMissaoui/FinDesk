@@ -6,6 +6,7 @@ import de.findesk.i18n.StringKey
 import de.findesk.model.BankAccessItem
 import de.findesk.model.PaymentAction
 import de.findesk.model.PaymentOrderStatus
+import de.findesk.model.TransactionFilter
 import de.findesk.repository.*
 import de.findesk.util.Formats
 import de.findesk.util.Iban
@@ -65,6 +66,9 @@ class BankingService(
 
         const val MAX_PURPOSE_LENGTH = 140
         const val MAX_NAME_LENGTH = 70
+
+        /** A currency code the bank can name: exactly three letters, as in ISO 4217. */
+        private val CURRENCY_CODE = Regex("^[A-Z]{3}$")
     }
 
     data class SyncReport(
@@ -227,8 +231,24 @@ class BankingService(
                     finTSClient.reportProgress(AppStrings.format(StringKey.ProgressSavingAccount, snap.account.iban.takeLast(4)), 0.5f + 0.5f * i / stored.size, i, stored.size)
                     val iban = Iban.normalize(snap.account.iban)
                     val existing = known.firstOrNull { it.iban.equals(iban, true) }
-                    val accountCurrency = existing?.currency ?: snap.account.currency
                     val balance = snap.balance
+                    var accountCurrency = existing?.currency ?: snap.account.currency
+                    // Older versions created accounts as EUR when the bank's account data had no currency. If the
+                    // bank now states the balance in another currency and the account has no EUR booking to lose,
+                    // correct it instead of noting the balance as belonging elsewhere on every sync.
+                    if (existing != null && !snap.account.currencyStated && balance != null) {
+                        val reported = balance.currency.trim().uppercase()
+                        if (CURRENCY_CODE.matches(reported) &&
+                            reported != existing.currency.uppercase() &&
+                            existing.currency.equals("EUR", ignoreCase = true) &&
+                            transactionRepository.findItems(TransactionFilter(accountId = existing.id, currency = existing.currency), limit = 1).isEmpty()
+                        ) {
+                            accountRepository.correctCurrency(existing.id, reported, balance.balance)
+                            auditLogRepository.log("CORRECT_ACCOUNT_CURRENCY", "user", "Account …${iban.takeLast(4)}: ${existing.currency} -> $reported")
+                            notes += AppStrings.format(StringKey.SyncCurrencyCorrected, iban.takeLast(4), existing.currency, reported)
+                            accountCurrency = reported
+                        }
+                    }
                     val balanceMatchesCurrency = balance == null || balance.currency.equals(accountCurrency, ignoreCase = true)
                     val accountId = existing?.id ?: accountRepository.create(
                         bankAccessId = bankAccessId,

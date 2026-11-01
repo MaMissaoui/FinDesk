@@ -31,6 +31,8 @@ data class FinTSAccount(
     val accountType: String,
     val currency: String = "EUR",
     val productName: String? = null,
+    /** Whether the bank's account data stated [currency], rather than a fallback having supplied it. */
+    val currencyStated: Boolean = true,
 )
 
 /**

@@ -149,6 +149,20 @@ class BankingSyncTest {
 
     private fun snapshot(iban: String, balance: String, vararg txns: FinTSTransaction) = AccountSnapshot(account(iban), FinTSBalance(account(iban), BigDecimal(balance)), txns.toList())
 
+    /** An account as an older FinDesk created it: always EUR, even when the bank's account data had no currency. */
+    private fun oldEurAccount(iban: String = giro, balance: String = "100.00"): Int = data.accountRepo.create(bankId, iban, balance = BigDecimal(balance), currency = "EUR").id.value
+
+    private fun foreignSnapshot(
+        iban: String = giro,
+        accountCurrency: String = "CHF",
+        balanceCurrency: String = accountCurrency,
+        stated: Boolean = false,
+        balance: String = "88.50",
+    ): AccountSnapshot {
+        val bankAccount = account(iban).copy(currency = accountCurrency, currencyStated = stated)
+        return AccountSnapshot(bankAccount, FinTSBalance(bankAccount, BigDecimal(balance), currency = balanceCurrency), emptyList())
+    }
+
     @Test
     fun `first sync creates accounts, sets balances, imports and categorizes`() = runBlocking {
         val food = data.category("Groceries")
@@ -1109,6 +1123,115 @@ class BankingSyncTest {
             listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "USD", "EUR")),
             report.notes,
         )
+    }
+
+    @Test
+    fun `a sync corrects an account the old currency fallback created as EUR`() = runBlocking {
+        val accountId = oldEurAccount()
+        // The earlier CHF bookings are what makes the account's real currency clear; none is in EUR.
+        data.txn(accountId, today.minusDays(10), "-12.00", "Shop", "Old CHF booking", currency = "CHF")
+
+        gateway.snapshots = listOf(foreignSnapshot())
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val stored = data.accountRepo.findAllItems().single { it.iban == giro }
+        assertEquals("CHF", stored.currency)
+        assertEquals(BigDecimal("88.50"), stored.balance, "the bank's CHF balance replaces the older EUR-labelled one")
+        val audit = AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").single()
+        assertTrue(audit.details!!.contains("EUR -> CHF"), audit.details)
+        assertFalse(audit.details!!.contains(giro), "the audit log never takes the full IBAN")
+        val corrected = AppStrings.format(StringKey.SyncCurrencyCorrected, giro.takeLast(4), "EUR", "CHF")
+        val otherCurrency = AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "CHF", "EUR")
+        assertEquals(listOf(corrected), report.notes)
+        assertFalse(report.notes.contains(otherCurrency), "one note, not both")
+    }
+
+    @Test
+    fun `a second sync of a corrected account writes no further correction`() = runBlocking {
+        oldEurAccount()
+        gateway.snapshots = listOf(foreignSnapshot())
+        service.syncBankConnection(bankId, ScriptedInteraction())
+        assertEquals(1, AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").size)
+
+        gateway.snapshots = listOf(foreignSnapshot(balance = "90.00"))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        assertEquals(1, AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").size, "no second correction")
+        val stored = data.accountRepo.findAllItems().single { it.iban == giro }
+        assertEquals("CHF", stored.currency)
+        assertEquals(BigDecimal("90.00"), stored.balance)
+        assertTrue(report.notes.isEmpty(), "no note about the currency any more: ${report.notes}")
+    }
+
+    @Test
+    fun `an account with an EUR booking keeps its currency and the other-currency note`() = runBlocking {
+        val accountId = oldEurAccount()
+        data.txn(accountId, today.minusDays(5), "-5.00", "Shop", "Old EUR booking", currency = "EUR")
+
+        gateway.snapshots = listOf(foreignSnapshot())
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val stored = data.accountRepo.findAllItems().single { it.iban == giro }
+        assertEquals("EUR", stored.currency)
+        assertEquals(BigDecimal("100.00"), stored.balance)
+        assertEquals(listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "CHF", "EUR")), report.notes)
+        assertTrue(AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").isEmpty())
+    }
+
+    @Test
+    fun `an account whose bank states its currency is not corrected`() = runBlocking {
+        oldEurAccount()
+
+        gateway.snapshots = listOf(foreignSnapshot(stated = true))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val stored = data.accountRepo.findAllItems().single { it.iban == giro }
+        assertEquals("EUR", stored.currency)
+        assertEquals(BigDecimal("100.00"), stored.balance)
+        assertEquals(listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "CHF", "EUR")), report.notes)
+        assertTrue(AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").isEmpty())
+    }
+
+    @Test
+    fun `a balance currency that is not three letters never corrects the account`() = runBlocking {
+        oldEurAccount()
+
+        gateway.snapshots = listOf(foreignSnapshot(balanceCurrency = "CH"))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val stored = data.accountRepo.findAllItems().single { it.iban == giro }
+        assertEquals("EUR", stored.currency)
+        assertEquals(BigDecimal("100.00"), stored.balance)
+        assertEquals(listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "CH", "EUR")), report.notes)
+        assertTrue(AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").isEmpty())
+    }
+
+    @Test
+    fun `a blank balance currency never corrects the account`() = runBlocking {
+        oldEurAccount()
+
+        gateway.snapshots = listOf(foreignSnapshot(balanceCurrency = ""))
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val stored = data.accountRepo.findAllItems().single { it.iban == giro }
+        assertEquals("EUR", stored.currency)
+        assertEquals(BigDecimal("100.00"), stored.balance)
+        assertEquals(listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "", "EUR")), report.notes)
+        assertTrue(AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").isEmpty())
+    }
+
+    @Test
+    fun `an account kept in another currency than EUR is not corrected`() = runBlocking {
+        data.accountRepo.create(bankId, giro, balance = BigDecimal("100.00"), currency = "USD")
+
+        gateway.snapshots = listOf(foreignSnapshot())
+        val report = (service.syncBankConnection(bankId, ScriptedInteraction()) as BankingResult.Success).data
+
+        val stored = data.accountRepo.findAllItems().single { it.iban == giro }
+        assertEquals("USD", stored.currency)
+        assertEquals(BigDecimal("100.00"), stored.balance)
+        assertEquals(listOf(AppStrings.format(StringKey.SyncBalanceOtherCurrency, giro.takeLast(4), "CHF", "USD")), report.notes)
+        assertTrue(AuditLogRepositoryImpl().findByAction("CORRECT_ACCOUNT_CURRENCY").isEmpty())
     }
 
     private fun fixedToday(date: LocalDate, name: String) = BankingService(finTSClient = FinTSClient(gateway = gateway, passportDir = File(tmp, name)), today = { date })
