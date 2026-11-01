@@ -5,7 +5,6 @@ import de.findesk.model.Direction
 import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.*
-import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.PaymentProviders
 import kotlinx.coroutines.Dispatchers
@@ -191,7 +190,7 @@ class ReportService(
             .take(10)
             .map {
                 ExpenseItem(
-                    description = BankText.displayDescription(it),
+                    description = it.displayTitle,
                     amount = it.amount.abs(),
                     category = it.categoryName ?: UNCATEGORIZED,
                     date = it.date,
@@ -329,7 +328,7 @@ class ReportService(
 
     /**
      * The period's expenses grouped into vendors, largest first. A vendor's bookings are matched case- and
-     * whitespace-insensitively on [BankText.displayDescription] (so a PayPal purchase groups by "PayPal · <shop>"
+     * whitespace-insensitively on [TransactionItem.displayTitle] (so a PayPal purchase groups by "PayPal · <shop>"
      * and bank padding or casing never splits a vendor). A group shows the spelling most of its bookings use; on a
      * tie, the spelling of its most recent booking (latest date, then highest id).
      */
@@ -349,7 +348,7 @@ class ReportService(
         }
 
         return expenses
-            .map { it to BankText.displayDescription(it) }
+            .map { it to it.displayTitle }
             .groupBy { key(it.second) }
             .map { (_, named) -> label(named) to named.sumOf { it.first.amount.abs() } }
             .sortedByDescending { it.second }

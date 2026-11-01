@@ -62,7 +62,7 @@ class PdfReportExporter {
                 writer.heading(AppStrings[StringKey.PdfTaxTransactions])
                 report.taxRelevantTransactions.sortedBy { it.date }.forEach {
                     writer.row(
-                        "${Formats.date(it.date)}  ${it.description.take(55)}  (${it.categoryName.orEmpty()})",
+                        "${Formats.date(it.date)}  ${it.displayTitle.take(55)}  (${it.categoryName.orEmpty()})",
                         Formats.money(it.amount.abs(), report.currency),
                     )
                 }

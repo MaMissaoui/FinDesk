@@ -308,7 +308,7 @@ fun DashboardScreen(
                     ) {
                         LedgerRow(
                             date = Formats.date(txn.date),
-                            title = BankText.displayDescription(txn),
+                            title = txn.displayTitle,
                             meta = txn.categoryName ?: s[StringKey.Uncategorized],
                             amount = Formats.money(txn.amount, txn.currency, signed = true),
                             isExpense = txn.isExpense,

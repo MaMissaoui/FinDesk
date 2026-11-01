@@ -101,7 +101,7 @@ object RecurringDetector {
         val fixed = amounts.all { (it - medianAmount).abs() <= medianAmount.abs().multiply(BigDecimal("0.01")).max(BigDecimal("0.01")) }
         return RecurringPayment(
             name = PaymentProviders.titleOf(last.purpose, last.partnerName)
-                ?: (last.partnerName ?: last.description).replace(Regex("\\s+"), " ").trim(),
+                ?: (last.partnerName ?: last.rawDescription).replace(Regex("\\s+"), " ").trim(),
             cadence = cadence,
             typicalAmount = medianAmount.setScale(2, RoundingMode.HALF_UP),
             fixedAmount = fixed,

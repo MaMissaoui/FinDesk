@@ -1,5 +1,6 @@
 package de.findesk.model
 
+import de.findesk.util.BankText
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -103,7 +104,12 @@ data class TransactionItem(
     /** The stored manual override, so the UI can show and reset it; null = automatic. */
     val taxOverride: Boolean? = null,
 ) {
-    val description: String get() = partnerName?.takeIf { it.isNotBlank() } ?: purpose?.takeIf { it.isNotBlank() } ?: "—"
+    /** The raw partner (else purpose, else "—"), for matching, grouping and search only; never shown as a title. */
+    val rawDescription: String get() = partnerName?.takeIf { it.isNotBlank() } ?: purpose?.takeIf { it.isNotBlank() } ?: "—"
+
+    /** What every screen and export shows as the booking's title: cleaned bank text, or "PayPal · <shop>". */
+    val displayTitle: String get() = BankText.displayDescription(this)
+
     val isExpense: Boolean get() = amount.signum() < 0
 
     /** Counts as income: money in on a normal category; own-account transfers never do. */
