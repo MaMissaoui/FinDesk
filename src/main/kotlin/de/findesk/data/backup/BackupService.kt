@@ -46,7 +46,7 @@ class BackupService(
 
     companion object {
         const val DB_NAME = "findesk.db"
-        private const val MANIFEST = "findesk-backup.properties"
+        internal const val MANIFEST = "findesk-backup.properties"
 
         /** Holds a staged restore until the next start; see `PlaintextLeftovers`. */
         const val PENDING_DIR = "restore-pending"
@@ -76,13 +76,20 @@ class BackupService(
             connect(File(dataDir, DB_NAME)).use { c ->
                 c.createStatement().use { it.execute("VACUUM INTO '${tmpDb.absolutePath.replace("'", "''")}'") }
             }
+            // Listed once, before the temp ZIP is opened for writing: when the target lies in documents/ or
+            // passports/, a second listing would include the ZIP that is being written. The target and the temp
+            // ZIP are excluded by path so an earlier backup at the same target is not packed into the new one.
+            val excluded = setOf(tmpZip.toFile().canonicalFile, target.absoluteFile.canonicalFile)
+            val contentByDir = CONTENT_DIRS.associateWith { dirName ->
+                contentFiles(dirName).filter { it.canonicalFile !in excluded }
+            }
             // Refused up front rather than written: stageRestore would reject it, leaving a backup that can't be restored
-            val files = listOf(tmpDb) + CONTENT_DIRS.flatMap { contentFiles(it) }
+            val files = listOf(tmpDb) + contentByDir.values.flatten()
             require(files.all { it.length() <= MAX_ENTRY_BYTES } && files.sumOf { it.length() } <= maxRestoreBytes) {
                 "Backup is too large to restore"
             }
             val transactions = countRows(tmpDb, "transactions")
-            val documentFiles = contentFiles("documents").size
+            val documentFiles = contentByDir.getValue("documents").size
             val info = BackupInfo(LocalDateTime.now().toString(), appVersion, transactions, documentFiles)
 
             Files.newOutputStream(tmpZip).use { output ->
@@ -101,7 +108,7 @@ class BackupService(
                     zip.closeEntry()
 
                     CONTENT_DIRS.forEach { dirName ->
-                        contentFiles(dirName).forEach { file ->
+                        contentByDir.getValue(dirName).forEach { file ->
                             zip.putNextEntry(ZipEntry("$dirName/${file.name}"))
                             file.inputStream().use { it.copyTo(zip) }
                             zip.closeEntry()
@@ -153,18 +160,19 @@ class BackupService(
         val info = inspect(backup)
         val pending = File(dataDir, PENDING_DIR)
         pending.deleteRecursively()
-        pending.mkdirs()
+        FileSecurity.secureDirectory(pending)
         try {
             ZipFile(backup).use { zip ->
                 var budget = maxRestoreBytes
                 zip.entries().asSequence().filter { !it.isDirectory && it.name != MANIFEST }.forEach { entry ->
                     val out = safeTarget(pending, entry.name)
                     require(entry.size <= MAX_ENTRY_BYTES) { "Entry ${entry.name} is too large" }
-                    out.parentFile.mkdirs()
+                    FileSecurity.secureDirectory(out.parentFile)
                     // Counted while copying: the sizes in the ZIP directory are the archive's own claim
                     val limit = minOf(MAX_ENTRY_BYTES, budget)
                     val written = zip.getInputStream(entry).use { input -> copyAtMost(input, out, limit) }
                     require(written <= limit) { "Backup is too large to restore" }
+                    FileSecurity.secureFile(out)
                     budget -= written
                 }
             }
@@ -203,7 +211,7 @@ class BackupService(
             return null
         }
         val previous = File(dataDir, "$PRE_RESTORE_PREFIX${LocalDateTime.now().format(STAMP)}").apply { mkdirs() }
-        (listOf(DB_NAME, "$DB_NAME-wal", "$DB_NAME-shm") + CONTENT_DIRS).forEach { name ->
+        (listOf(DB_NAME, "$DB_NAME-wal", "$DB_NAME-shm", "$DB_NAME-journal") + CONTENT_DIRS).forEach { name ->
             val current = File(dataDir, name)
             if (current.exists()) Files.move(current.toPath(), File(previous, name).toPath())
         }

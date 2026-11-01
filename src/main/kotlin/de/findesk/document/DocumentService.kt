@@ -127,6 +127,7 @@ class DocumentService(
         val result = ocrService.processDocument(File(doc.filePath))
         if (result != null && result.text.isNotBlank()) {
             documentRepository.saveOcrText(documentId, result.text, result.language, result.confidence)
+            auditLogRepository.log("OCR_PROCESSED", "user", "Text extracted again (${result.source}) for: ${doc.fileName}")
         }
         result
     }

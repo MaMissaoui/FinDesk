@@ -2,6 +2,7 @@ package de.findesk.document
 
 import de.findesk.TestData
 import de.findesk.TestDatabase
+import de.findesk.repository.AuditLogRepositoryImpl
 import kotlinx.coroutines.runBlocking
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
@@ -133,6 +134,32 @@ class DocumentServiceTest {
         val result = service.uploadDocument(png)
         assertNull(result.ocr)
         assertFalse(result.document.hasOcr)
+    }
+
+    @Test
+    fun `reprocessing OCR is audited only when text is extracted`() = runBlocking {
+        val audit = AuditLogRepositoryImpl()
+
+        val withText = service.uploadDocument(
+            textPdf("reprocess.pdf", "Rechnung Nr. 4711", "Datum: 12.03.2026", "Gesamtbetrag 89,99 EUR"),
+            performOcr = false,
+        ).document
+        assertTrue(audit.findByAction("OCR_PROCESSED").isEmpty(), "upload skipped OCR")
+
+        service.reprocessOcr(withText.id)
+
+        val entries = audit.findByAction("OCR_PROCESSED")
+        assertEquals(1, entries.size)
+        assertTrue(entries.single().details!!.contains(withText.fileName))
+
+        val empty = File(tmp, "empty.pdf")
+        PDDocument().use { doc ->
+            doc.addPage(PDPage())
+            doc.save(empty)
+        }
+        val withoutText = service.uploadDocument(empty, performOcr = false).document
+        assertNull(service.reprocessOcr(withoutText.id), "nothing extracted")
+        assertEquals(1, audit.findByAction("OCR_PROCESSED").size, "nothing was logged")
     }
 
     @Test
