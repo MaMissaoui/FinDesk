@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.concurrent.atomic.AtomicLong
 
 data class ChartSlice(
     val label: String,
@@ -121,17 +122,27 @@ class DashboardViewModel(
     )
     val state: StateFlow<DashboardState> = _state.asStateFlow()
 
+    /** The latest started load; a load publishes only while its generation is still the latest. */
+    private val loadGeneration = AtomicLong(0)
+
     fun loadDashboard(): Job {
+        val generation = loadGeneration.incrementAndGet()
+        // The month this load is for, before any suspension: a later click must not change what this one computes
+        val requestedMonth = _state.value.selectedMonth
         _state.update { it.copy(isLoading = true, error = null) }
-        return launchSafely({ e -> _state.update { it.copy(isLoading = false, error = e.userMessage()) } }) {
+        return launchSafely({ e ->
+            if (loadGeneration.get() == generation) _state.update { it.copy(isLoading = false, error = e.userMessage()) }
+        }) {
             val now = today()
             val nowMonth = YearMonth.from(now)
             val currency = Currencies.primary(settingsRepository)
             // Never a future month: the selection is clamped here too, in case data moved between loads
             // A future-dated oldest booking must not push the range past today (coerceIn would throw)
             val earliestMonth = transactionRepository.oldestDate(currency)?.let(YearMonth::from)?.coerceAtMost(nowMonth) ?: nowMonth
-            val month = _state.value.selectedMonth.coerceAtMost(nowMonth).coerceAtLeast(earliestMonth)
-            if (month != _state.value.selectedMonth) _state.update { it.copy(selectedMonth = month) }
+            val month = requestedMonth.coerceAtMost(nowMonth).coerceAtLeast(earliestMonth)
+            if (month != _state.value.selectedMonth && loadGeneration.get() == generation) {
+                _state.update { it.copy(selectedMonth = month) }
+            }
             val monthStart = month.atDay(1)
             val monthEnd = month.atEndOfMonth()
             val sixMonthsStart = monthStart.minusMonths(5)
@@ -191,6 +202,8 @@ class DashboardViewModel(
                 )
             }
 
+            // A load that is no longer the latest drops its whole result, including its month and figures
+            if (loadGeneration.get() != generation) return@launchSafely
             _state.value = DashboardState(
                 currency = currency,
                 totalBalance = balances[currency] ?: BigDecimal.ZERO,
