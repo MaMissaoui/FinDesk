@@ -6,6 +6,7 @@ import de.findesk.data.database.DatabaseFactory
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -59,6 +60,94 @@ class BackupServiceTest {
         assertEquals("passport", File(dataDir, "passports/bank-1.dat").readText())
         assertTrue(File(previous, "documents/new.pdf").exists(), "replaced data is kept")
         assertTrue(File(previous, BackupService.DB_NAME).exists())
+    }
+
+    @Test
+    fun `restore moves a hot rollback journal aside`() {
+        val dataDir = File(tmp, "d-journal").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        val data = TestData()
+        val acc = data.account()
+        data.txn(acc, LocalDate.of(2026, 1, 1), "-10.00", partner = "Before backup")
+        val service = BackupService(dataDir)
+        val backup = File(tmp, "journal.zip")
+        service.createBackup(backup)
+
+        service.stageRestore(backup)
+        val journal = File(dataDir, "${BackupService.DB_NAME}-journal")
+        val journalBytes = byteArrayOf(0x01, 0x02, 0x03)
+        journal.writeBytes(journalBytes)
+
+        DatabaseFactory.close()
+        val previous = service.applyPendingRestore()
+
+        assertNotNull(previous)
+        assertFalse(journal.exists(), "the old database's journal must not stay next to the restored database")
+        assertArrayEquals(journalBytes, File(previous!!, "${BackupService.DB_NAME}-journal").readBytes())
+        DatabaseFactory.init(dataDir.absolutePath)
+        assertEquals(listOf("Before backup"), TestData().transactionRepo.findItems().map { it.partnerName })
+    }
+
+    @Test
+    @Timeout(60)
+    fun `a backup saved inside documents does not include itself`() {
+        val dataDir = File(tmp, "d-self").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        TestData().account()
+        val documentsDir = File(dataDir, "documents").apply { mkdirs() }
+        File(documentsDir, "receipt.pdf").writeText("pdf-bytes")
+        val service = BackupService(dataDir)
+        val target = File(documentsDir, "backup.zip")
+
+        repeat(2) {
+            service.createBackup(target)
+
+            val entries = ZipFile(target).use { zip -> zip.entries().asSequence().map { it.name }.toSet() }
+            assertEquals(setOf(BackupService.MANIFEST, BackupService.DB_NAME, "documents/receipt.pdf"), entries)
+            assertTrue(entries.none { it.endsWith(".zip.tmp") })
+            assertFalse(entries.contains("documents/backup.zip"))
+            assertTrue(
+                documentsDir.listFiles().orEmpty().none { it.name.startsWith("findesk-backup") && it.name.endsWith(".zip.tmp") },
+                "no temporary ZIP left in documents/",
+            )
+        }
+    }
+
+    @Test
+    fun `restored files and directories are owner-only on POSIX`() {
+        assumeTrue(FileSystems.getDefault().supportedFileAttributeViews().contains("posix"))
+
+        val dataDir = File(tmp, "d-restore-owner").apply { mkdirs() }
+        DatabaseFactory.init(dataDir.absolutePath)
+        TestData().account()
+        File(dataDir, "documents").mkdirs()
+        File(dataDir, "documents/receipt.pdf").writeText("pdf-bytes")
+        File(dataDir, "passports").mkdirs()
+        File(dataDir, "passports/bank-1.dat").writeText("passport")
+        val service = BackupService(dataDir)
+        val backup = File(tmp, "restore-owner.zip")
+        service.createBackup(backup)
+
+        service.stageRestore(backup)
+        DatabaseFactory.init(dataDir.absolutePath) // applies the staged restore
+
+        val notOwnerOnly = setOf(
+            PosixFilePermission.GROUP_READ,
+            PosixFilePermission.GROUP_WRITE,
+            PosixFilePermission.GROUP_EXECUTE,
+            PosixFilePermission.OTHERS_READ,
+            PosixFilePermission.OTHERS_WRITE,
+            PosixFilePermission.OTHERS_EXECUTE,
+        )
+        fun assertOwnerOnly(file: File) {
+            val permissions = Files.getPosixFilePermissions(file.toPath())
+            assertTrue(permissions.none { it in notOwnerOnly }, "$file has $permissions")
+        }
+        assertOwnerOnly(File(dataDir, "documents/receipt.pdf"))
+        assertOwnerOnly(File(dataDir, "passports/bank-1.dat"))
+        assertOwnerOnly(File(dataDir, BackupService.DB_NAME))
+        assertOwnerOnly(File(dataDir, "documents"))
+        assertOwnerOnly(File(dataDir, "passports"))
     }
 
     @Test
