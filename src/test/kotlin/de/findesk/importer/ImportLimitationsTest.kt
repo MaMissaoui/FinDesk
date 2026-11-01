@@ -194,4 +194,27 @@ class ImportLimitationsTest {
         assertEquals(BigDecimal("1500.00"), s.bookings[1].amount)
         assertEquals("ACME Ltd", s.bookings[1].partnerName)
     }
+
+    @Test
+    fun `csv splitting stops after the requested non-blank records and keeps blank ones before`() {
+        val text = "a;b\n\nc;d\ne;f\n"
+
+        val records = CsvStatementParser.splitRecords(text, ';', maxNonBlankRecords = 2)
+
+        assertEquals(3, records.size)
+        assertEquals(listOf(""), records[1], "the blank record stays in the list")
+        assertEquals(listOf(listOf("a", "b"), listOf("c", "d")), records.filter { row -> row.any { it.isNotBlank() } })
+    }
+
+    @Test
+    fun `a file of 5000 booking rows still imports all of them`() {
+        val csv = buildString {
+            append("Buchungstag;Betrag;Verwendungszweck\n")
+            repeat(5000) { i -> append("03.10.2026;-1,00;Row $i\n") }
+        }
+
+        val s = CsvStatementParser.parse(csv.toByteArray())
+
+        assertEquals(5000, s.bookings.size)
+    }
 }

@@ -42,7 +42,7 @@ class CsvOwnExportReimportTest {
 
     @Test
     fun `own export round trips in every language`() = runBlocking {
-        for (language in listOf(AppLanguage.EN, AppLanguage.DE, AppLanguage.FR)) {
+        for (language in AppLanguage.entries) {
             try {
                 AppStrings.set(language)
                 val file = File(tmp, "own-${language.name.lowercase()}.csv")
@@ -72,7 +72,7 @@ class CsvOwnExportReimportTest {
             2 to BigDecimal("2557.50"),
             3 to BigDecimal("2550.25"),
         )
-        for (language in listOf(AppLanguage.EN, AppLanguage.DE, AppLanguage.FR)) {
+        for (language in AppLanguage.entries) {
             try {
                 AppStrings.set(language)
                 val file = File(tmp, "own-balances-${language.name.lowercase()}.csv")

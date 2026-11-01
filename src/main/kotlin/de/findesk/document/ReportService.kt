@@ -34,6 +34,7 @@ class ReportService(
     companion object {
         const val UNCATEGORIZED = "Uncategorized"
         private const val UTF8_BOM = 0xFEFF
+        private val VENDOR_KEY_WHITESPACE = Regex("\\s+")
     }
 
     /**
@@ -333,7 +334,7 @@ class ReportService(
      * tie, the spelling of its most recent booking (latest date, then highest id).
      */
     private fun topVendors(expenses: List<TransactionItem>, limit: Int = 5): List<Pair<String, BigDecimal>> {
-        fun key(name: String): String = name.replace(Regex("\\s+"), " ").trim().lowercase(Locale.ROOT)
+        fun key(name: String): String = name.replace(VENDOR_KEY_WHITESPACE, " ").trim().lowercase(Locale.ROOT)
 
         // Each group is a non-empty list of (booking, display name); the name is computed once per booking
         fun label(named: List<Pair<TransactionItem, String>>): String {

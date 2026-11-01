@@ -216,7 +216,7 @@ class BankingService(
                     stored.any { snap -> known.any { it.iban.equals(Iban.normalize(snap.account.iban), true) } }
                 ) {
                     val gapEnd = minOf(historyFrom ?: defaultStart, defaultStart).minusDays(1)
-                    notes += AppStrings.format(StringKey.SyncGapNotFetched, Formats.date(gapStart), Formats.date(gapEnd))
+                    notes += AppStrings.format(StringKey.SyncGapNotFetched, Formats.date(gapStart), Formats.date(gapEnd), INITIAL_SYNC_DAYS)
                 }
                 // Accounts without an IBAN are still dropped (they can't be matched or stored yet), but silently
                 // losing them is not acceptable: name each one by at most its last four characters.
@@ -305,10 +305,13 @@ class BankingService(
         }
     }
 
-    /** At most the last four characters identifying an account in a note; never a full number. */
-    private fun noteSuffix(account: FinTSAccount): String = account.accountNumber.ifBlank { account.productName?.takeIf { it.isNotBlank() } ?: account.accountType }
-        .takeLast(4)
-        .ifBlank { "?" }
+    /** At most the last four characters of an account number, else the product name or type as the identifier. */
+    private fun noteSuffix(account: FinTSAccount): String = when {
+        account.accountNumber.isNotBlank() -> "…" + account.accountNumber.takeLast(4)
+        !account.productName.isNullOrBlank() -> account.productName.trim()
+        account.accountType.isNotBlank() -> account.accountType
+        else -> "?"
+    }
 
     /**
      * Import bank bookings into the local database, skipping ones already imported (stored or remembered as
