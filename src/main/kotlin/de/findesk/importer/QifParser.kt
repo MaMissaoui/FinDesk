@@ -144,7 +144,7 @@ object QifParser {
     private fun parseYear(text: String): Int? {
         val digits = text.filter { it.isDigit() }
         return when (digits.length) {
-            2 -> 2000 + digits.toInt()
+            2 -> TwoDigitYear.resolve(digits.toInt())
             4 -> digits.toInt()
             else -> null
         }

@@ -9,7 +9,10 @@ import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
 import java.time.format.DateTimeParseException
+import java.time.format.ResolverStyle
+import java.time.temporal.ChronoField
 
 /**
  * Reads bank CSV exports (Sparkasse, ING, DKB, Commerzbank, comdirect, N26, … and generic ones).
@@ -51,15 +54,30 @@ object CsvStatementParser {
     private val OWN_CURRENCY = listOf("devise")
     private val OWN_BALANCE = listOf("solde")
 
-    private val dateFormats = listOf("dd.MM.yyyy", "d.M.yyyy", "dd.MM.yy", "yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy").map { DateTimeFormatter.ofPattern(it) }
+    // Strict, so an impossible date such as 31.02. is rejected instead of becoming the month's last day.
+    // The two-digit pattern resolves 00..27 to 2000..2027 and 28..99 to 1928..1999, the same window as TwoDigitYear.
+    private val dateFormats: List<DateTimeFormatter> = run {
+        val twoDigitBase = LocalDate.now().year + 1 - 99
+        listOf(
+            DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT),
+            DateTimeFormatter.ofPattern("d.M.uuuu").withResolverStyle(ResolverStyle.STRICT),
+            DateTimeFormatterBuilder()
+                .appendPattern("dd.MM.")
+                .appendValueReduced(ChronoField.YEAR, 2, 2, twoDigitBase)
+                .toFormatter()
+                .withResolverStyle(ResolverStyle.STRICT),
+            DateTimeFormatter.ofPattern("uuuu-MM-dd").withResolverStyle(ResolverStyle.STRICT),
+            DateTimeFormatter.ofPattern("dd/MM/uuuu").withResolverStyle(ResolverStyle.STRICT),
+            DateTimeFormatter.ofPattern("MM/dd/uuuu").withResolverStyle(ResolverStyle.STRICT),
+        )
+    }
 
     fun parse(file: File, override: CsvMapping? = null): ParsedStatement = parse(file.readBytes(), override)
 
     fun parse(bytes: ByteArray, override: CsvMapping? = null): ParsedStatement {
         val (text, charset) = decode(bytes)
         val clean = text.removePrefix(BOM)
-        val lines = clean.lines()
-        val delimiter = detectDelimiter(lines)
+        val delimiter = detectDelimiter(clean)
         val rows = splitRecords(clean, delimiter)
         return parseRows(rows, override, StatementFormat.CSV, charset.name(), delimiter)
     }
@@ -204,13 +222,28 @@ object CsvStatementParser {
         }
     }
 
-    private fun detectDelimiter(lines: List<String>): Char {
-        val sample = lines.filter { it.isNotBlank() }.take(30)
-        return listOf(';', ',', '\t', '|').maxBy { d ->
-            // Prefer the delimiter that gives the most rows with the same (>1) field count
-            sample.map { line -> line.count { it == d } }.filter { it > 0 }.groupingBy { it }.eachCount().maxOfOrNull { it.value } ?: 0
-        }
+    private fun detectDelimiter(text: String): Char {
+        val candidates = listOf(';', ',', '\t', '|')
+        val recordsByDelimiter = candidates.associateWith { splitRecords(text, it) }
+        val scores = candidates.associateWith { delimiterScore(recordsByDelimiter.getValue(it)) }
+        val best = scores.values.max()
+        if (best == 0) return ';'
+        val tied = candidates.filter { scores.getValue(it) == best }
+        // A recognisable header breaks a tie, then the list order stays.
+        return tied.firstOrNull { hasHeader(recordsByDelimiter.getValue(it)) } ?: tied.first()
     }
+
+    /** The largest number of the first 30 non-blank records that share the same field count (>1). */
+    private fun delimiterScore(records: List<List<String>>): Int {
+        val sample = records.filter { row -> !row.all { it.isBlank() } }.take(30)
+        return sample.filter { it.size > 1 }
+            .groupingBy { it.size }
+            .eachCount()
+            .maxOfOrNull { it.value } ?: 0
+    }
+
+    /** True when some row within the first 30 maps both a date and an amount column. */
+    private fun hasHeader(records: List<List<String>>): Boolean = records.take(30).any { detectMapping(it.map(String::trim)).isComplete }
 
     /** The header is the first row (within the first 30) that maps both a date and an amount column. */
     private fun findHeader(rows: List<List<String>>): Int = rows.take(30).indexOfFirst { detectMapping(it.map(String::trim)).isComplete }.takeIf { it >= 0 } ?: 0
