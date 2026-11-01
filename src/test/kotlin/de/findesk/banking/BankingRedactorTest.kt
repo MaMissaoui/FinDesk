@@ -118,6 +118,34 @@ class BankingRedactorTest {
     }
 
     @Test
+    fun `maskAccountNumbers masks a spaced IBAN whose regex match swallowed the next word`() {
+        assertEquals("Konto …1332 EUR ok", BankingRedactor.maskAccountNumbers("Konto ES91 2100 0418 4502 0005 1332 EUR ok"))
+    }
+
+    @Test
+    fun `maskAccountNumbers does not turn a kept IBAN tail into a return code`() {
+        assertEquals(emptyList<String>(), BankingRedactor.returnCodes(BankingRedactor.maskAccountNumbers("Konto ES91 2100 0418 4502 0005 1332 EUR ok")))
+    }
+
+    @Test
+    fun `maskAccountNumbers keeps the last 4 of valid spaced and lower-case IBANs`() {
+        assertEquals("…3000", BankingRedactor.maskAccountNumbers("DE89 3704 0044 0532 0130 00"))
+        assertEquals("…3000", BankingRedactor.maskAccountNumbers("de89 3704 0044 0532 0130 00"))
+    }
+
+    @Test
+    fun `maskAccountNumbers fails closed for a spaced IBAN with a wrong check digit`() {
+        assertFalse(Iban.isValid("DE00 3704 0044 0532 0130 00"))
+
+        assertEquals("…3000", BankingRedactor.maskAccountNumbers("DE00 3704 0044 0532 0130 00"))
+    }
+
+    @Test
+    fun `redact keeps its trace behaviour for a spaced IBAN whose match swallowed the next word`() {
+        assertEquals("Konto ${BankingRedactor.MASK} EUR ok", BankingRedactor.redact("Konto ES91 2100 0418 4502 0005 1332 EUR ok", emptyList()))
+    }
+
+    @Test
     fun `maskAccountNumbers masks long digit runs keeping the last 4 digits`() {
         assertEquals("Konto …7890 gesperrt", BankingRedactor.maskAccountNumbers("Konto 1234567890 gesperrt"))
     }

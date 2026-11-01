@@ -60,20 +60,25 @@ object BankingRedactor {
     }
 
     /**
-     * Masks a [SPACED_IBAN] match when it is a valid IBAN. The regex is greedy, so for an IBAN whose length is a
-     * multiple of 4 it can swallow the next word ("ES91 … 1332 EUR"). Then the longest prefix ending at a group
-     * boundary that forms a valid IBAN is masked and the rest of the match is kept verbatim.
+     * The length of the longest prefix of a [SPACED_IBAN] match that is a valid IBAN, or null when none is. The
+     * regex is greedy, so for an IBAN whose length is a multiple of 4 it can swallow the next word ("ES91 … 1332
+     * EUR"); the prefix ends right before that word. A valid whole match returns its length.
      */
-    private fun maskSpacedIban(match: String): String {
-        if (Iban.isValid(match)) return MASK
+    private fun validIbanPrefixLength(match: String): Int? {
+        if (Iban.isValid(match)) return match.length
         var cut = match.lastIndexOf(' ')
         while (cut > 0) {
-            val prefix = match.substring(0, cut)
-            if (Iban.normalize(prefix).length >= 15 && Iban.isValid(prefix)) return MASK + match.substring(cut)
+            if (Iban.isValid(match.substring(0, cut))) return cut
             cut = match.lastIndexOf(' ', cut - 1)
         }
-        return match
+        return null
     }
+
+    /**
+     * Masks a [SPACED_IBAN] match when it is a valid IBAN, keeping a greedy match's trailing word verbatim;
+     * anything without a valid IBAN prefix is left unmasked for a protocol trace.
+     */
+    private fun maskSpacedIban(match: String): String = validIbanPrefixLength(match)?.let { MASK + match.substring(it) } ?: match
 
     /**
      * Masks account identifiers in bank text before it is stored, keeping the last 4 characters so the user can
@@ -81,7 +86,16 @@ object BankingRedactor {
      * printed in digit groups after an account label ("Konto 9876 5432").
      */
     fun maskAccountNumbers(text: String): String {
-        var result = SPACED_IBAN.replace(text) { "…${it.value.replace(" ", "").takeLast(4)}" }
+        var result = SPACED_IBAN.replace(text) { m ->
+            val match = m.value
+            val validLength = validIbanPrefixLength(match)
+            if (validLength != null) {
+                "…${Iban.normalize(match.substring(0, validLength)).takeLast(4)}${match.substring(validLength)}"
+            } else {
+                // No valid IBAN: fail closed, whatever the match contains could still be an account number
+                "…${match.replace(" ", "").takeLast(4)}"
+            }
+        }
         result = LABELLED_ACCOUNT.replace(result) { m ->
             val digits = m.groupValues[2].replace(" ", "")
             if (digits.length >= 6) m.groupValues[1] + "…" + digits.takeLast(4) else m.value
