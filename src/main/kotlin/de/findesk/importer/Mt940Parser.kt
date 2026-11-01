@@ -243,7 +243,7 @@ object Mt940Parser {
 
     private fun parseMtDate(text: String): LocalDate? {
         if (text.length != 6 || !text.all { it.isDigit() }) return null
-        val year = 2000 + text.substring(0, 2).toInt()
+        val year = TwoDigitYear.resolve(text.substring(0, 2).toInt())
         val month = text.substring(2, 4).toInt()
         val day = text.substring(4, 6).toInt()
         return runCatching { LocalDate.of(year, month, day) }.getOrNull()
