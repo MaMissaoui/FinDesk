@@ -92,6 +92,8 @@ data class DashboardState(
     val transfersThisMonth: BigDecimal = BigDecimal.ZERO,
     /** The month the cards and charts show (never in the future); the balances and the lists below stay "now". */
     val selectedMonth: YearMonth = YearMonth.now(),
+    /** The month whose figures this state holds; null until the first load publishes them. */
+    val loadedMonth: YearMonth? = null,
     /** The month of the oldest booking in the primary currency; the current month when there are none. */
     val earliestMonth: YearMonth = YearMonth.now(),
     /** The calendar month of today when the dashboard last loaded ([isCurrentMonth] compares against it). */
@@ -236,6 +238,7 @@ class DashboardViewModel(
                     now,
                 ),
                 selectedMonth = month,
+                loadedMonth = month,
                 currentMonth = nowMonth,
                 earliestMonth = earliestMonth,
                 hasAccounts = accounts.isNotEmpty(),

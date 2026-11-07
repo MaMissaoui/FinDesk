@@ -100,9 +100,30 @@ fun DashboardScreen(
             return@LazyColumn
         }
 
+        // Nothing has loaded yet: never show zeros or another month's figures under a month's title
+        val loadedMonth = state.loadedMonth
+        if (loadedMonth == null) {
+            if (state.error == null) {
+                item {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
+            return@LazyColumn
+        }
+        // These titles describe the loaded figures, not the month the user just clicked while they still load
+        val isCurrentLoadedMonth = loadedMonth == state.currentMonth
+
         // Hidden with the other cards on the first-run dashboard (its block above returns early)
         if (state.hasAccounts) {
             item { MonthHeader(state.selectedMonth, state.earliestMonth, state.currentMonth, state.isCurrentMonth, vm) }
+        }
+        // The figures below are still the loaded month's until the new load publishes
+        if (state.isLoading) {
+            item {
+                LinearProgressIndicator(Modifier.fillMaxWidth().height(4.dp))
+            }
         }
 
         item {
@@ -129,7 +150,7 @@ fun DashboardScreen(
                 val carryForward = state.carryForward
                 if (carryForward != null) {
                     val amountText = Formats.money(carryForward, state.currency)
-                    val line = s.format(StringKey.CarryForwardFrom, s.month(state.selectedMonth.minusMonths(1)), amountText)
+                    val line = s.format(StringKey.CarryForwardFrom, s.month(loadedMonth.minusMonths(1)), amountText)
                     val base = length
                     append(line)
                     val start = line.indexOf(amountText)
@@ -170,7 +191,7 @@ fun DashboardScreen(
                     subtitleText = subtitleText,
                 )
                 StatCard(
-                    if (state.isCurrentMonth) s[StringKey.IncomeThisMonth] else s.format(StringKey.IncomeInMonth, s.month(state.selectedMonth)),
+                    if (isCurrentLoadedMonth) s[StringKey.IncomeThisMonth] else s.format(StringKey.IncomeInMonth, s.month(loadedMonth)),
                     Formats.money(state.monthlyIncome, state.currency),
                     AppIcons.AddCircleOutline,
                     Success,
@@ -178,7 +199,7 @@ fun DashboardScreen(
                     valueColor = amountColor(false),
                 )
                 StatCard(
-                    if (state.isCurrentMonth) s[StringKey.ExpensesThisMonth] else s.format(StringKey.ExpensesInMonth, s.month(state.selectedMonth)),
+                    if (isCurrentLoadedMonth) s[StringKey.ExpensesThisMonth] else s.format(StringKey.ExpensesInMonth, s.month(loadedMonth)),
                     Formats.money(state.monthlyExpenses, state.currency),
                     AppIcons.RemoveCircleOutline,
                     Error,
@@ -203,12 +224,12 @@ fun DashboardScreen(
                 (if (state.transfersThisMonth.signum() > 0) 1 else 0)
             Row(modifier = Modifier.fillMaxWidth().height(maxOf(300.dp, 104.dp + 34.dp * splitRows)), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 SectionCard(
-                    if (state.isCurrentMonth) s[StringKey.ExpensesByCategory] else s.format(StringKey.ExpensesByCategoryInMonth, s.month(state.selectedMonth)),
+                    if (isCurrentLoadedMonth) s[StringKey.ExpensesByCategory] else s.format(StringKey.ExpensesByCategoryInMonth, s.month(loadedMonth)),
                     Modifier.weight(1f).fillMaxHeight(),
                 ) {
                     if (state.expensesByCategory.isEmpty()) {
                         Text(
-                            if (state.isCurrentMonth) s[StringKey.NoExpensesThisMonth] else s.format(StringKey.NoExpensesInMonth, s.month(state.selectedMonth)),
+                            if (isCurrentLoadedMonth) s[StringKey.NoExpensesThisMonth] else s.format(StringKey.NoExpensesInMonth, s.month(loadedMonth)),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
@@ -223,10 +244,10 @@ fun DashboardScreen(
                 SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(1f).fillMaxHeight()) {
                     if (state.lastMonths.all { it.income.signum() == 0 && it.expenses.signum() == 0 }) {
                         Text(
-                            if (state.isCurrentMonth) {
+                            if (isCurrentLoadedMonth) {
                                 s[StringKey.NoBookingsSixMonths]
                             } else {
-                                s.format(StringKey.NoBookingsSixMonthsTo, s.month(state.selectedMonth))
+                                s.format(StringKey.NoBookingsSixMonthsTo, s.month(loadedMonth))
                             },
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -258,7 +279,7 @@ fun DashboardScreen(
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (state.budgets.isNotEmpty()) {
                     SectionCard(
-                        if (state.isCurrentMonth) s[StringKey.BudgetsThisMonth] else s.format(StringKey.BudgetsInMonth, s.month(state.selectedMonth)),
+                        if (isCurrentLoadedMonth) s[StringKey.BudgetsThisMonth] else s.format(StringKey.BudgetsInMonth, s.month(loadedMonth)),
                         Modifier.weight(1f).fillMaxHeight(),
                     ) {
                         state.budgets.forEach { b -> BudgetRow(b, state.monthProgress, state.currency) }
@@ -274,7 +295,7 @@ fun DashboardScreen(
                             onClickLabel = s[StringKey.OpenTaxBookings],
                             role = Role.Button,
                         ) {
-                            onNavigate(Screen.REPORTS, leaveWithBackArgs(NavigationArgs(taxYear = state.selectedMonth.year)))
+                            onNavigate(Screen.REPORTS, leaveWithBackArgs(NavigationArgs(taxYear = loadedMonth.year)))
                         },
                 ) {
                     if (state.taxDeductionsByCategory.isEmpty()) {

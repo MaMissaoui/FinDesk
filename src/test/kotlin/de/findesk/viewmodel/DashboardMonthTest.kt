@@ -4,6 +4,7 @@ import de.findesk.TestData
 import de.findesk.TestDatabase
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.Translations
+import de.findesk.repository.TransactionRepository
 import de.findesk.repository.TransactionRepositoryImpl
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
@@ -12,6 +13,9 @@ import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Month selection on the dashboard (default: the current month, never a future one): which figures follow the
@@ -59,6 +63,7 @@ class DashboardMonthTest {
 
         val s = vm.state.value
         assertEquals(YearMonth.of(2026, 10), s.selectedMonth)
+        assertEquals(s.selectedMonth, s.loadedMonth, "the published figures belong to the selected month")
         assertEquals(YearMonth.of(2026, 3), s.earliestMonth, "the month of the oldest booking")
         assertTrue(s.isCurrentMonth)
         assertNull(s.error)
@@ -141,6 +146,48 @@ class DashboardMonthTest {
         assertEquals(YearMonth.of(2026, 10), fresh.state.value.selectedMonth, "the selection is not persisted")
         assertEquals(YearMonth.of(2026, 3), fresh.state.value.earliestMonth)
         fresh.close()
+    }
+
+    @Test
+    fun `a month switch keeps the old figures' loaded month until the new load publishes`() = runBlocking {
+        fixtures()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val vm = DashboardViewModel(
+            transactionRepository = BlockingSecondOldestDateRepository(entered, release),
+            today = { today },
+        )
+        vm.loadDashboard().join()
+        assertEquals(YearMonth.of(2026, 10), vm.state.value.loadedMonth)
+
+        // selectMonth writes the clicked month at once; the figures stay September's until the load publishes
+        val switching = vm.selectMonth(YearMonth.of(2026, 9))
+        assertTrue(entered.await(5, TimeUnit.SECONDS), "the second load reached oldestDate")
+        assertEquals(YearMonth.of(2026, 9), vm.state.value.selectedMonth)
+        assertEquals(YearMonth.of(2026, 10), vm.state.value.loadedMonth, "October's figures are not shown under September")
+
+        release.countDown()
+        switching.join()
+        assertEquals(YearMonth.of(2026, 9), vm.state.value.selectedMonth)
+        assertEquals(YearMonth.of(2026, 9), vm.state.value.loadedMonth)
+        vm.close()
+    }
+
+    /** Blocks the second [oldestDate] call, so a month switch's load can be held before it publishes. */
+    private class BlockingSecondOldestDateRepository(
+        private val entered: CountDownLatch,
+        private val release: CountDownLatch,
+        private val delegate: TransactionRepository = TransactionRepositoryImpl(),
+    ) : TransactionRepository by delegate {
+        private val calls = AtomicInteger(0)
+
+        override fun oldestDate(currency: String?): LocalDate? {
+            if (calls.incrementAndGet() == 2) {
+                entered.countDown()
+                release.await()
+            }
+            return delegate.oldestDate(currency)
+        }
     }
 
     @Test

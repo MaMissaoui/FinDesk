@@ -1,5 +1,8 @@
 package de.findesk.util
 
+import de.findesk.i18n.AppLanguage
+import de.findesk.i18n.AppStrings
+import de.findesk.i18n.StringKey
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
@@ -20,6 +23,8 @@ class UtilTest {
         assertEquals("-€45.67", Formats.money(BigDecimal("-45.67")))
         assertEquals("+€3,200.00", Formats.money(BigDecimal("3200"), signed = true))
         assertEquals("€0.00", Formats.money(BigDecimal.ZERO, signed = true))
+        assertEquals("€", Formats.currencySymbol("EUR"))
+        assertEquals("$", Formats.currencySymbol("USD"))
     }
 
     @Test
@@ -27,10 +32,18 @@ class UtilTest {
         assertEquals(java.time.LocalDate.of(2026, 11, 5), Formats.parseDate("5.11.2026"))
         assertEquals(java.time.LocalDate.of(2026, 11, 5), Formats.parseDate(" 05.11.2026 "))
         assertEquals(java.time.LocalDate.of(2028, 2, 29), Formats.parseDate("29.02.2028"))
+        assertEquals(java.time.LocalDate.of(2026, 2, 28), Formats.parseDate("28.02.2026"))
         // Lenient parsing turned these into 28.02.; a scheduled transfer would then run on another day
         assertNull(Formats.parseDate("31.02.2026"))
         assertNull(Formats.parseDate("29.02.2027"))
         assertNull(Formats.parseDate("32.01.2026"))
+    }
+
+    @Test
+    fun `the amount label carries the currency symbol`() {
+        AppStrings.set(AppLanguage.EN)
+        assertEquals("Amount (€)", AppStrings.format(StringKey.AmountIn, Formats.currencySymbol("EUR")))
+        assertEquals("Amount ($)", AppStrings.format(StringKey.AmountIn, Formats.currencySymbol("USD")))
     }
 
     @Test
