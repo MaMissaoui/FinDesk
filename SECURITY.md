@@ -2,11 +2,11 @@
 
 ## Alpha status
 
-FinDesk is alpha software and is **not released for production use**. It must not
-be connected to real bank accounts. The banking code has never been run against a
-live bank, so a sync, transfer, scheduled transfer or standing order can fail,
-hang or behave unexpectedly — and those orders move real money. Treat every
-balance, statement and report it produces as unverified.
+FinDesk is alpha software. Its automated tests use fakes only and never contact a
+live bank, and each bank implements FinTS a little differently, so a sync,
+transfer, scheduled transfer or standing order can fail, hang or behave
+unexpectedly with your bank — and those orders move real money. Check balances,
+statements and reports against your online banking before relying on them.
 
 ## Reporting a vulnerability
 
@@ -26,7 +26,11 @@ stores everything on your machine. The most relevant areas are:
 - **Data at rest** – the database is encrypted with SQLCipher (AES-256). The
   passphrase is never written to disk in plain text.
 - **Credentials** – banking PINs and TANs are requested per dialog and are never
-  stored or logged.
+  logged; TANs are never stored. A PIN is stored only when you tick "Remember PIN
+  for syncs", and then only in the operating system's credential store (macOS
+  Keychain, Linux Secret Service via `secret-tool`, Windows Credential Manager),
+  never in the database or a file. It is used for syncs only, and deleted when
+  the bank rejects it, a dialog fails, the bank is removed or its login changes.
 - **Network** – only the FinTS server of a configured bank is contacted, over
   TLS.
 - **Attachments** – files under `documents/` are stored unencrypted; do not put
@@ -51,5 +55,6 @@ stores everything on your machine. The most relevant areas are:
 
 ## Supported versions
 
-The project is pre-1.0 and moves quickly. Fixes land on `main`; please test
-against the latest commit before reporting.
+Only the latest release gets fixes. The project moves quickly: fixes land on
+`main` and ship in the next release, so please test against the latest release
+(or `main`) before reporting.
