@@ -37,6 +37,8 @@ data class ReportsState(
     val missingReceiptsOnly: Boolean = false,
     /** Detected over the last 13 months, independent of the selected period. */
     val recurring: List<de.findesk.document.RecurringDetector.RecurringPayment> = emptyList(),
+    /** The profile's primary currency, shown when a total map is empty. */
+    val primaryCurrency: String = Currencies.DEFAULT,
     val isLoading: Boolean = false,
     val isExporting: Boolean = false,
     val error: String? = null,
@@ -64,13 +66,14 @@ class ReportsViewModel(
         return launchSafely(onError) {
             val from = LocalDate.of(year, 1, 1)
             val to = LocalDate.of(year, 12, 31)
+            val primary = Currencies.primary(settingsRepository)
             val report = reportService.generateTaxReport(year)
             val taxBookings = reportService.generateTaxBookings(from, to)
             val suggestions = findSuggestions(from, to)
             // Ignore stale results if the year changed meanwhile
             _state.update {
                 if (it.selectedYear == year && it.customRange == null) {
-                    it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, isLoading = false)
+                    it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, primaryCurrency = primary, isLoading = false)
                 } else {
                     it
                 }
@@ -80,7 +83,8 @@ class ReportsViewModel(
 
     fun loadRecurring(today: LocalDate = LocalDate.now()): Job = launchSafely(onError) {
         val txns = transactionRepository.findItems(de.findesk.model.TransactionFilter(startDate = today.minusDays(400), endDate = today))
-        _state.update { it.copy(recurring = de.findesk.document.RecurringDetector.detect(txns, today)) }
+        val primary = Currencies.primary(settingsRepository)
+        _state.update { it.copy(recurring = de.findesk.document.RecurringDetector.detect(txns, today), primaryCurrency = primary) }
     }
 
     fun updateYear(year: Int): Job {
@@ -95,12 +99,13 @@ class ReportsViewModel(
         }
         _state.update { it.copy(customRange = from to to, isLoading = true, error = null) }
         return launchSafely(onError) {
+            val primary = Currencies.primary(settingsRepository)
             val report = reportService.generateRangeReport(from, to)
             val taxBookings = reportService.generateTaxBookings(from, to)
             val suggestions = findSuggestions(from, to)
             _state.update {
                 if (it.customRange == from to to) {
-                    it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, isLoading = false)
+                    it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, primaryCurrency = primary, isLoading = false)
                 } else {
                     it
                 }
@@ -155,13 +160,14 @@ class ReportsViewModel(
             from = LocalDate.of(year, 1, 1)
             to = LocalDate.of(year, 12, 31)
         }
+        val primary = Currencies.primary(settingsRepository)
         val report = reportService.generateRangeReport(from, to)
         val taxBookings = reportService.generateTaxBookings(from, to)
         val suggestions = findSuggestions(from, to)
         _state.update {
             val stillCurrent = if (range != null) it.customRange == range else it.customRange == null
             if (stillCurrent) {
-                it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, isLoading = false)
+                it.copy(taxReport = report, taxBookings = taxBookings, loadedRange = from to to, suggestions = suggestions, primaryCurrency = primary, isLoading = false)
             } else {
                 it
             }

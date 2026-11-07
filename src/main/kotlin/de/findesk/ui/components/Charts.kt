@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import de.findesk.document.ReportService
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
@@ -99,7 +100,7 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
                     Box(Modifier.size(10.dp).background(colors[i], CircleShape))
                     Spacer(Modifier.width(8.dp))
                     // Ellipsis and a gap, so a long name never runs into its amount in a narrow window
-                    Text(slice.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(sliceLabel(slice, s), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.width(8.dp))
                     Text(Formats.money(slice.amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                 }
@@ -549,9 +550,12 @@ private fun buildBarsDescription(title: String, months: List<MonthBar>, currency
     return "$title: ${parts.joinToString(", ")}$suffix"
 }
 
+/** A slice's label, translating the service's uncategorized sentinel; other slices keep their own label. */
+private fun sliceLabel(slice: ChartSlice, s: Strings): String = if (slice.label == ReportService.UNCATEGORIZED) s[StringKey.Uncategorized] else slice.label
+
 private fun buildDonutDescription(title: String, slices: List<ChartSlice>, currency: String, s: Strings): String {
     if (slices.isEmpty()) return "$title: ${s[StringKey.NotEnoughData]}"
-    val parts = slices.take(5).map { "${it.label} ${Formats.money(it.amount, currency)}" }
+    val parts = slices.take(5).map { "${sliceLabel(it, s)} ${Formats.money(it.amount, currency)}" }
     val more = slices.size - 5
     val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""
     return "$title: ${parts.joinToString(", ")}$suffix · ${Formats.money(slices.fold(BigDecimal.ZERO) { a, x -> a + x.amount }, currency)}"

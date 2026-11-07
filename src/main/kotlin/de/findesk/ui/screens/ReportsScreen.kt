@@ -111,7 +111,7 @@ fun ReportsScreen(
                 // An empty period has nothing to export; the disabled button says so
                 val nothingToExport = report?.takeIf { it.transactionCount == 0 }
                 DisabledReason(nothingToExport?.let { s.format(StringKey.NothingToExport, it.title) }) {
-                    Button(enabled = !state.isExporting && nothingToExport == null, onClick = { exportMenu = true }) {
+                    Button(enabled = !state.isExporting && !state.isLoading && nothingToExport == null, onClick = { exportMenu = true }) {
                         Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(s[StringKey.Export])
@@ -121,7 +121,7 @@ fun ReportsScreen(
                     // The tax bookings tab brings its own export actions into this one menu
                     if (selectedTab == ReportsTab.TAX_BOOKINGS) {
                         val tax = state.taxBookings
-                        val enabled = !state.isExporting && tax != null && tax.bookingCount > 0
+                        val enabled = !state.isExporting && !state.isLoading && tax != null && tax.bookingCount > 0
                         val suffix = fileSuffix(state.customRange, state.selectedYear)
                         DropdownMenuItem(
                             text = { Text(s[StringKey.ExportExcel]) },
@@ -185,7 +185,7 @@ fun ReportsScreen(
         Spacer(Modifier.height(24.dp))
 
         if (selectedTab == ReportsTab.RECURRING) {
-            RecurringTab(state.recurring)
+            RecurringTab(state.recurring, state.primaryCurrency)
             return@Column
         }
         if (report == null) return@Column
@@ -407,10 +407,9 @@ private fun fileSuffix(range: Pair<LocalDate, LocalDate>?, year: Int) = range?.l
 
 @Composable
 private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (LocalDate, LocalDate) -> Unit) {
-    val fmt = remember { java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy") }
-    var fromText by remember { mutableStateOf(initial.first.format(fmt)) }
-    var toText by remember { mutableStateOf(initial.second.format(fmt)) }
-    fun parse(s: String) = runCatching { LocalDate.parse(s.trim(), fmt) }.getOrNull()
+    var fromText by remember { mutableStateOf(Formats.date(initial.first)) }
+    var toText by remember { mutableStateOf(Formats.date(initial.second)) }
+    fun parse(s: String) = Formats.parseDate(s)
     val from = parse(fromText)
     val to = parse(toText)
     val s = strings()
@@ -442,7 +441,7 @@ private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (Local
 }
 
 @Composable
-private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.RecurringPayment>) {
+private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.RecurringPayment>, primaryCurrency: String) {
     if (recurring.isEmpty()) {
         EmptyState(Icons.Default.Refresh, strings()[StringKey.NoRecurringFound], strings()[StringKey.RecurringHint])
         return
@@ -454,8 +453,8 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 StatCard(s[StringKey.RecurringPayments], payments.size.toString(), Icons.Default.Refresh, PrimaryBlue, Modifier.weight(1f))
-                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, Currencies.DEFAULT), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
-                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, Currencies.DEFAULT), Icons.Default.DateRange, Warning, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, primaryCurrency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, primaryCurrency), Icons.Default.DateRange, Warning, Modifier.weight(1f), valueColor = amountColor(true))
             }
         }
         item {
@@ -603,7 +602,7 @@ private fun TaxGroupCard(group: ReportService.TaxGroup, rows: List<TransactionIt
                 Box(Modifier.size(12.dp).background(categoryColor(group.color, group.name), CircleShape))
                 Spacer(Modifier.width(12.dp))
                 Text(group.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text(s.format(StringKey.BookingsCountTotal, rows.size, Formats.money(group.net, currency, signed = true)), style = MaterialTheme.typography.bodyMedium)
+                Text(s.format(StringKey.BookingsCountTotal, group.bookings.size, Formats.money(group.net, currency, signed = true)), style = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.height(8.dp))
             rows.forEachIndexed { index, txn ->

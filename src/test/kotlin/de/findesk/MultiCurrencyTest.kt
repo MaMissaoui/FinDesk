@@ -10,6 +10,8 @@ import de.findesk.model.TransactionFilter
 import de.findesk.repository.SettingsRepositoryImpl
 import de.findesk.util.Currencies
 import de.findesk.viewmodel.DashboardViewModel
+import de.findesk.viewmodel.ReportsViewModel
+import de.findesk.viewmodel.TransactionsViewModel
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
@@ -92,6 +94,21 @@ class MultiCurrencyTest {
         assertEquals("USD", report.currency)
         assertEquals(BigDecimal("800.00"), report.totalIncome)
         assertEquals(1, report.otherCurrencyBookings)
+    }
+
+    @Test
+    fun `empty totals fall back to the primary currency`() = runBlocking {
+        SettingsRepositoryImpl().setValue(Currencies.KEY_PRIMARY, "USD")
+
+        val transactions = TransactionsViewModel(today = { today })
+        transactions.loadTransactions().join()
+        assertEquals("USD", transactions.state.value.primaryCurrency)
+        transactions.close()
+
+        val reports = ReportsViewModel()
+        reports.loadTaxReport(2026).join()
+        assertEquals("USD", reports.state.value.primaryCurrency)
+        reports.close()
     }
 
     @Test

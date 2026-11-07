@@ -173,6 +173,8 @@ data class TransactionsState(
     /** Per currency: the list may mix accounts in different currencies, whose amounts can't be added. */
     val totalIncome: Map<String, BigDecimal> = emptyMap(),
     val totalExpenses: Map<String, BigDecimal> = emptyMap(),
+    /** The profile's primary currency, shown when a total map is empty. */
+    val primaryCurrency: String = Currencies.DEFAULT,
     val importPreview: ImportPreview? = null,
     val minAmount: BigDecimal? = null,
     val maxAmount: BigDecimal? = null,
@@ -453,6 +455,7 @@ class TransactionsViewModel(
                 customGroups = customGroups,
                 groups = groups,
                 grandTotal = grandTotal(accounts, primary),
+                primaryCurrency = primary,
                 // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
                 collapsed = if (collapsedLoaded) it.collapsed else AccountPanelSettings.loadCollapsed(settingsRepository).also { collapsedLoaded = true },
                 chartCollapsed = if (chartCollapsedLoaded) it.chartCollapsed else loadChartCollapsed().also { chartCollapsedLoaded = true },
@@ -515,6 +518,7 @@ class TransactionsViewModel(
                 accounts = accounts,
                 groups = groups,
                 grandTotal = grandTotal(accounts, primary),
+                primaryCurrency = primary,
                 boldIds = boldIds,
                 balances = balances,
                 balanceChart = balanceChart,

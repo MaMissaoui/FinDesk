@@ -117,6 +117,9 @@ object Formats {
         return parseDecimal(s)?.setScale(2, RoundingMode.HALF_UP)
     }
 
+    /** The currency's symbol as [money] shows it, without the trailing space of an unknown code. */
+    fun currencySymbol(currency: String): String = symbolFor(currency).trim()
+
     private fun symbolFor(currency: String): String = when (currency) {
         "EUR" -> "€"
         else -> runCatching { Currency.getInstance(currency).getSymbol(Locale.US) }.getOrDefault("$currency ")
