@@ -819,6 +819,9 @@ class ScreenshotTest {
 
         render("dashboard-with-account", Screen.DASHBOARD, dark = false)
         render("dashboard-with-account-dark", Screen.DASHBOARD, dark = true)
+        // A dashboard whose load never published: a spinner, never zeros or another month's figures
+        fun notLoaded(): DashboardViewModel = DashboardViewModel().apply { close() }
+        render("dashboard-loading", 1440, 900) { Frame(Screen.DASHBOARD, dark = false, dashboard = ::notLoaded) }
         // The narrowest common window: stat-card subtitles wrap here, so the cards must still line up
         render("dashboard-with-account-narrow", 1024, 900) { Frame(Screen.DASHBOARD, dark = false) }
 

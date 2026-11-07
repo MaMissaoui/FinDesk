@@ -88,8 +88,6 @@ import de.findesk.viewmodel.ReapplyPreview
 import de.findesk.viewmodel.TransactionsViewModel
 import java.math.BigDecimal
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -146,7 +144,7 @@ fun TransactionsScreen(
                     groups = state.groups,
                     customGroups = state.customGroups,
                     grandTotal = state.grandTotal,
-                    primaryCurrency = state.grandTotal.keys.firstOrNull() ?: Currencies.DEFAULT,
+                    primaryCurrency = state.grandTotal.keys.firstOrNull() ?: state.primaryCurrency,
                     selection = state.selection,
                     collapsed = state.collapsed,
                     filterText = state.accountFilterText,
@@ -175,8 +173,8 @@ fun TransactionsScreen(
                         s.format(
                             StringKey.TransactionsSummary,
                             state.transactions.size,
-                            Currencies.format(state.totalIncome, Currencies.DEFAULT),
-                            Currencies.format(state.totalExpenses, Currencies.DEFAULT),
+                            Currencies.format(state.totalIncome, state.primaryCurrency),
+                            Currencies.format(state.totalExpenses, state.primaryCurrency),
                         ),
                     )
                     if (headerBalance != null) {
@@ -201,13 +199,13 @@ fun TransactionsScreen(
                         )
                         SummaryFigure(
                             label = s[StringKey.SummaryIn],
-                            value = Currencies.format(state.totalIncome, Currencies.DEFAULT),
+                            value = Currencies.format(state.totalIncome, state.primaryCurrency),
                             color = amountColor(false),
                             modifier = Modifier.weight(1f, fill = false),
                         )
                         SummaryFigure(
                             label = s[StringKey.SummaryOut],
-                            value = Currencies.format(state.totalExpenses, Currencies.DEFAULT),
+                            value = Currencies.format(state.totalExpenses, state.primaryCurrency),
                             color = amountColor(true),
                             modifier = Modifier.weight(1f, fill = false),
                         )
@@ -324,7 +322,7 @@ fun TransactionsScreen(
                         onSelect = { vm.updateDirection(it) },
                     )
                     // Labelled in the primary currency, which the grand total lists first
-                    AmountFilter(state.minAmount, state.maxAmount, state.grandTotal.keys.firstOrNull() ?: Currencies.DEFAULT) { min, max ->
+                    AmountFilter(state.minAmount, state.maxAmount, state.grandTotal.keys.firstOrNull() ?: state.primaryCurrency) { min, max ->
                         vm.updateAmountRange(min, max)
                     }
                 }
@@ -625,10 +623,9 @@ internal fun MultiDeleteDialogContent(bookings: List<TransactionItem>) {
  */
 @Composable
 private fun CustomRangeDialog(initial: Pair<LocalDate, LocalDate>, onApply: (LocalDate, LocalDate) -> Unit, onDismiss: () -> Unit) {
-    val fmt = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
-    var fromText by remember { mutableStateOf(initial.first.format(fmt)) }
-    var toText by remember { mutableStateOf(initial.second.format(fmt)) }
-    fun parse(text: String) = runCatching { LocalDate.parse(text.trim(), fmt) }.getOrNull()
+    var fromText by remember { mutableStateOf(Formats.date(initial.first)) }
+    var toText by remember { mutableStateOf(Formats.date(initial.second)) }
+    fun parse(text: String) = Formats.parseDate(text)
     val from = parse(fromText)
     val to = parse(toText)
     val s = strings()
@@ -1183,9 +1180,8 @@ private fun AddTransactionDialog(
     onDismiss: () -> Unit,
     onConfirm: (Int, LocalDate, BigDecimal, String?, String?, Int?) -> Unit,
 ) {
-    val dateFormat = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy") }
     var account by remember { mutableStateOf(accounts.firstOrNull { it.id == initialAccountId } ?: accounts.first()) }
-    var dateText by remember { mutableStateOf(LocalDate.now().format(dateFormat)) }
+    var dateText by remember { mutableStateOf(Formats.date(LocalDate.now())) }
     var amountText by remember { mutableStateOf("") }
     var isExpense by remember { mutableStateOf(true) }
     var partner by remember { mutableStateOf("") }
@@ -1193,11 +1189,7 @@ private fun AddTransactionDialog(
     var category by remember { mutableStateOf<CategoryItem?>(null) }
     val s = strings()
 
-    val date = try {
-        LocalDate.parse(dateText.trim(), dateFormat)
-    } catch (e: DateTimeParseException) {
-        null
-    }
+    val date = Formats.parseDate(dateText)
     val amount = Formats.parseAmount(amountText)?.abs()?.takeIf { it.signum() > 0 }
     val valid = date != null && amount != null && (partner.isNotBlank() || purpose.isNotBlank())
 
@@ -1231,7 +1223,7 @@ private fun AddTransactionDialog(
                     OutlinedTextField(
                         amountText,
                         { amountText = it },
-                        label = { Text(s[StringKey.AmountEuro]) },
+                        label = { Text(s.format(StringKey.AmountIn, Formats.currencySymbol(account.currency))) },
                         singleLine = true,
                         isError = amountText.isNotEmpty() && amount == null,
                         supportingText = { if (amountText.isNotEmpty() && amount == null) Text(s[StringKey.EnterValidAmount]) },
@@ -1321,7 +1313,7 @@ internal fun ImportDialogContent(
             val delimLabel = csv?.let { if (it.delimiter == '\t') s[StringKey.TabDelimiter] else "'${it.delimiter}'" } ?: ""
             Text(
                 "${st.formatLabel}" +
-                    (if (st.format == StatementFormat.XLSX) "" else csv?.let { " · ${it.charsetName} · delimiter $delimLabel" } ?: "") +
+                    (if (st.format == StatementFormat.XLSX) "" else csv?.let { " · ${it.charsetName} · ${s.format(StringKey.DelimiterLabel, delimLabel)}" } ?: "") +
                     " · ${s.format(StringKey.BookingCount, st.bookings.size)}" +
                     (if (st.pendingSkipped > 0) " · ${s.format(StringKey.PendingLeftOut, st.pendingSkipped)}" else "") +
                     (if (st.skipped.isNotEmpty()) " · ${s.format(StringKey.UnreadableCount, st.skipped.size)}" else ""),
@@ -1552,7 +1544,7 @@ internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String =
                             minText = it
                             if (it.isBlank() || Formats.parseAmount(it) != null) apply()
                         },
-                        placeholder = s[StringKey.MinEuro],
+                        placeholder = s.format(StringKey.MinAmountIn, Formats.currencySymbol(currency)),
                         modifier = Modifier.weight(1f),
                     )
                     CompactAmountField(
@@ -1561,7 +1553,7 @@ internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String =
                             maxText = it
                             if (it.isBlank() || Formats.parseAmount(it) != null) apply()
                         },
-                        placeholder = s[StringKey.MaxEuro],
+                        placeholder = s.format(StringKey.MaxAmountIn, Formats.currencySymbol(currency)),
                         modifier = Modifier.weight(1f),
                     )
                 }
