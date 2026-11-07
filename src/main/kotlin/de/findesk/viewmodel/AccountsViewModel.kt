@@ -130,27 +130,31 @@ class AccountsViewModel(
         val groups = group(accounts, customGroups, primary)
         val firstLoad = !panelLoaded
         panelLoaded = true
-        val selection = AccountPanelSettings.resolve(
-            if (firstLoad) AccountPanelSettings.loadSelection(settingsRepository, groups, accounts) else _state.value.selection,
-            groups,
-            accounts,
-        )
-        val collapsed = if (firstLoad) AccountPanelSettings.loadCollapsed(settingsRepository) else null
-        _state.update {
-            it.copy(
+        val loadedSelection = if (firstLoad) AccountPanelSettings.loadSelection(settingsRepository, groups, accounts) else null
+        val loadedCollapsed = if (firstLoad) AccountPanelSettings.loadCollapsed(settingsRepository) else null
+        // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
+        val loadedCollapsedBanks = if (collapsedBanksLoaded) {
+            null
+        } else {
+            collapsedBanksLoaded = true
+            loadCollapsedBanks(bankAccesses)
+        }
+        _state.update { st ->
+            // Resolved inside the update: a selection made while the repository reads above ran must survive
+            val selection = AccountPanelSettings.resolve(if (firstLoad) requireNotNull(loadedSelection) else st.selection, groups, accounts)
+            st.copy(
                 customGroups = customGroups,
                 groups = groups,
                 grandTotal = grandTotal(accounts, primary),
                 selection = selection,
-                collapsed = collapsed ?: it.collapsed,
+                collapsed = loadedCollapsed ?: st.collapsed,
                 accounts = accounts,
                 bankAccesses = bankAccesses,
                 isLoading = false,
                 primaryCurrency = primary,
                 canRememberPin = bankingService.canRememberPin,
                 savedPins = bankAccesses.filter { bank -> bankingService.hasSavedPin(bank.id) }.map { bank -> bank.id }.toSet(),
-                // Read once; afterwards the in-memory set is the truth, so a refresh can't undo a toggle still being saved
-                collapsedBanks = if (collapsedBanksLoaded) it.collapsedBanks else loadCollapsedBanks(bankAccesses).also { collapsedBanksLoaded = true },
+                collapsedBanks = loadedCollapsedBanks ?: st.collapsedBanks,
             )
         }
     }
@@ -357,11 +361,18 @@ class AccountsViewModel(
         }
     }
 
-    fun deleteAccount(accountId: Int): Job = launchSafely(onError) {
-        accountRepository.deleteWithTransactions(accountId)
-        auditLogRepository.log("DELETE_ACCOUNT", "user", "Deleted account $accountId and its transactions")
-        refresh()
-        _state.update { it.copy(message = AppStrings[StringKey.MessageAccountDeleted]) }
+    fun deleteAccount(accountId: Int): Job {
+        // The sync snapshotted the accounts before its dialog; deleting one now would orphan its later bookings
+        if (_state.value.isSyncing || Busy.active.value) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorDeleteWhileBusy]) }
+            return Job().apply { complete() }
+        }
+        return launchSafely(onError) {
+            accountRepository.deleteWithTransactions(accountId)
+            auditLogRepository.log("DELETE_ACCOUNT", "user", "Deleted account $accountId and its transactions")
+            refresh()
+            _state.update { it.copy(message = AppStrings[StringKey.MessageAccountDeleted], error = null) }
+        }
     }
 
     /**
@@ -378,17 +389,24 @@ class AccountsViewModel(
                 "user",
                 "Account ${iban.takeLast(4)}: $count deleted bookings may be imported again",
             )
-            _state.update { it.copy(message = AppStrings.format(StringKey.MessageDeletedForgotten, count)) }
+            _state.update { it.copy(message = AppStrings.format(StringKey.MessageDeletedForgotten, count), error = null) }
         } else {
-            _state.update { it.copy(message = AppStrings[StringKey.MessageNoDeletedRemembered]) }
+            _state.update { it.copy(message = AppStrings[StringKey.MessageNoDeletedRemembered], error = null) }
         }
         refresh()
     }
 
-    fun deleteBankAccess(bankAccessId: Int): Job = launchSafely(onError) {
-        bankingService.removeBankAccess(bankAccessId)
-        refresh()
-        _state.update { it.copy(message = AppStrings[StringKey.MessageBankRemoved]) }
+    fun deleteBankAccess(bankAccessId: Int): Job {
+        // A sync or import still inserts under the accounts; removing the bank now would orphan them
+        if (_state.value.isSyncing || Busy.active.value) {
+            _state.update { it.copy(error = AppStrings[StringKey.ErrorDeleteWhileBusy]) }
+            return Job().apply { complete() }
+        }
+        return launchSafely(onError) {
+            bankingService.removeBankAccess(bankAccessId)
+            refresh()
+            _state.update { it.copy(message = AppStrings[StringKey.MessageBankRemoved], error = null) }
+        }
     }
 
     /** Removes the PIN remembered for [bankAccessId] from the system's credential store. */
@@ -445,7 +463,7 @@ class AccountsViewModel(
                 auditLogRepository.log("RENAME_BANK_ACCESS", "user", "Renamed bank access $bankAccessId from $oldName to ${updated.bankName}")
             }
             refresh()
-            _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
+            _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved], error = null) }
             return@launchSafely
         }
         validateBankAccess(name, blz)?.let { msg ->
@@ -465,7 +483,7 @@ class AccountsViewModel(
         }
         // The service resets the login (and forgets the PIN) when the BLZ, user id or URL changed.
         refresh()
-        _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved]) }
+        _state.update { it.copy(message = AppStrings[StringKey.MessageConnectionSaved], error = null) }
     }
 
     /** Validates the start date of a historical sync ("dd.MM.yyyy"); returns an error message or null. */

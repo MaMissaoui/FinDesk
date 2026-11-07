@@ -76,6 +76,21 @@ class AddDefaultCategoriesTest {
     }
 
     @Test
+    fun `two calls without a join create every default category once`() = runBlocking {
+        val vm = vm(tmp)
+
+        val first = vm.addDefaultCategories()
+        val second = vm.addDefaultCategories()
+        first.join()
+        second.join()
+
+        val names = vm.state.value.categories.map { it.name }
+        assertEquals(24, names.size, names.joinToString())
+        assertEquals(names.size, names.toSet().size, "no category is created twice")
+        vm.close()
+    }
+
+    @Test
     fun `the list holds 24 entries in palette order`() {
         assertEquals(24, DefaultCategories.entries.size)
         assertEquals("#FF5722", DefaultCategories.entries.first().second)

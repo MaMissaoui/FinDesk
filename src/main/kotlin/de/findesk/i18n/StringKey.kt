@@ -809,6 +809,7 @@ enum class StringKey {
     BankNameRequired,
     BlzMustBe8Digits,
     ErrorConnectionBusy,
+    ErrorDeleteWhileBusy,
     IbanRequired,
     IbanChecksumFailed,
     AccountIbanExists,

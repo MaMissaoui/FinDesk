@@ -8,6 +8,7 @@ import de.findesk.model.TransactionFilter
 import de.findesk.model.TransactionItem
 import de.findesk.repository.TransactionRepository
 import de.findesk.repository.TransactionRepositoryImpl
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,28 +53,35 @@ class DocumentsViewModel(
     }
     private var searchJob: Job? = null
 
+    /** Each refresh numbers itself; only the newest may publish, so a slow older one can't overwrite it. */
+    private val generation = java.util.concurrent.atomic.AtomicLong(0)
+
     fun loadDocuments(): Job {
         _state.update { it.copy(isLoading = true, error = null) }
         return launchSafely(onError) { refresh() }
     }
 
     private suspend fun refresh() {
+        val currentGeneration = generation.incrementAndGet()
         val s = _state.value
         val all = documentService.listDocuments(query = s.searchQuery, unlinkedOnly = false)
         val unlinked = documentService.listDocuments(query = s.searchQuery, unlinkedOnly = true)
-        val linked = all.filter { it.linkedTransactionId != null }
-        val counts = mapOf(
-            DocumentTab.ALL to all.size,
-            DocumentTab.UNLINKED to unlinked.size,
-            DocumentTab.LINKED to linked.size,
-        )
-        val docs = when (s.tab) {
-            DocumentTab.ALL -> all
-            DocumentTab.UNLINKED -> unlinked
-            DocumentTab.LINKED -> linked
+        _state.update { st ->
+            if (currentGeneration != generation.get()) return@update st
+            val linked = all.filter { it.linkedTransactionId != null }
+            val counts = mapOf(
+                DocumentTab.ALL to all.size,
+                DocumentTab.UNLINKED to unlinked.size,
+                DocumentTab.LINKED to linked.size,
+            )
+            val docs = when (st.tab) {
+                DocumentTab.ALL -> all
+                DocumentTab.UNLINKED -> unlinked
+                DocumentTab.LINKED -> linked
+            }
+            val selected = st.selectedDocument?.let { sel -> docs.firstOrNull { it.id == sel.id } }
+            st.copy(documents = docs, counts = counts, selectedDocument = selected, isLoading = false)
         }
-        val selected = s.selectedDocument?.let { sel -> docs.firstOrNull { it.id == sel.id } }
-        _state.update { it.copy(documents = docs, counts = counts, selectedDocument = selected, isLoading = false) }
     }
 
     fun selectTab(tab: DocumentTab): Job {
@@ -95,12 +103,17 @@ class DocumentsViewModel(
         return launchSafely(onError) {
             val failures = mutableListOf<String>()
             var withText = 0
-            files.forEach { file ->
-                try {
-                    val result = Busy.track { documentService.uploadDocument(file, transactionId) }
-                    if (result.ocr?.text?.isNotBlank() == true) withText++
-                } catch (e: Exception) {
-                    failures += "${file.name}: ${e.userMessage()}"
+            // One busy section for the whole batch, not one per file: the upload is not interruptible halfway through
+            Busy.track {
+                files.forEach { file ->
+                    try {
+                        val result = documentService.uploadDocument(file, transactionId)
+                        if (result.ocr?.text?.isNotBlank() == true) withText++
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        failures += "${file.name}: ${e.userMessage()}"
+                    }
                 }
             }
             refresh()
