@@ -305,7 +305,8 @@ class PaymentsViewModel(
 
     /** Asks the bank for the account's standing orders (needs the PIN). Read-only. */
     fun loadStandingOrders(account: AccountItem): Job {
-        _state.update { it.copy(isLoadingStandingOrders = true, error = null, standingOrdersAccount = account.id) }
+        // Another account's orders must never show under this one while the bank is asked (or if the prompt is cancelled)
+        _state.update { it.copy(isLoadingStandingOrders = true, error = null, standingOrdersAccount = account.id, standingOrders = if (account.id == it.standingOrdersAccount) it.standingOrders else null) }
         return launchSafely({ e -> _state.update { it.copy(isLoadingStandingOrders = false, error = e.userMessage()) } }) {
             val result = bankingService.loadStandingOrders(account.id, bankingInteraction)
             _state.update {
@@ -327,7 +328,8 @@ class PaymentsViewModel(
 
     /** Asks the bank for the account's scheduled transfers (needs the PIN). Read-only. */
     fun loadScheduledTransfers(account: AccountItem): Job {
-        _state.update { it.copy(isLoadingScheduledTransfers = true, error = null, scheduledTransfersAccount = account.id) }
+        // Another account's transfers must never show under this one while the bank is asked (or if the prompt is cancelled)
+        _state.update { it.copy(isLoadingScheduledTransfers = true, error = null, scheduledTransfersAccount = account.id, scheduledTransfers = if (account.id == it.scheduledTransfersAccount) it.scheduledTransfers else null) }
         return launchSafely({ e -> _state.update { it.copy(isLoadingScheduledTransfers = false, error = e.userMessage()) } }) {
             val result = bankingService.loadScheduledTransfers(account.id, bankingInteraction)
             _state.update {

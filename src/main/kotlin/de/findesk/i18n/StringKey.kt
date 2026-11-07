@@ -722,6 +722,8 @@ enum class StringKey {
     PrepareRestore,
     DeleteCategoryTitle,
     DeleteCategoryText,
+    DeleteRuleTitle,
+    DeleteRuleText,
     EditCategory,
     Name,
     MonthlyBudgetOptional,
