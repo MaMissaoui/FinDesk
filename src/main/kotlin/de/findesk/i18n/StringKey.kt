@@ -275,6 +275,7 @@ enum class StringKey {
     Expense,
     Income,
     DateFormat,
+    DatePlaceholder,
     AmountEuro,
     PartnerPayee,
     Purpose,

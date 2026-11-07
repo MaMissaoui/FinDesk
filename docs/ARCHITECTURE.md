@@ -51,9 +51,12 @@ transaction.
   `AppPaths.dataDir` is the active profile's directory, holding `findesk.db`,
   `documents/` and `passports/`. The default profile is the root itself; other
   profiles live in `profiles/<slug>/` (`util/ProfileStore`).
-  `AppPaths.activeProfile` is set once in `main()` and never changes at runtime:
-  switching applies at the next start. A test that sets it must restore it in a
-  `finally` block.
+  `AppPaths.activeProfile` is set in `main()` and changed only by a live profile
+  switch (`ProfileSwitch.closeAndActivate`): after the main window and its view
+  models are gone and the previous database is closed (`DatabaseFactory.close`),
+  before the next profile is unlocked. Anything holding a data path or a
+  bank-access id must therefore live in a view model or be cleared there. A test
+  that sets it must restore it in a `finally` block.
 - The database is encrypted with SQLCipher v4 via
   `io.github.willena:sqlite-jdbc` (which replaces xerial's driver in the same
   `org.sqlite` package — never add `org.xerial:sqlite-jdbc`). The app opens it
@@ -76,7 +79,12 @@ transaction.
   `UiBankingInteraction` (blocking prompts rendered as dialogs by
   `BankingPromptHost`).
 - One sync is one FinTS dialog (`fetchAll`), so the user is asked for the PIN
-  once. PINs and TANs are never stored or logged.
+  once. PINs and TANs are never logged, and TANs are never stored. A PIN is
+  stored only when the user ticks "Remember PIN for syncs", and only in the
+  operating system's credential store (`CredentialStore`: macOS Keychain, Linux
+  `secret-tool`, Windows Credential Manager), never in `findesk.db` or a file.
+  Only a sync (`FinTSClient.fetchAll`) uses it; transfers and standing orders
+  always ask.
 - **Never run code against a real bank** in development or tests. The gateway is
   verified only against fakes and a local closed port
   (`Hbci4JavaGatewaySmokeTest`), plus an opt-in live test gated behind
