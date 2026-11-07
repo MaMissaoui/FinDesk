@@ -42,6 +42,7 @@ import de.findesk.ui.navigation.NavigationState
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.navigation.SettingsSection
+import de.findesk.ui.navigation.isBackShortcut
 import de.findesk.ui.navigation.shortcutScreen
 import de.findesk.ui.platform.AppMenuBar
 import de.findesk.ui.platform.MacAppMenuHandlers
@@ -209,8 +210,10 @@ fun main(args: Array<String>) {
                 }
             }
         }
-        // The name shows in the window titles once there is more than one profile
-        val profileLabel = remember(session.slug) { profiles.list().takeIf { it.size > 1 }?.firstOrNull { it.slug == session.slug }?.name }
+        // The name shows in the window titles once there is more than one profile. The store's change counter makes a
+        // rename visible here even though Settings' own ProfileStore instance did it.
+        val profileChanges by ProfileStore.changes.collectAsState()
+        val profileLabel = remember(session.slug, profileChanges) { profiles.list().takeIf { it.size > 1 }?.firstOrNull { it.slug == session.slug }?.name }
         prefs?.let { FinDeskWindow(profileLabel, it, session.slug, profiles, switchProfile, onDisposed = { mainWindowGone?.complete(Unit) }) }
             ?: key(session.slug) {
                 val back = session.previous?.let { previous -> profiles.list().firstOrNull { it.slug == previous } }
@@ -322,8 +325,8 @@ private fun ApplicationScope.FinDeskWindow(
             val target = if (down) shortcutScreen(event.key, event.isCtrlPressed || event.isMetaPressed) else null
             if (target != null) navigationState.navigateTo(target)
             when {
-                // Back: ⌘/Ctrl + [ and Alt + Left arrow; only consumed when something was opened, so typing keeps the keys
-                down && ((event.key == Key.LeftBracket && (event.isCtrlPressed || event.isMetaPressed)) || (event.key == Key.DirectionLeft && event.isAltPressed)) ->
+                // Back: ⌘/Ctrl + [ and, off macOS, Alt + Left arrow; only consumed when something was opened, so typing keeps the keys
+                down && isBackShortcut(event.key, event.isCtrlPressed || event.isMetaPressed, event.isAltPressed, Platform.isMac) ->
                     navigationState.back()
 
                 else -> target != null

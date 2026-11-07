@@ -1,8 +1,10 @@
 package de.findesk.ui
 
+import androidx.compose.ui.input.key.Key
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.NavigationState
 import de.findesk.ui.navigation.Screen
+import de.findesk.ui.navigation.isBackShortcut
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.time.YearMonth
@@ -124,6 +126,25 @@ class NavigationStateTest {
         repeat(10) { assertTrue(nav.back(), "the ${it + 1}. back must work") }
         assertFalse(nav.back(), "the 11th back must refuse: the stack was capped at 10")
         assertNull(nav.backTarget)
+    }
+
+    @Test
+    fun `ctrl or meta plus bracket is back on every platform`() {
+        assertTrue(isBackShortcut(Key.LeftBracket, ctrlOrMeta = true, alt = false, isMac = true))
+        assertTrue(isBackShortcut(Key.LeftBracket, ctrlOrMeta = true, alt = false, isMac = false))
+        assertFalse(isBackShortcut(Key.LeftBracket, ctrlOrMeta = false, alt = false, isMac = true), "a bare bracket is typing")
+    }
+
+    @Test
+    fun `alt plus left is back only off macOS`() {
+        assertTrue(isBackShortcut(Key.DirectionLeft, ctrlOrMeta = false, alt = true, isMac = false))
+        assertFalse(isBackShortcut(Key.DirectionLeft, ctrlOrMeta = false, alt = true, isMac = true), "Option+Left must reach text fields on macOS")
+    }
+
+    @Test
+    fun `plain left is never back`() {
+        assertFalse(isBackShortcut(Key.DirectionLeft, ctrlOrMeta = false, alt = false, isMac = true))
+        assertFalse(isBackShortcut(Key.DirectionLeft, ctrlOrMeta = false, alt = false, isMac = false))
     }
 
     @Test

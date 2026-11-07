@@ -49,6 +49,7 @@ import de.findesk.viewmodel.SettingsState
 import de.findesk.viewmodel.SettingsViewModel
 import java.io.File
 import java.math.BigDecimal
+import java.time.LocalDateTime
 
 /** Whether two or more categories currently share one colour (hex compared case-insensitively). */
 private fun List<CategoryItem>.hasSharedColours(): Boolean = groupBy { it.color.uppercase() }.any { it.value.size > 1 }
@@ -75,6 +76,7 @@ fun SettingsScreen(
     var editRule by remember { mutableStateOf<RuleItem?>(null) }
     var newRule by remember { mutableStateOf(false) }
     var confirmDeleteCategory by remember { mutableStateOf<CategoryItem?>(null) }
+    var confirmDeleteRule by remember { mutableStateOf<RuleItem?>(null) }
     var newProfile by remember { mutableStateOf(false) }
     var renameProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
     var confirmDeleteProfile by remember { mutableStateOf<ProfileStore.Profile?>(null) }
@@ -270,7 +272,7 @@ fun SettingsScreen(
                 state.rules.forEach { r ->
                     RowContextMenu(
                         menuItem(s[StringKey.MenuEdit]) { editRule = r },
-                        menuItem(s[StringKey.Delete]) { vm.deleteRule(r.id) },
+                        menuItem(s[StringKey.Delete]) { confirmDeleteRule = r },
                     ) {
                         Row(
                             Modifier
@@ -302,7 +304,7 @@ fun SettingsScreen(
                                 }
                             }
                             Text(s.format(StringKey.Prio, r.priority) + if (!r.autoApply) " · ${s[StringKey.Manual]}" else "", style = MaterialTheme.typography.bodySmall)
-                            IconButton(onClick = { vm.deleteRule(r.id) }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
+                            IconButton(onClick = { confirmDeleteRule = r }) { Icon(Icons.Default.Delete, contentDescription = s[StringKey.Delete]) }
                         }
                     }
                     HorizontalDivider()
@@ -531,7 +533,9 @@ fun SettingsScreen(
             title = { Text(s.format(StringKey.RestoreFileTitle, file.name)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(s.format(StringKey.RestoreCreated, info.created.take(16).replace('T', ' '), info.transactions, info.documents))
+                    val created = runCatching { Formats.dateTime(LocalDateTime.parse(info.created)) }
+                        .getOrElse { info.created.take(16).replace('T', ' ') }
+                    Text(s.format(StringKey.RestoreCreated, created, info.transactions, info.documents))
                     Text(s[StringKey.RestoreExplanation])
                 }
             },
@@ -553,6 +557,14 @@ fun SettingsScreen(
             text = s[StringKey.DeleteCategoryText],
             onConfirm = { vm.deleteCategory(c.id) },
             onDismiss = { confirmDeleteCategory = null },
+        )
+    }
+    confirmDeleteRule?.let { r ->
+        ConfirmDialog(
+            title = s.format(StringKey.DeleteRuleTitle, r.pattern),
+            text = s[StringKey.DeleteRuleText],
+            onConfirm = { vm.deleteRule(r.id) },
+            onDismiss = { confirmDeleteRule = null },
         )
     }
 }

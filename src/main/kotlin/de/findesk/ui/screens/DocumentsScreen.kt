@@ -270,7 +270,7 @@ private fun DocumentDetail(
             } else {
                 if (state.suggestions.isNotEmpty()) {
                     Text(s[StringKey.SuggestedMatches], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    state.suggestions.forEach { s2 -> LinkCandidateRow(s2.transaction, s.format(StringKey.MatchPercent, "${(s2.score * 100).toInt()}%")) { onLink(s2.transaction.id) } }
+                    state.suggestions.forEach { s2 -> LinkCandidateRow(s2.transaction, s.format(StringKey.MatchPercent, Formats.percent(s2.score))) { onLink(s2.transaction.id) } }
                 }
                 OutlinedTextField(
                     value = pickerQuery,
