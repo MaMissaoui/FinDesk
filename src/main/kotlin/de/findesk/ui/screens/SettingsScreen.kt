@@ -520,6 +520,7 @@ fun SettingsScreen(
     state.ruleImport?.let { preview ->
         RuleImportDialog(
             preview = preview,
+            isImporting = state.isImportingRules,
             onConfirm = vm::confirmRuleImport,
             onDismiss = vm::cancelRuleImport,
         )
@@ -838,6 +839,7 @@ private fun ProfileNameDialog(initial: String, onDismiss: () -> Unit, onConfirm:
 @Composable
 private fun RuleImportDialog(
     preview: de.findesk.importer.RuleImportPreview,
+    isImporting: Boolean,
     onConfirm: (categorize: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -877,12 +879,15 @@ private fun RuleImportDialog(
             }
         },
         confirmButton = {
-            Button(
-                enabled = preview.newRules.isNotEmpty() || preview.categoriesToCreate.isNotEmpty(),
-                onClick = { onConfirm(categorize) },
-            ) { Text(s[StringKey.Import]) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    enabled = !isImporting && (preview.newRules.isNotEmpty() || preview.categoriesToCreate.isNotEmpty()),
+                    onClick = { onConfirm(categorize) },
+                ) { Text(s[StringKey.Import]) }
+                if (isImporting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { TextButton(enabled = !isImporting, onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 

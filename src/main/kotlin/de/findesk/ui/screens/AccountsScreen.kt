@@ -49,15 +49,23 @@ import de.findesk.util.LOAN_TYPE
 import de.findesk.util.balanceTone
 import de.findesk.viewmodel.AccountDetail
 import de.findesk.viewmodel.AccountsViewModel
+import de.findesk.viewmodel.Busy
 import java.math.BigDecimal
 import java.time.LocalDate
 
 @Composable
-fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
-    val vm = rememberViewModel { AccountsViewModel() }
+fun AccountsScreen(
+    createViewModel: () -> AccountsViewModel = { AccountsViewModel() },
+    onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> },
+) {
+    val vm = rememberViewModel(createViewModel)
     val state by vm.state.collectAsState()
+    val busy by Busy.active.collectAsState()
     val s = strings()
     LaunchedEffect(Unit) { vm.loadAccounts() }
+
+    // A sync or an import may still insert under these accounts: no delete while one runs
+    val deleteEnabled = !state.isSyncing && !busy
 
     var showAddBank by remember { mutableStateOf(false) }
     var addAccountFor by remember { mutableStateOf<BankAccessItem?>(null) }
@@ -169,6 +177,7 @@ fun AccountsScreen(onNavigate: (Screen, NavigationArgs) -> Unit = { _, _ -> }) {
                         syncing = state.syncingBankId == bank.id,
                         syncStep = state.syncStep,
                         syncEnabled = !state.isSyncing,
+                        deleteEnabled = deleteEnabled,
                         onToggleCollapse = { vm.toggleBankCollapsed(bank.id) },
                         onSync = { vm.syncBankAccess(bank.id) },
                         onToggleIncludeInSyncAll = { vm.setIncludeInSyncAll(bank.id, !bank.includeInSyncAll) },
@@ -344,6 +353,7 @@ private fun BankCard(
     syncing: Boolean,
     syncStep: String?,
     syncEnabled: Boolean,
+    deleteEnabled: Boolean,
     onToggleCollapse: () -> Unit,
     onSync: () -> Unit,
     onToggleIncludeInSyncAll: () -> Unit,
@@ -373,7 +383,7 @@ private fun BankCard(
                 menuItem(s[StringKey.AddAccount], onAddAccount),
                 menuItem(s[StringKey.RenameConnection], onRename),
                 syncEnabled.takeIf { it && !bank.offline }?.let { menuItem(s[StringKey.ConnectionSettings], onEditConnection) },
-                menuItem(s[StringKey.RemoveBank], onDeleteBank),
+                if (deleteEnabled) menuItem(s[StringKey.RemoveBank], onDeleteBank) else null,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // The chevron only folds the account rows away; sync and every header action stay reachable
@@ -503,14 +513,16 @@ private fun BankCard(
                                     },
                                 )
                             }
-                            DropdownMenuItem(
-                                text = { Text(s[StringKey.RemoveBank], color = MaterialTheme.colorScheme.error) },
-                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                onClick = {
-                                    bankMenu = false
-                                    onDeleteBank()
-                                },
-                            )
+                            if (deleteEnabled) {
+                                DropdownMenuItem(
+                                    text = { Text(s[StringKey.RemoveBank], color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                                    onClick = {
+                                        bankMenu = false
+                                        onDeleteBank()
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -532,7 +544,7 @@ private fun BankCard(
                         menuItem(s[StringKey.RenameAccount]) { onRenameAccount(account) },
                         menuItem(s[StringKey.ChangeAccountType]) { onEditBalance(account) },
                         menuItem(s[StringKey.EditBalance]) { onEditBalance(account) },
-                        menuItem(s[StringKey.DeleteAccount]) { onDeleteAccount(account) },
+                        if (deleteEnabled) menuItem(s[StringKey.DeleteAccount]) { onDeleteAccount(account) } else null,
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -570,6 +582,7 @@ private fun BankCard(
                                 onEditBalance = { onEditBalance(account) },
                                 onDelete = { onDeleteAccount(account) },
                                 onForgetDeleted = { onForgetDeleted(account) },
+                                deleteEnabled = deleteEnabled,
                             )
                         }
                     }
@@ -590,6 +603,8 @@ internal fun AccountRowMenu(
     modifier: Modifier = Modifier,
     /** "Allow deleted bookings again" from the account's menu; see [AccountsViewModel.forgetDeletedBookings]. */
     onForgetDeleted: () -> Unit = {},
+    /** False while a sync or import runs: the delete entry is left out entirely. */
+    deleteEnabled: Boolean = true,
 ) {
     val s = strings()
     var expanded by remember { mutableStateOf(false) }
@@ -644,14 +659,16 @@ internal fun AccountRowMenu(
                     onForgetDeleted()
                 },
             )
-            DropdownMenuItem(
-                text = { Text(s[StringKey.DeleteAccount], color = MaterialTheme.colorScheme.error) },
-                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                onClick = {
-                    expanded = false
-                    onDelete()
-                },
-            )
+            if (deleteEnabled) {
+                DropdownMenuItem(
+                    text = { Text(s[StringKey.DeleteAccount], color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    onClick = {
+                        expanded = false
+                        onDelete()
+                    },
+                )
+            }
         }
     }
 }

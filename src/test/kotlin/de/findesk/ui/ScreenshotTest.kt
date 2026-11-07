@@ -79,6 +79,8 @@ import java.io.File
 import java.math.BigDecimal
 import java.nio.file.Files
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -953,6 +955,48 @@ class ScreenshotTest {
         render("accounts-sync-all", 1440, 900) { Frame(Screen.ACCOUNTS, dark = false) }
     }
 
+    /** Accounts while a sync runs: the bank card shows its progress and offers no delete entry. */
+    @Test
+    fun `render accounts while a sync is running`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-accounts-syncing").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37"))
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val gateway = object : FinTSGateway {
+            override fun fetchAll(connection: FinTSConnection, interaction: BankingInteraction, since: (String) -> java.time.LocalDate?, to: java.time.LocalDate): List<AccountSnapshot> {
+                entered.countDown()
+                release.await(30, TimeUnit.SECONDS)
+                return emptyList()
+            }
+
+            override fun transfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = throw UnsupportedOperationException()
+
+            override fun instantTransfer(connection: FinTSConnection, interaction: BankingInteraction, fromIban: String, order: TransferOrder): FinTSClient.TransferResult = throw UnsupportedOperationException()
+        }
+        val vm = AccountsViewModel(
+            bankingService = BankingService(
+                finTSClient = FinTSClient(
+                    gateway = gateway,
+                    passportDir = File(Files.createTempDirectory("findesk-accounts-syncing-passports").toFile(), "passports"),
+                ),
+            ),
+        )
+        runBlocking { vm.loadAccounts().join() }
+        val sync = vm.syncBankAccess(bank)
+        try {
+            check(entered.await(10, TimeUnit.SECONDS)) { "the sync did not reach the gateway" }
+            // The sync is deliberately still in flight: render without waiting for view-model work to finish
+            render("accounts-syncing", 1440, 900, waitForIdle = false) {
+                Frame(Screen.ACCOUNTS, dark = false, accounts = { vm })
+            }
+        } finally {
+            release.countDown()
+            runBlocking { sync.join() }
+            vm.close()
+        }
+    }
+
     /** The unread-booking counter: panel badges, a bold account name and bold rows for a sync's fresh bookings. */
     @Test
     fun `render transactions with new bookings`() {
@@ -1042,7 +1086,7 @@ class ScreenshotTest {
 
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
-    private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, afterStable: (() -> Unit)? = null, content: @Composable () -> Unit) {
+    private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, afterStable: (() -> Unit)? = null, waitForIdle: Boolean = true, content: @Composable () -> Unit) {
         // ImageComposeScene runs effects on Dispatchers.Unconfined by default, so collectAsState resumed on the view model's IO
         // thread and wrote state from there while this thread rendered; some of those writes never reached the picture.
         // Effects are queued instead and run here, on the rendering thread, around every frame.
@@ -1078,13 +1122,13 @@ class ScreenshotTest {
             fun settle(png: ByteArray, limit: Long = 150, minimumFrames: Long = 10): ByteArray {
                 var currentPng = png
                 var stable = 0
-                while (frame < limit && (frame < minimumFrames || stable < 10 || ViewModelWork.active > 0)) {
+                while (frame < limit && (frame < minimumFrames || stable < 10 || (waitForIdle && ViewModelWork.active > 0))) {
                     Thread.sleep(100)
                     val current = next()
-                    stable = if (current.contentEquals(currentPng) && ViewModelWork.active == 0) stable + 1 else 0
+                    stable = if (current.contentEquals(currentPng) && (!waitForIdle || ViewModelWork.active == 0)) stable + 1 else 0
                     currentPng = current
                 }
-                if (ViewModelWork.active > 0) {
+                if (waitForIdle && ViewModelWork.active > 0) {
                     throw IllegalStateException("$name: view-model work still running after $frame frames")
                 }
                 return currentPng
@@ -1130,6 +1174,7 @@ class ScreenshotTest {
         settingsArgs: NavigationArgs = NavigationArgs(),
         dashboard: (() -> DashboardViewModel)? = null,
         reports: (() -> ReportsViewModel)? = null,
+        accounts: (() -> AccountsViewModel)? = null,
         backTarget: Screen? = null,
     ) {
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
@@ -1152,7 +1197,7 @@ class ScreenshotTest {
                             Box(Modifier.fillMaxSize()) {
                                 when (screen) {
                                     Screen.DASHBOARD -> if (dashboard != null) DashboardScreen(createViewModel = dashboard) else DashboardScreen()
-                                    Screen.ACCOUNTS -> AccountsScreen()
+                                    Screen.ACCOUNTS -> if (accounts != null) AccountsScreen(createViewModel = accounts) else AccountsScreen()
                                     Screen.TRANSACTIONS -> if (transactions != null) TransactionsScreen(transactionArgs, createViewModel = transactions) else TransactionsScreen()
                                     Screen.PAYMENTS -> if (payments != null) PaymentsScreen(payments) else PaymentsScreen()
                                     Screen.DOCUMENTS -> DocumentsScreen()

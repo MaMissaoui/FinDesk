@@ -4,6 +4,7 @@ import de.findesk.TestData
 import de.findesk.TestDatabase
 import de.findesk.i18n.AppStrings
 import de.findesk.i18n.StringKey
+import de.findesk.repository.AuditLogRepositoryImpl
 import de.findesk.repository.CategoryRepositoryImpl
 import de.findesk.repository.RuleRepositoryImpl
 import kotlinx.coroutines.runBlocking
@@ -104,6 +105,22 @@ class RuleImportViewModelTest {
         vm.cancelRuleImport()
         vm.confirmRuleImport(categorize = false).join()
         assertTrue(vm.state.value.rules.isEmpty(), "a cancelled import applies nothing")
+        vm.close()
+    }
+
+    @Test
+    fun `two confirmations without a join create each rule and one audit entry`() = runBlocking {
+        data.category("Groceries")
+        val vm = vm(tmp)
+        vm.chooseRuleImport(ruleFile("rules.tsv", "Groceries\tmusterladen\tpartner\texpense\t60\ttrue")).join()
+
+        val first = vm.confirmRuleImport(categorize = true)
+        val second = vm.confirmRuleImport(categorize = true)
+        first.join()
+        second.join()
+
+        assertEquals(1, RuleRepositoryImpl().findAllItems().size, "the rule is created once")
+        assertEquals(1, AuditLogRepositoryImpl().findByAction("IMPORT_RULES").size, "the import is audited once")
         vm.close()
     }
 }

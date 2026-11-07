@@ -58,6 +58,8 @@ data class SettingsState(
     val nextProfile: String? = null,
     /** Rule file chosen for import, waiting for confirmation in the preview dialog. */
     val ruleImport: de.findesk.importer.RuleImportPreview? = null,
+    /** True while a confirmed rule import applies the preview; the dialog's buttons stay disabled. */
+    val isImportingRules: Boolean = false,
 
     /** The tax suggestion keywords as one editable multi-line text (one keyword per line). */
     val taxKeywords: String = "",
@@ -88,6 +90,12 @@ class SettingsViewModel(
     val state: StateFlow<SettingsState> = _state.asStateFlow()
 
     private val onError: (Exception) -> Unit = { e -> _state.update { it.copy(isLoading = false, error = e.userMessage()) } }
+
+    /** Claimed on the calling thread, so a double click can't apply the same preview twice. */
+    private val importingRules = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Claimed on the calling thread, so a double click can't add every default category twice. */
+    private val addingDefaultCategories = java.util.concurrent.atomic.AtomicBoolean(false)
 
     companion object {
         const val KEY_DARK_THEME = "ui.dark_theme"
@@ -279,18 +287,25 @@ class SettingsViewModel(
     }
 
     /** Adds the default categories that do not exist yet, in the current UI language; nothing else changes. */
-    fun addDefaultCategories(): Job = launchSafely(onError) {
-        val existing = categoryRepository.findAllItems().map { it.name.trim().lowercase() }.toSet()
-        val current = AppStrings.current
-        val toCreate = DefaultCategories.entries.filter { (key, _, _) -> current[key].trim().lowercase() !in existing }
-        val added = toCreate.size
-        toCreate.forEach { (key, color, isTransfer) -> categoryRepository.create(current[key].trim(), color, isTransfer = isTransfer) }
-        auditLogRepository.log("ADD_DEFAULT_CATEGORIES", "user", "Added $added default categories")
-        refresh()
-        _state.update {
-            it.copy(
-                message = if (added == 0) AppStrings[StringKey.MessageDefaultCategoriesNone] else AppStrings.format(StringKey.MessageDefaultCategoriesAdded, added),
-            )
+    fun addDefaultCategories(): Job {
+        if (!addingDefaultCategories.compareAndSet(false, true)) return Job().apply { complete() }
+        return launchSafely(onError) {
+            try {
+                val existing = categoryRepository.findAllItems().map { it.name.trim().lowercase() }.toSet()
+                val current = AppStrings.current
+                val toCreate = DefaultCategories.entries.filter { (key, _, _) -> current[key].trim().lowercase() !in existing }
+                val added = toCreate.size
+                toCreate.forEach { (key, color, isTransfer) -> categoryRepository.create(current[key].trim(), color, isTransfer = isTransfer) }
+                auditLogRepository.log("ADD_DEFAULT_CATEGORIES", "user", "Added $added default categories")
+                refresh()
+                _state.update {
+                    it.copy(
+                        message = if (added == 0) AppStrings[StringKey.MessageDefaultCategoriesNone] else AppStrings.format(StringKey.MessageDefaultCategoriesAdded, added),
+                    )
+                }
+            } finally {
+                addingDefaultCategories.set(false)
+            }
         }
     }
 
@@ -326,15 +341,27 @@ class SettingsViewModel(
     }
 
     /** Step 2: confirmed. Applies the preview to the database and marks the import done. */
-    fun confirmRuleImport(categorize: Boolean): Job = launchSafely(onError) {
-        val preview = _state.value.ruleImport ?: return@launchSafely
-        val result = ruleImportService.apply(preview, categorize)
-        refresh()
-        _state.update {
-            it.copy(
-                ruleImport = null,
-                message = AppStrings.format(StringKey.MessageRulesImported, result.rules, result.categories, result.categorized),
-            )
+    fun confirmRuleImport(categorize: Boolean): Job {
+        if (!importingRules.compareAndSet(false, true)) return Job().apply { complete() }
+        _state.update { it.copy(isImportingRules = true) }
+        return launchSafely({ e ->
+            importingRules.set(false)
+            _state.update { it.copy(isImportingRules = false, error = e.userMessage()) }
+        }) {
+            try {
+                val preview = _state.value.ruleImport ?: return@launchSafely
+                val result = ruleImportService.apply(preview, categorize)
+                refresh()
+                _state.update {
+                    it.copy(
+                        ruleImport = null,
+                        message = AppStrings.format(StringKey.MessageRulesImported, result.rules, result.categories, result.categorized),
+                    )
+                }
+            } finally {
+                importingRules.set(false)
+                _state.update { it.copy(isImportingRules = false) }
+            }
         }
     }
 

@@ -222,8 +222,17 @@ class PaymentsViewModel(
         if (!sending.compareAndSet(false, true)) return Job().apply { complete() }
         _state.update { it.copy(isSending = true, error = null, message = null) }
         return launchSafely({ e ->
+            // The order may have reached the bank before the exception: never leave the review ready to send twice
             sending.set(false)
-            onError(e)
+            _state.update {
+                it.copy(
+                    isSending = false,
+                    review = null,
+                    editReview = null,
+                    editDraft = null,
+                    error = AppStrings.format(StringKey.ErrorOrderOutcomeUnknown, e.message ?: e.javaClass.simpleName),
+                )
+            }
         }) {
             val result = try {
                 Busy.track {
@@ -249,7 +258,6 @@ class PaymentsViewModel(
             } finally {
                 sending.set(false)
             }
-            refresh()
             val sent = when {
                 review.editOf != null -> AppStrings[StringKey.MessageStandingOrderChanged]
                 review.schedule != null -> AppStrings.format(StringKey.MessageStandingOrderSetUp, order.recipientName)
@@ -257,13 +265,18 @@ class PaymentsViewModel(
                 review.instant -> AppStrings[StringKey.MessageInstantTransferAccepted]
                 else -> AppStrings.format(StringKey.MessageTransferSent, order.recipientName)
             }
-            // A new or changed standing order makes the loaded list stale
-            if (result is BankingResult.Success && review.schedule != null) _state.update { it.copy(standingOrders = null) }
-            // So does a new scheduled transfer
-            if (result is BankingResult.Success && review.date != null) _state.update { it.copy(scheduledTransfers = null) }
+            // The bank's answer goes into the state first, before anything that could fail afterwards
             _state.update {
                 when (result) {
-                    is BankingResult.Success -> it.copy(isSending = false, review = null, message = sent)
+                    is BankingResult.Success -> it.copy(
+                        isSending = false,
+                        review = null,
+                        message = sent,
+                        // A new or changed standing order makes the loaded list stale
+                        standingOrders = if (review.schedule != null) null else it.standingOrders,
+                        // So does a new scheduled transfer
+                        scheduledTransfers = if (review.date != null) null else it.scheduledTransfers,
+                    )
 
                     // A definite rejection keeps the review open to correct and retry; an unknown outcome closes it, so
                     // sending again takes a fresh review that shows the unconfirmed order
@@ -276,6 +289,14 @@ class PaymentsViewModel(
                     // A closed review ends the edit too: the form must not reopen after a sent, cancelled or unknown order
                     if (review.editOf != null && s.review == null) s.copy(editReview = null, editDraft = null) else s
                 }
+            }
+            // A failed refresh must not turn the bank's answer into an unknown outcome
+            try {
+                refresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.userMessage()) }
             }
             // After a successful edit the list shows the changed order without another click on "Load from bank"
             if (result is BankingResult.Success && review.editOf != null) loadStandingOrders(from)
