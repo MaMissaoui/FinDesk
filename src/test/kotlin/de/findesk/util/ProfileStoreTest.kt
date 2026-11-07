@@ -61,6 +61,21 @@ class ProfileStoreTest {
     }
 
     @Test
+    fun `create rename and delete increment the process-wide change counter`() {
+        val store = ProfileStore(root)
+        val before = ProfileStore.changes.value
+
+        val business = store.create("Business")
+        assertEquals(before + 1, ProfileStore.changes.value)
+
+        ProfileStore(root).rename(business.slug, "Firma")
+        assertEquals(before + 2, ProfileStore.changes.value, "a rename through another instance is visible too")
+
+        store.delete(business.slug!!, openSlug = null)
+        assertEquals(before + 3, ProfileStore.changes.value)
+    }
+
+    @Test
     fun `delete moves the folder aside and refuses the default and the open profile`() {
         val store = ProfileStore(root)
         val business = store.create("Business")

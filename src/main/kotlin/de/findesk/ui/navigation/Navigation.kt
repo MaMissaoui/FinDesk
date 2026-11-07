@@ -147,6 +147,13 @@ class NavigationState {
     }
 }
 
+/**
+ * The Back shortcut: ⌘/Ctrl + `[` everywhere, and Alt + Left only off macOS. On macOS Option+Left is the
+ * text field's "word left" key, so it must reach the focused field instead of navigating away.
+ */
+fun isBackShortcut(key: androidx.compose.ui.input.key.Key, ctrlOrMeta: Boolean, alt: Boolean, isMac: Boolean): Boolean = (key == androidx.compose.ui.input.key.Key.LeftBracket && ctrlOrMeta) ||
+    (key == androidx.compose.ui.input.key.Key.DirectionLeft && alt && !isMac)
+
 /** ⌘/Ctrl + 1…7 open the screens in sidebar order; the macOS View menu lists the same keys. */
 val screenShortcutKeys: List<androidx.compose.ui.input.key.Key> = listOf(
     androidx.compose.ui.input.key.Key.One,

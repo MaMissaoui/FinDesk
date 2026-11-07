@@ -1,5 +1,9 @@
 package de.findesk.util
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -35,6 +39,11 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
         const val MAX_NAME_LENGTH = 40
         private val SLUG = Regex("[a-z0-9]+(-[a-z0-9]+)*")
         private val STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+
+        private val _changes = MutableStateFlow(0)
+
+        /** Incremented after every create, rename and delete, so views with their own instance notice the change. */
+        val changes: StateFlow<Int> = _changes.asStateFlow()
 
         fun profileDir(rootDir: File, slug: String): File {
             require(SLUG.matches(slug) && slug != DEFAULT_KEY) { "Invalid profile id: $slug" }
@@ -73,6 +82,7 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
         val dir = FileSecurity.secureDirectory(profileDir(rootDir, slug))
         props.setProperty(NAME_PREFIX + slug, clean)
         save(props)
+        _changes.update { it + 1 }
         return Profile(slug, clean, dir)
     }
 
@@ -82,6 +92,7 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
         if (slug != null) require(props.containsKey(NAME_PREFIX + slug)) { "Unknown profile: $slug" }
         props.setProperty(NAME_PREFIX + (slug ?: DEFAULT_KEY), clean)
         save(props)
+        _changes.update { it + 1 }
     }
 
     /** Takes effect at the next start. */
@@ -109,6 +120,7 @@ class ProfileStore(private val rootDir: File = AppPaths.rootDir) {
         props.remove(NAME_PREFIX + slug)
         if (props.getProperty(KEY_ACTIVE) == slug) props.setProperty(KEY_ACTIVE, "")
         save(props)
+        _changes.update { it + 1 }
         return target
     }
 
