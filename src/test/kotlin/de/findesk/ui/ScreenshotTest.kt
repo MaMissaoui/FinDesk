@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -16,6 +17,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import de.findesk.banking.AccountSnapshot
 import de.findesk.banking.BankCapabilities
 import de.findesk.banking.BankingCancelledException
@@ -50,6 +52,7 @@ import de.findesk.repository.NewTransaction
 import de.findesk.repository.PaymentOrderRepositoryImpl
 import de.findesk.repository.SettingsRepositoryImpl
 import de.findesk.repository.TransactionRepositoryImpl
+import de.findesk.ui.components.BankBadge
 import de.findesk.ui.components.ProfileMenuModel
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.components.TopBar
@@ -775,18 +778,87 @@ class ScreenshotTest {
     @Test
     fun `render accounts with a custom account name`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-names").toFile().absolutePath)
-        val bank = BankAccessRepositoryImpl().create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        val banks = BankAccessRepositoryImpl()
+        val dkb = banks.create("DKB", "12030000", "BYLADEM1001", "demo-user").id.value
+        val sparkasse = banks.create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val volksbank = banks.create("Volksbank Mittelhessen", "51390000", "VBMHDE5FXXX", "demo-user").id.value
+        val unknown = banks.create("Hausbank Muster", "12345678", "TESTDEFFXXX", "demo-user").id.value
         val accounts = AccountRepositoryImpl()
-        val named = accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
-        accounts.create(bank, "DE02120300000000202051", balance = BigDecimal("-45.10"))
+        val named = accounts.create(dkb, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        accounts.create(dkb, "DE02120300000000202051", balance = BigDecimal("-45.10"))
         accounts.rename(named, "Haushalt")
+        // Logo, logo, logo and monogram: the three matching paths an Accounts card shows
+        accounts.create(sparkasse, "DE44500105175407324931", balance = BigDecimal("15000.00"), accountType = "savings")
+        accounts.create(volksbank, "DE02100500000054540402", balance = BigDecimal("812.40"))
+        accounts.create(unknown, "DE02120300000000202052", balance = BigDecimal("-120.00"))
 
         render("accounts-named", Screen.ACCOUNTS, dark = false)
         render("accounts-named-dark", Screen.ACCOUNTS, dark = true)
 
         // The same bank, with its account rows folded away
-        SettingsRepositoryImpl().setValue(AccountsViewModel.KEY_COLLAPSED_BANKS, bank.toString())
+        SettingsRepositoryImpl().setValue(AccountsViewModel.KEY_COLLAPSED_BANKS, dkb.toString())
         render("accounts-collapsed", Screen.ACCOUNTS, dark = false)
+    }
+
+    /** Every bundled logo at the largest badge size, plus a monogram: a missing or unrenderable asset shows up here. */
+    @Test
+    fun `render the bank badges`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-badges").toFile().absolutePath)
+        val samples = listOf(
+            Triple("HypoVereinsbank", "UniCredit Bank - HypoVereinsbank AG", "HYVEDEMMXXX"),
+            Triple("DKB", "DKB", "BYLADEM1001"),
+            Triple("Postbank", "Postbank", "PBNKDEFFXXX"),
+            Triple("Deutsche Bank", "Deutsche Bank", "DEUTDEFFXXX"),
+            Triple("Commerzbank", "Commerzbank", "COBADEFFXXX"),
+            Triple("Santander", "Santander Consumer Bank", "SCFBDEFFXXX"),
+            Triple("N26", "N26 Bank", "NTSBDEB1XXX"),
+            Triple("Sparkasse", "Sparkasse KölnBonn", "COLSDE33XXX"),
+            Triple("Volksbank", "Volksbank Mittelhessen", "VBMHDE5FXXX"),
+            Triple("Monogram", "Bank Norwegian", ""),
+        )
+        render("bank-badges", 420, 640) {
+            CompositionLocalProvider(LocalStrings provides Translations.of(AppLanguage.EN)) {
+                FinDeskTheme(darkTheme = false) {
+                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            samples.forEach { (label, name, bic) ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    BankBadge(name = name, blz = null, bic = bic, size = 40.dp)
+                                    Spacer(Modifier.width(16.dp))
+                                    Text(label)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** The account properties dialog: the 40 px bank badge (logo or monogram) next to the account name. */
+    @Test
+    fun `render the account properties dialog with a bank badge`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-account-detail").toFile().absolutePath)
+        val banks = BankAccessRepositoryImpl()
+        val sparkasse = banks.create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val unknown = banks.create("Hausbank Muster", "12345678", "TESTDEFFXXX", "demo-user").id.value
+        val accounts = AccountRepositoryImpl()
+        val household = accounts.create(sparkasse, "DE23370501980000000001", balance = BigDecimal("2450.37")).id.value
+        accounts.rename(household, "Haushalt")
+        val cash = accounts.create(unknown, "DE17123456780000000001", balance = BigDecimal("99.00")).id.value
+
+        fun opening(accountId: Int): AccountsViewModel = AccountsViewModel().apply {
+            runBlocking {
+                loadAccounts().join()
+                openDetail(accountId).join()
+            }
+            check(state.value.detail?.account?.id == accountId) { "the account properties should be open" }
+        }
+
+        render("accounts-detail", 1440, 900) { Frame(Screen.ACCOUNTS, dark = false, accounts = { opening(household) }) }
+        render("accounts-detail-dark", 1440, 900) { Frame(Screen.ACCOUNTS, dark = true, accounts = { opening(household) }) }
+        // An unknown bank falls back to the monogram badge
+        render("accounts-detail-monogram", 1440, 900) { Frame(Screen.ACCOUNTS, dark = false, accounts = { opening(cash) }) }
     }
 
     /** A bank whose loan accounts have no bank balance and therefore carry the negative amounts the user entered. */
@@ -907,13 +979,19 @@ class ScreenshotTest {
     @Test
     fun `render transactions with the account panel`() {
         DatabaseFactory.init(Files.createTempDirectory("findesk-panel").toFile().absolutePath)
-        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val banks = BankAccessRepositoryImpl()
+        val bank = banks.create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val volksbank = banks.create("Volksbank Mittelhessen", "51390000", "VBMHDE5FXXX", "demo-user").id.value
+        val unknown = banks.create("Hausbank Muster", "12345678", "TESTDEFFXXX", "demo-user").id.value
         val accounts = AccountRepositoryImpl()
-        val household = accounts.create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        val household = accounts.create(bank, "DE23370501980000000001", balance = BigDecimal("2450.37")).id.value
         accounts.rename(household, "Haushalt")
-        accounts.create(bank, "DE02120300000000202051", balance = BigDecimal("812.40"))
-        val savings = accounts.create(bank, "DE44500105175407324931", balance = BigDecimal("15000.00"), accountType = "savings").id.value
-        accounts.create(bank, "DE02120300000000202052", balance = BigDecimal("-5400.00"), currency = "USD", accountType = "depot")
+        accounts.create(bank, "DE93370501980000000002", balance = BigDecimal("812.40"))
+        val savings = accounts.create(bank, "DE66370501980000000003", balance = BigDecimal("15000.00"), accountType = "savings").id.value
+        accounts.create(bank, "DE39370501980000000004", balance = BigDecimal("-5400.00"), currency = "USD", accountType = "depot")
+        // A type group that stands for one bank shows that bank's badge; the rows show logo or monogram
+        accounts.create(volksbank, "DE58513900000000000001", balance = BigDecimal("-12000.00"), accountType = "loan")
+        accounts.create(unknown, "DE17123456780000000001", balance = BigDecimal("99.00"), accountType = "other")
         val reisen = AccountGroupRepositoryImpl().create("Reisen")
         accounts.setGroup(savings, reisen.id)
 

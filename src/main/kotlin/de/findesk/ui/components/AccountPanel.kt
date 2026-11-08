@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import de.findesk.banking.BankDirectory
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
@@ -408,6 +409,14 @@ private fun GroupHeaderRow(
                 modifier = Modifier.size(18.dp),
             )
         }
+        // A type group that holds one bank's accounts stands for that bank; "All accounts" and custom groups do not
+        val singleBank = (view.key as? GroupKey.Type)
+            ?.let { view.accounts.firstOrNull() }
+            ?.takeIf { first -> view.accounts.all { it.bankAccessId == first.bankAccessId } }
+        singleBank?.let { account ->
+            AccountBankBadge(account)
+            Spacer(Modifier.width(8.dp))
+        }
         Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         NewCountBadge(view.newCount, selected = selected)
         Spacer(Modifier.width(8.dp))
@@ -470,6 +479,8 @@ private fun AccountRow(
                 )
             },
     ) {
+        AccountBankBadge(account)
+        Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 s.accountName(account),
@@ -500,6 +511,22 @@ private fun AccountRow(
             color = panelAmountColor(balanceTone(listOf(account), account.currency), selected),
         )
     }
+}
+
+/**
+ * The badge for a panel row. The panel only carries the account, not its connection, so the account is treated like
+ * one without a connection: its German IBAN's BLZ and the bundled directory give the bank, and the account's own
+ * bank name is the fallback (an offline account without an IBAN gets a monogram).
+ */
+@Composable
+private fun AccountBankBadge(account: AccountItem) {
+    val entry = remember(account.iban) { BankDirectory.byIban(account.iban) }
+    BankBadge(
+        name = entry?.name ?: account.bankName,
+        blz = entry?.blz ?: BankDirectory.blzFromIban(account.iban),
+        bic = entry?.bic,
+        size = 24.dp,
+    )
 }
 
 /** One small name dialog for both a new and a renamed group; Save stays disabled while blank. */

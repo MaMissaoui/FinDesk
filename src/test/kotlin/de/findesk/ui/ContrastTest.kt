@@ -3,6 +3,7 @@ package de.findesk.ui
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import de.findesk.ui.components.MonogramColors
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.DarkColorScheme
 import de.findesk.ui.theme.Error
@@ -19,6 +20,7 @@ import de.findesk.ui.theme.SuccessDark
 import de.findesk.ui.theme.SuccessOnSelectionDark
 import de.findesk.ui.theme.SuccessOnSelectionLight
 import de.findesk.ui.theme.readableOn
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -114,6 +116,15 @@ class ContrastTest {
             // A positive balance stays green on a selected row, in the selection-safe green
             val selectionSuccess = if (name == "light") SuccessOnSelectionLight else SuccessOnSelectionDark
             assertContrast(selectionSuccess, selection, "positive balance on selected row ($name)")
+        }
+    }
+
+    /** The monogram badge draws white SemiBold letters on one of eight fixed colours, in both themes. */
+    @Test
+    fun `white monogram letters stay readable on every monogram colour`() {
+        assertEquals(8, MonogramColors.size)
+        MonogramColors.forEachIndexed { index, color ->
+            assertContrast(Color.White, color, "white monogram letters on colour $index")
         }
     }
 

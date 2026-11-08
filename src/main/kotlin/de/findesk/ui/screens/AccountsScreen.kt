@@ -214,6 +214,8 @@ fun AccountsScreen(
     state.detail?.let { detail ->
         AccountDetailDialog(
             detail = detail,
+            // The account's bank is its connection; the dialog falls back to the IBAN's directory entry for one without
+            bank = state.bankAccesses.firstOrNull { it.id == detail.account.bankAccessId },
             onDays = { vm.openDetail(detail.account.id, it) },
             onAllTransactions = {
                 vm.closeDetail()
@@ -393,6 +395,8 @@ private fun BankCard(
                             contentDescription = s[if (collapsed) StringKey.Expand else StringKey.Collapse],
                         )
                     }
+                    BankBadge(name = bank.bankName, blz = bank.blz, bic = bank.bic, size = 32.dp)
+                    Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -555,6 +559,8 @@ private fun BankCard(
                                     role = Role.Button,
                                 ),
                         ) {
+                            BankBadge(name = bank.bankName, blz = bank.blz, bic = bank.bic, size = 24.dp)
+                            Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(s.accountName(account), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                                 val subtitle = account.name?.let { "${s.accountType(account.accountType)} · ${AccountIds.display(account.iban)}" } ?: AccountIds.display(account.iban)
@@ -1172,12 +1178,22 @@ private fun FetchHistoryDialog(
 }
 
 @Composable
-private fun AccountDetailDialog(detail: AccountDetail, onDays: (Int) -> Unit, onAllTransactions: () -> Unit, onRename: () -> Unit, onClose: () -> Unit) {
+private fun AccountDetailDialog(detail: AccountDetail, bank: BankAccessItem?, onDays: (Int) -> Unit, onAllTransactions: () -> Unit, onRename: () -> Unit, onClose: () -> Unit) {
     val a = detail.account
     val s = strings()
+    // An account without a connection takes its bank from the German IBAN's BLZ and the bundled directory
+    val badgeName = bank?.bankName ?: a.bankName
+    val badgeBlz = bank?.blz ?: BankDirectory.blzFromIban(a.iban)
+    val badgeBic = bank?.bic ?: BankDirectory.byIban(a.iban)?.bic
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("${a.bankName} · ${s.accountName(a)}") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BankBadge(name = badgeName, blz = badgeBlz, bic = badgeBic, size = 40.dp)
+                Spacer(Modifier.width(12.dp))
+                Text("${a.bankName} · ${s.accountName(a)}")
+            }
+        },
         text = {
             Column(Modifier.width(760.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
