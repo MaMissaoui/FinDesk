@@ -61,12 +61,14 @@ data class DashboardState(
     val loanBalance: BigDecimal = BigDecimal.ZERO,
     /**
      * Money available at the end of the previous month, reconstructed from today's balances and the bookings after
-     * that month. Null when the available accounts' booking history doesn't reach back before the selected month.
+     * that month, for every month, even before an account's first booking. Always set once the month has loaded;
+     * nullable only because it starts unset.
      */
     val carryForward: BigDecimal? = null,
     /**
      * What the available accounts moved outside income and expenses (transfers to loans or depots, interest on a
-     * loan), so [carryForward] and the monthly figures add up to [availableBalance]. Null when [carryForward] is null.
+     * loan), so [carryForward] and the monthly figures add up to [availableBalance]. Always set once the month has
+     * loaded; nullable only because it starts unset.
      */
     val otherMovements: BigDecimal? = null,
     /** The day the available balance is stated for: a past month's last day; null in the current month. */
@@ -181,15 +183,12 @@ class DashboardViewModel(
             val monthlyIncome = thisMonth.filter { it.countsAsIncome }.sumOf { it.amount }
             val monthlyExpenses = thisMonthExpenses.sumOf { it.amount.abs() }
 
-            // The carry-forward is only reliable when the booking history reaches back before the month: otherwise
-            // money from earlier bookings is missing from today's balance and would look like a movement.
-            val oldestByAccount = transactionRepository.oldestDateByAccount()
-            val carryForwardKnown = availableAccounts.all { account ->
-                oldestByAccount[account.id]?.isBefore(monthStart) ?: true
-            }
-            val carryForward = if (carryForwardKnown) availableAccounts.sumOf { balanceAt(it) - movement(it) } else null
+            // The carry-forward is reconstructed for every month from today's balances and the bookings after that
+            // month, even when an account's history only starts later. Earlier money is then part of the balance
+            // carried over, so the identity below still holds.
+            val carryForward = availableAccounts.sumOf { balanceAt(it) - movement(it) }
             // By construction carryForward + monthlyIncome - monthlyExpenses + otherMovements == availableBalance
-            val otherMovements = carryForward?.let { availableAccounts.sumOf { movement(it) } - (monthlyIncome - monthlyExpenses) }
+            val otherMovements = availableAccounts.sumOf { movement(it) } - (monthlyIncome - monthlyExpenses)
 
             val lastMonths = (0 until 6).map { i ->
                 val m = sixMonthsStart.plusMonths(i.toLong())
