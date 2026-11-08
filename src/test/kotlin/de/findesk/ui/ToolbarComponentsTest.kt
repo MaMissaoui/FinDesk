@@ -42,7 +42,7 @@ class ToolbarComponentsTest {
     }
 
     @Test
-    fun `compact search field is 40 dp tall, reports typing and clears`() = runComposeUiTest {
+    fun `compact search field is 36 dp tall, reports typing and clears`() = runComposeUiTest {
         var value by mutableStateOf("")
         setContent {
             Host {
@@ -50,7 +50,7 @@ class ToolbarComponentsTest {
             }
         }
 
-        onNodeWithTag("search").assertHeightIsEqualTo(40.dp)
+        onNodeWithTag("search").assertHeightIsEqualTo(36.dp)
         onNodeWithTag("search").performTextInput("Miete")
         assertEquals("Miete", value)
 

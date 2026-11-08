@@ -39,6 +39,28 @@ val SelectedFillDark = Color(0xFF232D37)
 val OnSelectedFillLight = InkLight
 val OnSelectedFillDark = InkDark
 
+// Quiet filled controls: buttons, icon buttons and the tracks of segmented choices. No outline.
+val ControlFillLight = Color(0xFFE6EAEE)
+val ControlFillDark = Color(0xFF26303A)
+val ControlFillHoverLight = Color(0xFFE1E6EA)
+val ControlFillHoverDark = Color(0xFF2F3A45)
+
+// The selected settings row: a light accent tint on paper, with the same ink and slate text.
+val SelectedAccentLight = Color(0xFFDCE6F5)
+val SelectedAccentDark = Color(0xFF1E2F4D)
+
+/** The quiet filled-control background: neutral in both themes. */
+@Composable
+fun controlFill(): Color = if (isLightTheme()) ControlFillLight else ControlFillDark
+
+/** The hover state of a quiet filled control. */
+@Composable
+fun controlFillHover(): Color = if (isLightTheme()) ControlFillHoverLight else ControlFillHoverDark
+
+/** The selected settings row's accent tint. */
+@Composable
+fun selectedAccent(): Color = if (isLightTheme()) SelectedAccentLight else SelectedAccentDark
+
 // Money in is the only green; expenses are ink. Red is reserved for real problems.
 val MoneyIn = Color(0xFF1E7B4F)
 val MoneyInDark = Color(0xFF5CC28F)

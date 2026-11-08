@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.sp
 import de.findesk.ui.theme.FinDeskFontFamily
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.ui.theme.FinDeskTypography
+import de.findesk.ui.theme.caption
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -50,8 +51,9 @@ class TypographyTest {
         assertScale("titleLarge", FinDeskTypography.titleLarge, 20, 28, FontWeight.SemiBold)
         assertScale("titleMedium", FinDeskTypography.titleMedium, 16, 24, FontWeight.SemiBold)
         assertScale("bodyMedium", FinDeskTypography.bodyMedium, 14, 20, FontWeight.Normal)
-        assertScale("bodySmall", FinDeskTypography.bodySmall, 12, 16, FontWeight.Normal)
-        assertScale("labelSmall", FinDeskTypography.labelSmall, 12, 16, FontWeight.Medium)
+        assertScale("bodySmall", FinDeskTypography.bodySmall, 13, 18, FontWeight.Normal)
+        assertScale("labelSmall", FinDeskTypography.labelSmall, 13, 18, FontWeight.Medium)
+        assertScale("caption", FinDeskTypography.caption, 12, 16, FontWeight.Medium)
     }
 
     private fun assertScale(name: String, style: TextStyle, size: Int, lineHeight: Int, weight: FontWeight) {

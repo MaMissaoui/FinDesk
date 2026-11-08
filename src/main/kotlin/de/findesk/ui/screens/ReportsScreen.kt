@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -31,6 +34,7 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.chartOutColor
 import de.findesk.ui.theme.inflowColor
 import de.findesk.ui.theme.netColor
 import de.findesk.util.BankText
@@ -86,9 +90,19 @@ fun ReportsScreen(
                         },
                     )
                     if (!customMode) {
-                        IconButton(onClick = { vm.updateYear(state.selectedYear - 1) }) { Icon(Icons.Default.ArrowBack, contentDescription = s[StringKey.PreviousYear]) }
-                        Text(state.selectedYear.toString(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { vm.updateYear(state.selectedYear + 1) }) { Icon(Icons.Default.ArrowForward, contentDescription = s[StringKey.NextYear]) }
+                        PeriodNavigator(
+                            label = state.selectedYear.toString(),
+                            // The current year and the twenty before it; the arrows still reach any year
+                            options = (LocalDate.now().year downTo LocalDate.now().year - 20).toList(),
+                            optionLabel = { it.toString() },
+                            onSelect = { vm.updateYear(it) },
+                            onPrevious = { vm.updateYear(state.selectedYear - 1) },
+                            onNext = { vm.updateYear(state.selectedYear + 1) },
+                            previousEnabled = true,
+                            nextEnabled = true,
+                            previousContentDescription = s[StringKey.PreviousYear],
+                            nextContentDescription = s[StringKey.NextYear],
+                        )
                     } else {
                         DateRangeInputs(
                             initial = state.customRange ?: (LocalDate.now().withDayOfMonth(1).minusMonths(2) to LocalDate.now()),
@@ -107,7 +121,11 @@ fun ReportsScreen(
                 // An empty period has nothing to export; the disabled button says so
                 val nothingToExport = report?.takeIf { it.transactionCount == 0 }
                 DisabledReason(nothingToExport?.let { s.format(StringKey.NothingToExport, it.title) }) {
-                    AppButton(enabled = !state.isExporting && !state.isLoading && nothingToExport == null, onClick = { exportMenu = true }) {
+                    AppButton(
+                        enabled = !state.isExporting && !state.isLoading && nothingToExport == null,
+                        onClick = { exportMenu = true },
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                    ) {
                         Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(s[StringKey.Export])
@@ -253,19 +271,14 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
             }
         }
         item {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), AppIcons.AddCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(false))
-                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), AppIcons.RemoveCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(true))
-                StatCard(
-                    s[StringKey.NetIncome],
-                    Formats.money(report.netIncome, report.currency),
-                    AppIcons.BarChart,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                    Modifier.weight(1f),
-                    valueColor = netColor(report.netIncome),
-                )
-                StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f))
-            }
+            SummaryFigures(
+                listOf(
+                    KpiFigure(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), amountColor(false)),
+                    KpiFigure(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), amountColor(true)),
+                    KpiFigure(s[StringKey.NetIncome], Formats.money(report.netIncome, report.currency), netColor(report.netIncome)),
+                    KpiFigure(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), MaterialTheme.colorScheme.onSurface),
+                ),
+            )
         }
         item {
             SectionCard(s[StringKey.TaxRelevantByCategory], Modifier.fillMaxWidth()) {
@@ -275,11 +288,11 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                report.taxRelevantExpenses.forEach { (category, amount) -> AmountRow(category, amount, report.currency) }
+                report.taxRelevantExpenses.forEach { (category, amount) -> AmountRow(category, amount, report.currency, report.taxRelevantTotal) }
             }
         }
         item {
-            // Quick statistics as plain stat cards, matching the dashboard's row
+            // Quick statistics on one surface, like the headline figures above
             val activeMonths = report.monthlyBreakdown.filter { it.expenses.signum() > 0 }
             val avgMonthly = if (activeMonths.isEmpty()) {
                 BigDecimal.ZERO
@@ -287,18 +300,19 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
                 report.totalExpenses.divide(BigDecimal(activeMonths.size), 2, RoundingMode.HALF_UP)
             }
             val highest = report.monthlyBreakdown.maxByOrNull { it.expenses }
-            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.StatTransactions], report.transactionCount.toString(), null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f).fillMaxHeight())
-                StatCard(s[StringKey.CategoriesUsed], report.categoriesUsed.toString(), null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f).fillMaxHeight())
-                StatCard(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency), null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f).fillMaxHeight(), valueColor = amountColor(true))
-                StatCard(
-                    s[StringKey.HighestMonth],
-                    highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses, report.currency)}" } ?: "—",
-                    null,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                    Modifier.weight(1f).fillMaxHeight(),
-                )
-            }
+            val ink = MaterialTheme.colorScheme.onSurface
+            SummaryFigures(
+                listOf(
+                    KpiFigure(s[StringKey.StatTransactions], report.transactionCount.toString(), ink),
+                    KpiFigure(s[StringKey.CategoriesUsed], report.categoriesUsed.toString(), ink),
+                    KpiFigure(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency), amountColor(true)),
+                    KpiFigure(
+                        s[StringKey.HighestMonth],
+                        highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses, report.currency)}" } ?: "—",
+                        ink,
+                    ),
+                ),
+            )
         }
     }
 }
@@ -396,11 +410,72 @@ private fun CategoryAnalysisTab(report: ReportService.TaxReport, linkablePeriod:
     }
 }
 
+/** One KPI of the summary surface. */
+private data class KpiFigure(val label: String, val value: String, val color: Color)
+
+/** The report's four headline figures as one paper surface, divided by 1 dp hairlines. */
 @Composable
-private fun AmountRow(label: String, amount: BigDecimal, currency: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+private fun SummaryFigures(figures: List<KpiFigure>) {
+    FinDeskCard(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            figures.forEachIndexed { index, figure ->
+                if (index > 0) VerticalDivider(modifier = Modifier.fillMaxHeight())
+                Column(Modifier.weight(1f).padding(horizontal = 16.dp, vertical = 16.dp)) {
+                    Text(
+                        figure.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        figure.value,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = figure.color,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A tax category row: label, its share of the tax-relevant total as a 6 dp bar, then the amount on the right. */
+@Composable
+private fun AmountRow(label: String, amount: BigDecimal, currency: String, total: BigDecimal) {
+    val fraction = if (total.signum() == 0) 0f else (amount.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+    Row(
+        modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.width(12.dp))
+        Box(
+            modifier = Modifier
+                .weight(0.8f)
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(fraction)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(chartOutColor()),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(
+            Formats.money(amount, currency),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.End,
+            modifier = Modifier.width(120.dp),
+        )
     }
 }
 

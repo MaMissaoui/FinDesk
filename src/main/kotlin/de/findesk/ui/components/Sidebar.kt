@@ -105,13 +105,13 @@ fun Sidebar(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Version info at bottom; it doesn't fit the icon-only width
+        // Version info at bottom, aligned with the nav items' text; it doesn't fit the icon-only width
         if (!collapsed) {
             Text(
                 text = "v${AppInfo.VERSION}",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(start = 52.dp, top = 16.dp),
             )
         }
     }

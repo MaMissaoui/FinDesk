@@ -52,13 +52,11 @@ fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Left side: sidebar toggle, back button (only after a link) and title
-        IconButton(onClick = onToggleSidebar) {
-            Icon(
-                imageVector = if (sidebarCollapsed) Icons.Default.Menu else AppIcons.MenuOpen,
-                contentDescription = s[if (sidebarCollapsed) StringKey.ExpandSidebar else StringKey.CollapseSidebar],
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        AppIconButton(
+            icon = if (sidebarCollapsed) Icons.Default.Menu else AppIcons.MenuOpen,
+            contentDescription = s[if (sidebarCollapsed) StringKey.ExpandSidebar else StringKey.CollapseSidebar],
+            onClick = onToggleSidebar,
+        )
         // Back to the screen the last link left, between the sidebar toggle and the title
         backTarget?.let { target ->
             TooltipArea(
@@ -100,14 +98,11 @@ fun TopBar(
             LanguageMenu(language, languageEnabled, onLanguageChange)
 
             // Theme Toggle
-            IconButton(onClick = onThemeToggle) {
-                Icon(
-                    // Shows the theme a click switches to
-                    imageVector = if (isDarkTheme) AppIcons.LightMode else AppIcons.DarkMode,
-                    contentDescription = s[StringKey.ToggleTheme],
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            AppIconButton(
+                icon = if (isDarkTheme) AppIcons.LightMode else AppIcons.DarkMode,
+                contentDescription = s[StringKey.ToggleTheme],
+                onClick = onThemeToggle,
+            )
         }
     }
 }
@@ -178,12 +173,11 @@ private fun ProfileMenu(model: ProfileMenuModel, enabled: Boolean) {
                     open = true
                 },
                 enabled = enabled,
-                modifier = Modifier.widthIn(min = 160.dp, max = 260.dp).semantics { contentDescription = s[StringKey.SwitchProfileMenu] },
-                colors = OutlinedButtonStyle.colors(),
-                border = OutlinedButtonStyle.border(enabled = enabled),
+                modifier = Modifier.semantics { contentDescription = s[StringKey.SwitchProfileMenu] },
+                contentPadding = PaddingValues(horizontal = 12.dp),
             ) {
-                Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                Spacer(Modifier.width(8.dp))
+                Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.width(6.dp))
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
             }
             AppDropdownMenu(expanded = open, onDismissRequest = { open = false }) {

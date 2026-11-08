@@ -1,22 +1,42 @@
 package de.findesk.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import de.findesk.ui.theme.controlFill
+import de.findesk.ui.theme.controlFillHover
 
 /**
- * FinDesk's button defaults: every button is 6 dp, because Material 3's buttons ignore `MaterialTheme.shapes` and
- * would otherwise stay pills. The wrappers keep the whole app on one shape without touching each call site's logic.
+ * FinDesk's controls: filled 8 dp shapes, 36 dp high. Material 3's buttons ignore `MaterialTheme.shapes` and would
+ * otherwise keep their own pills and padding, so every call site goes through these wrappers.
  */
 @Composable
 fun AppButton(
@@ -24,16 +44,20 @@ fun AppButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = MaterialTheme.shapes.small,
-    colors: ButtonColors = ButtonDefaults.buttonColors(),
-    elevation: ButtonElevation? = ButtonDefaults.buttonElevation(),
+    colors: ButtonColors = ButtonDefaults.buttonColors(
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+    ),
+    elevation: ButtonElevation? = null,
     border: BorderStroke? = null,
-    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 14.dp),
     interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier,
+        // A primary action is always the accent rectangle: no elevation, always 36 dp high.
+        modifier = modifier.height(36.dp),
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -45,35 +69,44 @@ fun AppButton(
     )
 }
 
-/** Outlined controls: 6 dp, a 1 dp `outlineVariant` border and ink text. */
+/**
+ * The secondary control: a quiet `controlFill` rectangle with ink text and icon, no outline. Hovering deepens the
+ * fill instead of drawing a border.
+ */
 @Composable
 fun AppOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = MaterialTheme.shapes.small,
-    colors: ButtonColors = OutlinedButtonStyle.colors(),
-    elevation: ButtonElevation? = null,
-    border: BorderStroke? = OutlinedButtonStyle.border(enabled),
-    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 14.dp),
     interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
-    OutlinedButton(
+    val interaction = interactionSource ?: remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val fill = if (hovered && enabled) controlFillHover() else controlFill()
+    Button(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.height(36.dp),
         enabled = enabled,
         shape = shape,
-        colors = colors,
-        elevation = elevation,
-        border = border,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = fill,
+            contentColor = contentColor,
+            disabledContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+            disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+        ),
+        elevation = null,
+        border = null,
         contentPadding = contentPadding,
-        interactionSource = interactionSource,
+        interactionSource = interaction,
         content = content,
     )
 }
 
-/** Text buttons: 6 dp and accent text. */
+/** Text buttons: 8 dp, accent text and no fill, still 36 dp high so they line up with the filled controls. */
 @Composable
 fun AppTextButton(
     onClick: () -> Unit,
@@ -83,13 +116,13 @@ fun AppTextButton(
     colors: ButtonColors = ButtonDefaults.textButtonColors(),
     elevation: ButtonElevation? = null,
     border: BorderStroke? = null,
-    contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 10.dp),
     interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     TextButton(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.height(36.dp),
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -102,7 +135,54 @@ fun AppTextButton(
 }
 
 /**
- * Outlined text fields: 6 dp. Material 3 reads `extraSmall` (4 dp) for these, so the shape is passed explicitly.
+ * A 36×36 icon button. Page headers and toolbars use the filled form; icon buttons inside list rows stay
+ * transparent. [selected] paints the accent instead, for toggles whose state matters.
+ */
+@Composable
+fun AppIconButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    selected: Boolean = false,
+    filled: Boolean = true,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val fill = when {
+        selected -> MaterialTheme.colorScheme.primary
+        !filled -> Color.Transparent
+        hovered && enabled -> controlFillHover()
+        else -> controlFill()
+    }
+    val tint = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        selected -> MaterialTheme.colorScheme.onPrimary
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier = modifier
+            .size(36.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(fill)
+            .hoverable(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = LocalIndication.current,
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .then(if (selected) Modifier.semantics { this.selected = true } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(20.dp))
+    }
+}
+
+/**
+ * Outlined text fields: 8 dp. Material 3 reads `extraSmall` (4 dp) for these, so the shape is passed explicitly.
  * The wrapper keeps every field in the app on the same control shape.
  */
 @Composable

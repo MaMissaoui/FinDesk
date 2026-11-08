@@ -109,8 +109,8 @@ val FinDeskTypography = Typography(
     bodySmall = TextStyle(
         fontFamily = FinDeskFontFamily,
         fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
         letterSpacing = 0.1.sp,
         fontFeatureSettings = "tnum",
     ),
@@ -133,9 +133,16 @@ val FinDeskTypography = Typography(
     labelSmall = TextStyle(
         fontFamily = FinDeskFontFamily,
         fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
         letterSpacing = 0.2.sp,
         fontFeatureSettings = "tnum",
     ),
 )
+
+/**
+ * Chart axes and badge counters stay at 12 sp while body and label text grow to 13 sp; every other small label
+ * uses [Typography.bodySmall] or [Typography.labelSmall].
+ */
+val Typography.caption: TextStyle
+    get() = labelSmall.copy(fontSize = 12.sp, lineHeight = 16.sp)
