@@ -135,6 +135,18 @@ enum class StringKey {
     /** First stat card's subtitle line for money moved outside income and expenses; %s is the signed amount. */
     OtherMovements,
 
+    /** Statement line for the previous month's balance; %s is the previous month's name. */
+    CarryForwardLabel,
+
+    /** Statement line for money moved outside income and expenses, without its amount. */
+    StatementMovementsLabel,
+
+    /** One open-task line; %d is the number of uncategorized bookings. */
+    PendingUncategorizedLine,
+
+    /** One open-task line; %d is the number of documents not linked to a booking. */
+    PendingUnlinkedDocumentsLine,
+
     // Accounts
     AccountsTotal,
     AccountsTotalLabel,
