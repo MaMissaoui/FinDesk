@@ -135,19 +135,19 @@ class DashboardCarryForwardTest {
     }
 
     @Test
-    fun `an incomplete history hides the carry-forward until the month is covered`() = runBlocking {
+    fun `an incomplete history still shows the carry-forward`() = runBlocking {
         fixtures()
-        // Its first booking is in September, so FinDesk cannot know the balance it started September with
+        // Its first booking is in September, so FinDesk reconstructs the balance it started September with
         val savings = newAccount("500.00", "checking", "DE44500105175407324931")
         data.txn(savings, LocalDate.of(2026, 9, 5), "100.00", partner = "First booking")
 
-        val september = load(YearMonth.of(2026, 9))
-        assertNull(september.carryForward)
-        assertNull(september.otherMovements)
-
-        val october = load(YearMonth.of(2026, 10))
-        assertNotNull(october.carryForward, "September's booking is before October, so October is covered")
-        assertNotNull(october.otherMovements)
+        listOf(YearMonth.of(2026, 9), YearMonth.of(2026, 10)).forEach { month ->
+            val s = load(month)
+            assertNotNull(s.carryForward, "the carry-forward is reconstructed for $month")
+            assertNotNull(s.otherMovements, "other movements are reconstructed for $month")
+            val total = s.carryForward!! + s.monthlyIncome - s.monthlyExpenses + s.otherMovements!!
+            assertEquals(0, total.compareTo(s.availableBalance), "the identity holds for $month")
+        }
     }
 
     @Test
