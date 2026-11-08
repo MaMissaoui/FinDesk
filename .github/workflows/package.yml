@@ -75,6 +75,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fakeroot rpm xvfb
 
+      # The Compose plugin downloads the WiX toolset from GitHub releases for the MSI/EXE; that download
+      # timed out on several runs on 2026-11-08. Fetch it first, with retries, so the build reuses it.
+      - name: Download WiX (Windows, with retries)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          for attempt in 1 2 3 4; do
+            ./gradlew --no-daemon downloadWix && exit 0
+            echo "::warning::WiX download attempt $attempt failed"
+            sleep $((attempt * 20))
+          done
+          echo "::error::WiX could not be downloaded after 4 attempts"
+          exit 1
+
       - name: Build installers
         shell: bash
         run: ./gradlew --no-daemon ${{ matrix.task }}
