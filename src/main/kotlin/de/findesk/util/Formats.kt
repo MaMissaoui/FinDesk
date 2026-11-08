@@ -20,22 +20,34 @@ object Formats {
     /** Uses the app language's decimal/grouping separators ("1.234,56" in German, "1,234.56" in English). */
     private fun decimalFormat() = DecimalFormat("#,##0.00", DecimalFormatSymbols(AppStrings.current.language.locale))
 
-    /** "€1,234.56" / "-€1,234.56"; with [signed], positive amounts get a leading "+". */
+    /**
+     * "€1,234.56" / "-€1,234.56" in English; in German "1.234,56 €" / "-1.234,56 €" (symbol after the number,
+     * separated by a no-break space). With [signed], positive amounts get a leading "+".
+     */
     fun money(amount: BigDecimal, currency: String = "EUR", signed: Boolean = false): String {
-        val symbol = symbolFor(currency)
         val abs = decimalFormat().format(amount.abs().setScale(2, RoundingMode.HALF_UP))
         val sign = when {
             amount.signum() < 0 -> "-"
             signed && amount.signum() > 0 -> "+"
             else -> ""
         }
-        return "$sign$symbol$abs"
+        return signedAmount(sign, abs, currency)
     }
 
-    /** Whole currency units for chart axes: "€4,000" / "€4.000". */
+    /** Whole currency units for chart axes: "€4,000" / "€4.000" in English, "4.000 €" in German. */
     fun wholeMoney(amount: BigDecimal, currency: String = "EUR"): String {
         val abs = DecimalFormat("#,##0", DecimalFormatSymbols(AppStrings.current.language.locale)).format(amount.abs().setScale(0, RoundingMode.HALF_UP))
-        return (if (amount.signum() < 0) "-" else "") + symbolFor(currency) + abs
+        return signedAmount(if (amount.signum() < 0) "-" else "", abs, currency)
+    }
+
+    /** Puts the symbol before the number, or after it with a no-break space in German. */
+    private fun signedAmount(sign: String, number: String, currency: String): String {
+        val symbol = symbolFor(currency)
+        return if (AppStrings.current.language == AppLanguage.DE) {
+            "$sign$number$NO_BREAK_SPACE${symbol.trim()}"
+        } else {
+            "$sign$symbol$number"
+        }
     }
 
     /**
@@ -104,9 +116,9 @@ object Formats {
         return value
     }
 
-    /** Parses user input like "1.234,56", "1,234.56", "-12.5" or "12". Returns null if it isn't a number. */
+    /** Parses user input like "1.234,56", "1,234.56", "-12.5", "12" or "1.234,56 €". Returns null if it isn't a number. */
     fun parseAmount(input: String): BigDecimal? {
-        var s = input.trim().replace("€", "").replace(" ", "")
+        var s = input.trim().replace("€", "").replace(" ", "").replace(NO_BREAK_SPACE, "")
         if (s.isEmpty()) return null
         val lastComma = s.lastIndexOf(',')
         val lastDot = s.lastIndexOf('.')

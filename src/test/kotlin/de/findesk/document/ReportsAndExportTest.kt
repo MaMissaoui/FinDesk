@@ -114,6 +114,22 @@ class ReportsAndExportTest {
     }
 
     @Test
+    fun `German pdf export writes a report with an amount`() = runBlocking {
+        val file = File(tmp, "report-de.pdf")
+        try {
+            AppStrings.set(AppLanguage.DE)
+            val report = service.generateTaxReport(2026)
+            assertTrue(service.exportToPdf(report, file))
+
+            val text = Loader.loadPDF(file).use { PDFTextStripper().getText(it) }
+            assertTrue(text.contains("Steuerbericht 2026"))
+            assertTrue(text.contains("3.000,00"), "the German amount is drawn: $text")
+        } finally {
+            AppStrings.set(AppLanguage.EN)
+        }
+    }
+
+    @Test
     fun `csv export adds the shop last and keeps the raw partner`() = runBlocking {
         val paypal = paypalBooking(id = 1)
         val plain = plainBooking(id = 2)

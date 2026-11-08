@@ -49,7 +49,7 @@ class ReviewBatchATest {
             )
             AppStrings.set(AppLanguage.DE)
             assertEquals(
-                "2 Buchungen · +€5,00",
+                "2 Buchungen · +5,00${0xA0.toChar()}€",
                 de.format(StringKey.BookingsCountTotal, 2, Formats.money(BigDecimal("5.00"), "EUR", signed = true)),
             )
         } finally {
