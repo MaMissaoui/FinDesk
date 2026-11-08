@@ -9,81 +9,120 @@ import de.findesk.model.DefaultCategories
 import de.findesk.util.BalanceTone
 import java.math.BigDecimal
 
-// Primary Colors
-val PrimaryBlue = Color(0xFF2D6CDF)
-val PrimaryBlueLight = Color(0xFF5B8DEF)
+// Ink and neutrals: the statement's calm, blue-leaning greys.
+val InkLight = Color(0xFF1C2733)
+val InkDark = Color(0xFFE6EAEE)
+val SlateLight = Color(0xFF5B6875)
+val SlateDark = Color(0xFF9AA5B1)
+val PaperLight = Color(0xFFFFFFFF)
+val PaperDark = Color(0xFF1A2129)
+val DeskLight = Color(0xFFEEF1F4)
+val DeskDark = Color(0xFF11161C)
+val RuleLight = Color(0xFFDDE2E7)
+val RuleDark = Color(0xFF2C3540)
+val OutlineLight = Color(0xFF7D8996)
+val OutlineDark = Color(0xFF6E7D8C)
 
-/** Light-theme selection background: a quiet blue tint of [PrimaryBlue] for selected rows, tabs and chips. */
-val SelectionLight = Color(0xFFE3EAF9)
+// One deep FinDesk blue carries actions, focus, links and the selection bar.
+val AccentLight = Color(0xFF1F4FA8)
+val AccentDark = Color(0xFF8AB0F0)
+val OnAccentLight = Color(0xFFFFFFFF)
+val OnAccentDark = Color(0xFF0B1A33)
+val AccentContainerLight = Color(0xFFDCE6F7)
+val OnAccentContainerLight = Color(0xFF0B2A66)
+val AccentContainerDark = Color(0xFF1E3A6E)
+val OnAccentContainerDark = Color(0xFFDCE6F7)
 
-/** Text and icons on [SelectionLight], dark enough for 4.5:1 contrast. */
-val OnSelectionLight = Color(0xFF1B3A78)
+// Selection is a neutral fill, not a blue tint, so the accent bar does the pointing.
+val SelectedFillLight = Color(0xFFE4EBEF)
+val SelectedFillDark = Color(0xFF232D37)
+val OnSelectedFillLight = InkLight
+val OnSelectedFillDark = InkDark
 
-/** Dark-theme selection background: the same blue idea, muted so it does not glare next to dark surfaces. */
-val SelectionDark = Color(0xFF26324D)
+// Money in is the only green; expenses are ink. Red is reserved for real problems.
+val MoneyIn = Color(0xFF1E7B4F)
+val MoneyInDark = Color(0xFF5CC28F)
+val ChartIn = MoneyIn
+val ChartInDark = MoneyInDark
+val ChartOut = Color(0xFF7A8795)
+val ChartOutDark = Color(0xFF6E7D8C)
 
-/** Text and icons on [SelectionDark], light enough for 4.5:1 contrast. */
-val OnSelectionDark = Color(0xFFDCE5FB)
+// Names kept for the call sites that still use them, now carrying the new palette.
+val PrimaryBlue = AccentLight
+val PrimaryBlueLight = AccentDark
+val SelectionLight = SelectedFillLight
+val SelectionDark = SelectedFillDark
+val OnSelectionLight = OnSelectedFillLight
+val OnSelectionDark = OnSelectedFillDark
 
-/** Negative amounts on [SelectionLight], dark enough for 4.5:1 contrast. */
-val ErrorOnSelectionLight = Color(0xFFB91C1C)
+/** Light-theme sidebar: the desk colour, one step away from the white work surfaces. */
+val SidebarLight = DeskLight
 
-/** Negative amounts on [SelectionDark], light enough for 4.5:1 contrast. */
-val ErrorOnSelectionDark = Color(0xFFFCA5A5)
+/** Dark-theme sidebar: the window background, one step away from the paper surfaces. */
+val SidebarDark = DeskDark
 
-/** Positive amounts on [SelectionLight], dark enough for 4.5:1 contrast. */
-val SuccessOnSelectionLight = Color(0xFF065F46)
+val DarkGray = InkLight
+val MediumGray = SlateLight
+val LightGray = RuleLight
+val BackgroundLight = DeskLight
+val SurfaceWhite = PaperLight
 
-/** Positive amounts on [SelectionDark], light enough for 4.5:1 contrast. */
-val SuccessOnSelectionDark = Color(0xFF6EE7B7)
+// Semantic colours.
+val Success = MoneyIn
+val SuccessDark = MoneyInDark
+val Warning = Color(0xFF9A5B00)
+val WarningDark = Color(0xFFE0A54A)
+val Error = Color(0xFFB3261E)
+val ErrorDark = Color(0xFFF2867E)
 
-/** Light-theme sidebar: neutral, so the logo is the only saturated blue in the panel. */
-val SidebarLight = Color(0xFFECEFF4)
-
-/** Dark-theme sidebar: a neutral charcoal a step away from the content surface. */
-val SidebarDark = Color(0xFF232429)
-
-// Neutral Colors
-val DarkGray = Color(0xFF2F2F2F)
-val MediumGray = Color(0xFF6B7280)
-val LightGray = Color(0xFFE5E7EB)
-val BackgroundLight = Color(0xFFF5F7FA)
-val SurfaceWhite = Color(0xFFFFFFFF)
-
-// Semantic Colors
-val Success = Color(0xFF098765)
-val SuccessDark = Color(0xFF34D399)
-val Warning = Color(0xFFF59E0B)
-val Error = Color(0xFFDC2626)
-val ErrorDark = Color(0xFFF87171)
-val Info = Color(0xFF3B82F6)
-
-/** Returns the accessible text colour for positive/negative amounts based on the current theme. */
-@Composable
-fun amountColor(isExpense: Boolean): Color = if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-    if (isExpense) Error else Success
-} else {
-    if (isExpense) ErrorDark else SuccessDark
-}
+/** Alert text on the selected fill; the alert red passes on both selected fills. */
+val ErrorOnSelectionLight = Error
+val ErrorOnSelectionDark = ErrorDark
 
 /**
- * The colour for a balance by its plain sign: red below zero and the theme's text colour at zero or above.
- * Account balances and their totals use [balanceToneColor] instead, which splits a negative balance into the loan
- * rule's warning red and its calm grey; money flows keep using [amountColor] for income and expenses.
+ * Inflow text on the selected fill. The plain light inflow is 4.36:1 on #E4EBEF, just short of 4.5:1, so the
+ * selection-safe light green is a shade darker (5.4:1). The dark inflow already passes.
  */
+val SuccessOnSelectionLight = Color(0xFF1A6B44)
+val SuccessOnSelectionDark = MoneyInDark
+
+@Composable
+fun isLightTheme(): Boolean = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+
+/** The theme's incoming-money colour. */
+@Composable
+fun inflowColor(): Color = if (isLightTheme()) MoneyIn else MoneyInDark
+
+/** Income bars and lines in the charts. */
+@Composable
+fun chartInColor(): Color = if (isLightTheme()) ChartIn else ChartInDark
+
+/** Expense bars and lines in the charts. */
+@Composable
+fun chartOutColor(): Color = if (isLightTheme()) ChartOut else ChartOutDark
+
+/** A booking or flow amount: incoming in inflow, outgoing in ink. Expenses are never red. */
+@Composable
+fun amountColor(isExpense: Boolean): Color = if (isExpense) MaterialTheme.colorScheme.onSurface else inflowColor()
+
+/** A net figure: non-negative in inflow, negative in alert. */
+@Composable
+fun netColor(value: BigDecimal): Color = if (value.signum() < 0) MaterialTheme.colorScheme.error else inflowColor()
+
+/** The colour for a plain balance: alert below zero and ink at zero or above. */
 @Composable
 fun balanceColor(value: BigDecimal): Color = when (value.signum()) {
-    -1 -> amountColor(true)
+    -1 -> MaterialTheme.colorScheme.error
     else -> MaterialTheme.colorScheme.onSurface
 }
 
-/** The colour for a [BalanceTone]: green above zero, red for a warning, grey for a loan and plain text at zero. */
+/** The colour for a [BalanceTone]: ink above zero, alert for a warning, slate for a loan and at zero. */
 @Composable
 fun balanceToneColor(tone: BalanceTone): Color = when (tone) {
-    BalanceTone.POSITIVE -> amountColor(false)
-    BalanceTone.NEGATIVE -> amountColor(true)
+    BalanceTone.POSITIVE -> MaterialTheme.colorScheme.onSurface
+    BalanceTone.NEGATIVE -> MaterialTheme.colorScheme.error
     BalanceTone.LOAN -> MaterialTheme.colorScheme.onSurfaceVariant
-    BalanceTone.ZERO -> MaterialTheme.colorScheme.onSurface
+    BalanceTone.ZERO -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 // Category Colors

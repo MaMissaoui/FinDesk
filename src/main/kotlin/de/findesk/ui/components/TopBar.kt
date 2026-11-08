@@ -86,9 +86,8 @@ fun TopBar(
         Spacer(Modifier.width(8.dp))
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
-            fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
 
@@ -120,7 +119,7 @@ private fun LanguageMenu(language: AppLanguage, enabled: Boolean, onLanguageChan
     var open by remember { mutableStateOf(false) }
     DisabledReason(if (enabled) null else s[StringKey.LanguageBusy]) {
         Box {
-            TextButton(
+            AppTextButton(
                 onClick = { open = true },
                 enabled = enabled,
                 modifier = Modifier.semantics { contentDescription = s[StringKey.ChangeLanguage] },
@@ -129,7 +128,7 @@ private fun LanguageMenu(language: AppLanguage, enabled: Boolean, onLanguageChan
                 Spacer(Modifier.width(6.dp))
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
             }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            AppDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 AppLanguage.entries.forEach { option ->
                     DropdownMenuItem(
                         leadingIcon = { LanguageFlag(option) },
@@ -173,7 +172,7 @@ private fun ProfileMenu(model: ProfileMenuModel, enabled: Boolean) {
     val name = profiles.firstOrNull { it.first == model.current }?.second.orEmpty()
     DisabledReason(if (enabled) null else s[StringKey.LanguageBusy]) {
         Box {
-            OutlinedButton(
+            AppOutlinedButton(
                 onClick = {
                     profiles = model.load()
                     open = true
@@ -187,7 +186,7 @@ private fun ProfileMenu(model: ProfileMenuModel, enabled: Boolean) {
                 Spacer(Modifier.width(8.dp))
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
             }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            AppDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 profiles.forEach { (slug, profileName) ->
                     val isCurrent = slug == model.current
                     DropdownMenuItem(

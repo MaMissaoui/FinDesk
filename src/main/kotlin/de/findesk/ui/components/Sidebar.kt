@@ -187,7 +187,7 @@ private fun SidebarItemRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(backgroundColor)
             .then(selectionBar)
             .selectable(

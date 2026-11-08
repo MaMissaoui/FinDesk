@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
@@ -33,6 +32,9 @@ import de.findesk.data.database.DatabaseCrypto
 import de.findesk.data.database.PlaintextLeftovers
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
+import de.findesk.ui.components.AppButton
+import de.findesk.ui.components.AppOutlinedTextField
+import de.findesk.ui.components.AppTextButton
 import de.findesk.viewmodel.UnlockError
 import de.findesk.viewmodel.UnlockMode
 import de.findesk.viewmodel.UnlockViewModel
@@ -179,7 +181,7 @@ fun UnlockScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(onClick = submit, enabled = !state.isBusy) {
+                    AppButton(onClick = submit, enabled = !state.isBusy) {
                         Text(
                             when (mode) {
                                 UnlockMode.UNLOCK -> s[StringKey.Unlock]
@@ -194,13 +196,13 @@ fun UnlockScreen(
                     }
                 }
                 when (mode) {
-                    UnlockMode.UNLOCK -> TextButton(
+                    UnlockMode.UNLOCK -> AppTextButton(
                         onClick = { vm.showChange(true) },
                         enabled = !state.isBusy,
                         contentPadding = PaddingValues(horizontal = 0.dp),
                     ) { Text(s[StringKey.ChangePassphrase]) }
 
-                    UnlockMode.CHANGE -> TextButton(
+                    UnlockMode.CHANGE -> AppTextButton(
                         onClick = { vm.showChange(false) },
                         enabled = !state.isBusy,
                         contentPadding = PaddingValues(horizontal = 0.dp),
@@ -210,7 +212,7 @@ fun UnlockScreen(
                 }
                 // That profile is locked again, so going back means unlocking it again
                 back?.let { (name, onBack) ->
-                    TextButton(
+                    AppTextButton(
                         onClick = onBack,
                         enabled = !state.isBusy,
                         contentPadding = PaddingValues(horizontal = 0.dp),
@@ -227,7 +229,7 @@ internal fun UnlockProfileLabel(name: String) {
     val s = strings()
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = RoundedCornerShape(16.dp),
+        shape = MaterialTheme.shapes.small,
         modifier = Modifier.semantics { contentDescription = s.format(StringKey.UnlockProfile, name) },
     ) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -254,7 +256,7 @@ private fun PassphraseField(
     enabled: Boolean,
     supporting: String? = null,
 ) {
-    OutlinedTextField(
+    AppOutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(label) },

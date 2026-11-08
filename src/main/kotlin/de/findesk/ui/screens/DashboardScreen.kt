@@ -26,10 +26,6 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.SettingsSection
-import de.findesk.ui.theme.Error
-import de.findesk.ui.theme.PrimaryBlue
-import de.findesk.ui.theme.Success
-import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceToneColor
 import de.findesk.util.BalanceTone
@@ -184,7 +180,7 @@ fun DashboardScreen(
                     title,
                     Formats.money(state.availableBalance, state.currency),
                     AppIcons.AccountBalance,
-                    PrimaryBlue,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                     Modifier.weight(1f).fillMaxHeight(),
                     subtitle = null,
                     valueColor = balanceToneColor(balanceTone(state.availableBalance, isLoan = false)),
@@ -194,7 +190,7 @@ fun DashboardScreen(
                     if (isCurrentLoadedMonth) s[StringKey.IncomeThisMonth] else s.format(StringKey.IncomeInMonth, s.month(loadedMonth)),
                     Formats.money(state.monthlyIncome, state.currency),
                     AppIcons.AddCircleOutline,
-                    Success,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                     Modifier.weight(1f).fillMaxHeight(),
                     valueColor = amountColor(false),
                 )
@@ -202,7 +198,7 @@ fun DashboardScreen(
                     if (isCurrentLoadedMonth) s[StringKey.ExpensesThisMonth] else s.format(StringKey.ExpensesInMonth, s.month(loadedMonth)),
                     Formats.money(state.monthlyExpenses, state.currency),
                     AppIcons.RemoveCircleOutline,
-                    Error,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                     Modifier.weight(1f).fillMaxHeight(),
                     valueColor = amountColor(true),
                 )
@@ -314,7 +310,7 @@ fun DashboardScreen(
             SectionCard(
                 s[StringKey.RecentTransactions],
                 Modifier.fillMaxWidth(),
-                actions = { TextButton(onClick = { onNavigate(Screen.TRANSACTIONS, leaveWithBackArgs(NavigationArgs())) }) { Text(s[StringKey.ViewAll]) } },
+                actions = { AppTextButton(onClick = { onNavigate(Screen.TRANSACTIONS, leaveWithBackArgs(NavigationArgs())) }) { Text(s[StringKey.ViewAll]) } },
             ) {
                 if (state.recentTransactions.isEmpty()) {
                     Text(s[StringKey.NoTransactionsYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -350,7 +346,7 @@ internal fun upcomingAmount(payment: de.findesk.document.RecurringDetector.Recur
 @Composable
 internal fun GettingStartedCard(onAddBank: () -> Unit, onOpenSettings: () -> Unit, modifier: Modifier = Modifier) {
     val s = strings()
-    Card(modifier = modifier.widthIn(max = 640.dp).fillMaxWidth()) {
+    FinDeskCard(modifier = modifier.widthIn(max = 640.dp).fillMaxWidth()) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Text(s[StringKey.WelcomeTitle], style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text(
@@ -359,12 +355,12 @@ internal fun GettingStartedCard(onAddBank: () -> Unit, onOpenSettings: () -> Uni
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             GettingStartedStep(1, s[StringKey.StepAddBank], s[StringKey.StepAddBankHint]) {
-                Button(onClick = onAddBank) { Text(s[StringKey.AddBank]) }
+                AppButton(onClick = onAddBank) { Text(s[StringKey.AddBank]) }
             }
             GettingStartedStep(2, s[StringKey.StepSync], s[StringKey.StepSyncHint])
             GettingStartedStep(3, s[StringKey.StepCategorize], s[StringKey.StepCategorizeHint]) {
                 // No inner padding, so the label lines up with the step text above it
-                TextButton(onClick = onOpenSettings, contentPadding = PaddingValues(horizontal = 0.dp)) { Text(s[StringKey.OpenSettings]) }
+                AppTextButton(onClick = onOpenSettings, contentPadding = PaddingValues(horizontal = 0.dp)) { Text(s[StringKey.OpenSettings]) }
             }
         }
     }
@@ -423,7 +419,7 @@ internal fun MonthHeader(
         }
         if (!isCurrentMonth) {
             Spacer(Modifier.width(8.dp))
-            TextButton(onClick = { vm.currentMonth() }) { Text(s[StringKey.CurrentMonth]) }
+            AppTextButton(onClick = { vm.currentMonth() }) { Text(s[StringKey.CurrentMonth]) }
         }
     }
 }
@@ -442,7 +438,7 @@ internal fun PendingTasksCard(
         s[StringKey.PendingTasks],
         pendingTasks.toString(),
         if (done) Icons.Default.CheckCircle else Icons.Default.Warning,
-        if (done) amountColor(false) else Warning,
+        if (done) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.tertiary,
         modifier.clickable(
             enabled = uncategorizedCount > 0,
             onClick = onOpenTasks,
@@ -456,13 +452,13 @@ internal fun PendingTasksCard(
 @Composable
 private fun BudgetRow(b: BudgetStatus, monthProgress: Float, currency: String) {
     val s = strings()
-    // Over budget: red. Spending faster than the month is passing: amber.
+    // Over budget or spending faster than the month is passing: caution, not the error red reserved for real problems.
     val color = when {
-        b.isOver -> Error
-        b.ratio > monthProgress + 0.1f -> Warning
+        b.isOver -> MaterialTheme.colorScheme.tertiary
+        b.ratio > monthProgress + 0.1f -> MaterialTheme.colorScheme.tertiary
         else -> categoryColor(b.color, b.categoryName)
     }
-    val overBudgetTextColor = amountColor(true)
+    val overBudgetTextColor = MaterialTheme.colorScheme.tertiary
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth()) {
             Text(b.categoryName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))

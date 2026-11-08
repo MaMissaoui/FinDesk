@@ -24,7 +24,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -54,9 +53,8 @@ import de.findesk.model.AccountItem
 import de.findesk.repository.MAX_ACCOUNT_GROUP_NAME_LENGTH
 import de.findesk.ui.theme.ErrorOnSelectionDark
 import de.findesk.ui.theme.ErrorOnSelectionLight
-import de.findesk.ui.theme.SuccessOnSelectionDark
-import de.findesk.ui.theme.SuccessOnSelectionLight
 import de.findesk.ui.theme.balanceToneColor
+import de.findesk.ui.theme.isLightTheme
 import de.findesk.util.AccountGroupView
 import de.findesk.util.BalanceTone
 import de.findesk.util.Formats
@@ -211,7 +209,7 @@ fun AccountPanel(
 
                 HorizontalDivider()
                 Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { creating = true }) {
+                    AppTextButton(onClick = { creating = true }) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(s[StringKey.NewGroup])
@@ -223,9 +221,9 @@ fun AccountPanel(
             drag?.let { d ->
                 val position = d.pointer - panelTopLeft
                 Surface(
-                    tonalElevation = 6.dp,
-                    shadowElevation = 6.dp,
-                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier
                         .offset { IntOffset(position.x.roundToInt() + 12, position.y.roundToInt() + 12) }
                         .zIndex(1f)
@@ -304,16 +302,16 @@ fun AccountPanel(
 }
 
 /**
- * The tone's colour (see [balanceToneColor]) off the selection highlight; on it, positive and warning-negative
- * balances use the selection-safe green and red, which keep 4.5:1 where the plain ones fall below (see ContrastTest),
- * so a checking account's red stays red everywhere. Loan grey and zero keep the row's own content colour.
+ * The tone's colour (see [balanceToneColor]) off the selection highlight; on it, a warning-negative balance uses the
+ * selection-safe alert, which keeps 4.5:1 where the plain one would still pass but the helper keeps the rule explicit.
+ * Ink and slate keep the row's own content colour; loan grey and zero stay slate.
  */
 @Composable
 private fun panelAmountColor(tone: BalanceTone, selected: Boolean): Color = when {
     !selected -> balanceToneColor(tone)
-    tone == BalanceTone.POSITIVE -> if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) SuccessOnSelectionLight else SuccessOnSelectionDark
-    tone == BalanceTone.NEGATIVE -> if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) ErrorOnSelectionLight else ErrorOnSelectionDark
-    else -> LocalContentColor.current
+    tone == BalanceTone.NEGATIVE -> if (isLightTheme()) ErrorOnSelectionLight else ErrorOnSelectionDark
+    tone == BalanceTone.POSITIVE -> LocalContentColor.current
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 /** The grey of secondary lines, except on the selection highlight, where the row keeps the container's content colour. */
@@ -541,7 +539,7 @@ private fun GroupNameDialog(title: String, initial: String, onDismiss: () -> Uni
         title = { Text(title) },
         text = {
             Column(Modifier.width(400.dp)) {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     text,
                     { text = it.take(MAX_ACCOUNT_GROUP_NAME_LENGTH) },
                     label = { Text(s[StringKey.GroupName]) },
@@ -552,8 +550,8 @@ private fun GroupNameDialog(title: String, initial: String, onDismiss: () -> Uni
                 )
             }
         },
-        confirmButton = { Button(enabled = text.isNotBlank(), onClick = { onConfirm(text) }) { Text(s[StringKey.Save]) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        confirmButton = { AppButton(enabled = text.isNotBlank(), onClick = { onConfirm(text) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -572,8 +570,8 @@ private fun MoveToGroupDialog(account: AccountItem, customGroups: List<AccountGr
                 }
             }
         },
-        confirmButton = { Button(onClick = { onConfirm(chosen) }) { Text(s[StringKey.Save]) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        confirmButton = { AppButton(onClick = { onConfirm(chosen) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 

@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,8 +42,8 @@ import de.findesk.document.ReportService
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
-import de.findesk.ui.theme.Error
-import de.findesk.ui.theme.Success
+import de.findesk.ui.theme.chartInColor
+import de.findesk.ui.theme.chartOutColor
 import de.findesk.util.Formats
 import de.findesk.viewmodel.ChartSlice
 import de.findesk.viewmodel.MonthBar
@@ -162,6 +161,8 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
     val ticks = if (max > 0.0) listOf(top, top / 2, 0.0) else listOf(0.0)
     val grid = MaterialTheme.colorScheme.outlineVariant
     val hoverBand = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+    val chartIn = chartInColor()
+    val chartOut = chartOutColor()
     val description = buildBarsDescription(title, months, currency, s)
     val axisWidth = 64.dp
     // Gridlines sit at the vertical centre of their labels
@@ -223,11 +224,11 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
                         val expenseH = (m.expenses.toDouble() / top).toFloat() * size.height
                         // Pale bars mark a still-running month: its totals are so far, not final
                         if (m.partial) {
-                            drawRoundedTopBar(Success.copy(alpha = 0.45f), x, barWidth, incomeH)
-                            drawRoundedTopBar(Error.copy(alpha = 0.45f), x + barWidth + 2f, barWidth, expenseH)
+                            drawRoundedTopBar(chartIn.copy(alpha = 0.45f), x, barWidth, incomeH)
+                            drawRoundedTopBar(chartOut.copy(alpha = 0.45f), x + barWidth + 2f, barWidth, expenseH)
                         } else {
-                            drawRoundedTopBar(Success, x, barWidth, incomeH)
-                            drawRoundedTopBar(Error, x + barWidth + 2f, barWidth, expenseH)
+                            drawRoundedTopBar(chartIn, x, barWidth, incomeH)
+                            drawRoundedTopBar(chartOut, x + barWidth + 2f, barWidth, expenseH)
                         }
                     }
                     drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
@@ -255,7 +256,7 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
                     val topOffset = (topY - labelHeight - gap).coerceIn(0f, (plotHeight - labelHeight).coerceAtLeast(0f)).roundToInt()
                     Surface(
                         modifier = Modifier.offset { IntOffset(left, topOffset) },
-                        shape = RoundedCornerShape(6.dp),
+                        shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.inverseSurface,
                     ) {
                         Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
@@ -278,8 +279,8 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 4.dp)) {
-            Legend(Success, s[StringKey.ChartIncome])
-            Legend(Error, s[StringKey.ChartExpenses])
+            Legend(chartIn, s[StringKey.ChartIncome])
+            Legend(chartOut, s[StringKey.ChartExpenses])
             // No colour swatch: paleness is not a colour of its own but these two at reduced alpha
             if (months.any { it.partial }) {
                 Text(
@@ -344,7 +345,7 @@ fun BalanceLineChart(
     }
     val line = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surface
-    val zero = MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+    val zero = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
     val grid = MaterialTheme.colorScheme.outlineVariant
     val outline = MaterialTheme.colorScheme.outline
     val description = buildLineDescription(title, points, currency, s)
@@ -448,7 +449,7 @@ fun BalanceLineChart(
                     val top = (pointY - labelHeight / 2).coerceIn(0f, (plotHeight - labelHeight).coerceAtLeast(0f)).roundToInt()
                     Surface(
                         modifier = Modifier.offset { IntOffset(left, top) },
-                        shape = RoundedCornerShape(6.dp),
+                        shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.inverseSurface,
                     ) {
                         Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {

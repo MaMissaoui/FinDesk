@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
@@ -61,7 +60,7 @@ fun AccountPicker(
     Box(modifier) {
         Surface(
             onClick = { expanded = true },
-            shape = RoundedCornerShape(4.dp),
+            shape = MaterialTheme.shapes.small,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).semantics { contentDescription = description },
@@ -107,7 +106,7 @@ fun AccountPicker(
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null)
             }
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.widthIn(min = 440.dp)) {
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.widthIn(min = 440.dp)) {
             // The list order is the view model's bank-then-type order, so a bank change starts a new group
             var previousBank: String? = null
             accounts.forEach { account ->

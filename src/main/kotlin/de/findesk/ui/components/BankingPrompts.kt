@@ -82,8 +82,8 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
             onDismissRequest = {},
             title = { Text(s[StringKey.ConfirmInBankingApp]) },
             text = { Text(p.message) },
-            confirmButton = { Button(onClick = { interaction.answer("ok") }) { Text(s[StringKey.IConfirmedIt]) } },
-            dismissButton = { TextButton(onClick = { interaction.answer(null) }) { Text(s[StringKey.Cancel]) } },
+            confirmButton = { AppButton(onClick = { interaction.answer("ok") }) { Text(s[StringKey.IConfirmedIt]) } },
+            dismissButton = { AppTextButton(onClick = { interaction.answer(null) }) { Text(s[StringKey.Cancel]) } },
         )
 
         is BankingPrompt.ConfirmPayee -> AlertDialog(
@@ -101,12 +101,12 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
                 }
             },
             confirmButton = {
-                Button(
+                AppButton(
                     onClick = { interaction.answer("ok") },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) { Text(s[StringKey.SendAnyway]) }
             },
-            dismissButton = { Button(onClick = { interaction.answer(null) }) { Text(s[StringKey.CancelTransfer]) } },
+            dismissButton = { AppButton(onClick = { interaction.answer(null) }) { Text(s[StringKey.CancelTransfer]) } },
         )
     }
 
@@ -115,7 +115,7 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
             onDismissRequest = interaction::clearInfo,
             title = { Text(s[StringKey.MessageFromBank]) },
             text = { Text(message) },
-            confirmButton = { TextButton(onClick = interaction::clearInfo) { Text(s[StringKey.Ok]) } },
+            confirmButton = { AppTextButton(onClick = interaction::clearInfo) { Text(s[StringKey.Ok]) } },
         )
     }
 }
@@ -139,7 +139,7 @@ private fun SecretDialog(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(text)
                 extra()
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
                     label = { Text(label) },
@@ -151,8 +151,8 @@ private fun SecretDialog(
                 footer()
             }
         },
-        confirmButton = { Button(enabled = value.isNotEmpty(), onClick = { onAnswer(value) }) { Text(strings()[StringKey.Ok]) } },
-        dismissButton = { TextButton(onClick = { onAnswer(null) }) { Text(strings()[StringKey.Cancel]) } },
+        confirmButton = { AppButton(enabled = value.isNotEmpty(), onClick = { onAnswer(value) }) { Text(strings()[StringKey.Ok]) } },
+        dismissButton = { AppTextButton(onClick = { onAnswer(null) }) { Text(strings()[StringKey.Cancel]) } },
     )
 }
 
@@ -170,6 +170,6 @@ private fun ChoiceDialog(title: String, options: List<Pair<String, String>>, onA
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = { onAnswer(null) }) { Text(strings()[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = { onAnswer(null) }) { Text(strings()[StringKey.Cancel]) } },
     )
 }

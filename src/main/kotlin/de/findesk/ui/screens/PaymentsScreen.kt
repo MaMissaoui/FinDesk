@@ -2,7 +2,6 @@ package de.findesk.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -30,6 +29,7 @@ import de.findesk.model.PaymentOrderStatus
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
+import de.findesk.ui.theme.inflowColor
 import de.findesk.util.Formats
 import de.findesk.util.Iban
 import de.findesk.viewmodel.PaymentsViewModel
@@ -93,7 +93,7 @@ fun PaymentsScreen(
         if (state.accounts.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
                 EmptyState(Icons.Default.Send, s[StringKey.NoAccounts], s[StringKey.AddAndSyncFirst]) {
-                    Button(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddBank]) }
+                    AppButton(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddBank]) }
                 }
             }
             return@Row
@@ -106,8 +106,8 @@ fun PaymentsScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(s[StringKey.From], style = MaterialTheme.typography.labelLarge)
                     AccountPicker(selected = from, accounts = state.accounts, onSelect = { from = it })
-                    OutlinedTextField(name, { name = it.take(BankingService.MAX_NAME_LENGTH) }, label = { Text(s[StringKey.RecipientName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(
+                    AppOutlinedTextField(name, { name = it.take(BankingService.MAX_NAME_LENGTH) }, label = { Text(s[StringKey.RecipientName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    AppOutlinedTextField(
                         iban,
                         { iban = it.uppercase() },
                         label = { Text(s[StringKey.RecipientIban]) },
@@ -118,7 +118,7 @@ fun PaymentsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
+                        AppOutlinedTextField(
                             bic,
                             { bic = it.uppercase() },
                             label = { Text(s[StringKey.BicOptional]) },
@@ -126,7 +126,7 @@ fun PaymentsScreen(
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
-                        OutlinedTextField(
+                        AppOutlinedTextField(
                             amount,
                             { amount = it },
                             label = { Text(s[StringKey.AmountEuro]) },
@@ -137,7 +137,7 @@ fun PaymentsScreen(
                             modifier = Modifier.width(220.dp),
                         )
                     }
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         purpose,
                         { purpose = it.take(BankingService.MAX_PURPOSE_LENGTH) },
                         label = { Text(s[StringKey.PurposeVerwendungszweck]) },
@@ -172,7 +172,7 @@ fun PaymentsScreen(
                     }
                     if (execution == Execution.ON_DATE || execution == Execution.STANDING) {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            OutlinedTextField(
+                            AppOutlinedTextField(
                                 dateText,
                                 { dateText = it },
                                 label = { Text(s[if (execution == Execution.STANDING) StringKey.FirstExecution else StringKey.ExecutionDate]) },
@@ -183,7 +183,7 @@ fun PaymentsScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             if (execution == Execution.STANDING) {
-                                OutlinedTextField(
+                                AppOutlinedTextField(
                                     lastDateText,
                                     { lastDateText = it },
                                     label = { Text(s[StringKey.LastExecutionOptional]) },
@@ -208,7 +208,7 @@ fun PaymentsScreen(
                         (execution != Execution.ON_DATE || scheduledOk) && (execution != Execution.STANDING || standingOk) &&
                         (execution != Execution.INSTANT || instantOk)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(
+                        AppButton(
                             enabled = canReview,
                             onClick = {
                                 val order = TransferOrder(name, iban, bic.ifBlank { suggestedBic.orEmpty() }.ifBlank { null }, parsedAmount!!, purpose)
@@ -262,7 +262,7 @@ fun PaymentsScreen(
                             else -> null
                         },
                     ) {
-                        TextButton(enabled = from != null && standingOk && !state.isLoadingStandingOrders && !state.isSending, onClick = { from?.let(vm::loadStandingOrders) }) {
+                        AppTextButton(enabled = from != null && standingOk && !state.isLoadingStandingOrders && !state.isSending, onClick = { from?.let(vm::loadStandingOrders) }) {
                             Text(s[StringKey.LoadFromBank])
                         }
                     }
@@ -319,7 +319,7 @@ fun PaymentsScreen(
                             else -> null
                         },
                     ) {
-                        TextButton(enabled = from != null && scheduledListOk && !state.isLoadingScheduledTransfers && !state.isSending, onClick = { from?.let(vm::loadScheduledTransfers) }) {
+                        AppTextButton(enabled = from != null && scheduledListOk && !state.isLoadingScheduledTransfers && !state.isSending, onClick = { from?.let(vm::loadScheduledTransfers) }) {
                             Text(s[StringKey.LoadFromBank])
                         }
                     }
@@ -494,7 +494,7 @@ fun PaymentsScreen(
                 }
             },
             confirmButton = {
-                Button(enabled = acknowledged && !state.isSending, onClick = { vm.confirmAndSend() }) {
+                AppButton(enabled = acknowledged && !state.isSending, onClick = { vm.confirmAndSend() }) {
                     Text(
                         when {
                             review.editOf != null -> s[StringKey.SaveChangesToBank]
@@ -504,7 +504,7 @@ fun PaymentsScreen(
                     )
                 }
             },
-            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelReview) { Text(s[StringKey.Back]) } },
+            dismissButton = { AppTextButton(enabled = !state.isSending, onClick = vm::cancelReview) { Text(s[StringKey.Back]) } },
         )
     }
 
@@ -535,7 +535,7 @@ fun PaymentsScreen(
                     modifier = Modifier.width(440.dp).verticalScroll(rememberScrollState()),
                 ) {
                     // The recipient identifies the order at the bank and cannot be edited
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         o.order.recipientName,
                         {},
                         label = { Text(s[StringKey.RecipientName]) },
@@ -544,7 +544,7 @@ fun PaymentsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         o.order.recipientIban,
                         {},
                         label = { Text(s[StringKey.RecipientIban]) },
@@ -552,7 +552,7 @@ fun PaymentsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         o.order.recipientBic.orEmpty(),
                         {},
                         label = { Text(s[StringKey.BicOptional]) },
@@ -560,7 +560,7 @@ fun PaymentsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         draft.amountText,
                         { vm.updateEditDraft(draft.copy(amountText = it)) },
                         label = { Text(s[StringKey.AmountEuro]) },
@@ -569,7 +569,7 @@ fun PaymentsScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         draft.purpose,
                         { vm.updateEditDraft(draft.copy(purpose = it.take(BankingService.MAX_PURPOSE_LENGTH))) },
                         label = { Text(s[StringKey.PurposeVerwendungszweck]) },
@@ -577,7 +577,7 @@ fun PaymentsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedTextField(
+                        AppOutlinedTextField(
                             draft.firstDateText,
                             { vm.updateEditDraft(draft.copy(firstDateText = it)) },
                             label = { Text(s[StringKey.FirstExecution]) },
@@ -588,7 +588,7 @@ fun PaymentsScreen(
                             enabled = firstDateEditable,
                             modifier = Modifier.weight(1f),
                         )
-                        OutlinedTextField(
+                        AppOutlinedTextField(
                             draft.lastDateText,
                             { vm.updateEditDraft(draft.copy(lastDateText = it)) },
                             label = { Text(s[StringKey.LastExecutionOptional]) },
@@ -601,7 +601,7 @@ fun PaymentsScreen(
                     }
                     if (o.schedule.interval == null) {
                         // The bank's interval is not one FinDesk offers (e.g. every 2 months): it stays as reported, so read-only
-                        OutlinedTextField(
+                        AppOutlinedTextField(
                             intervalText(o.schedule, s),
                             {},
                             label = { Text(s[StringKey.IntervalLabel]) },
@@ -617,7 +617,7 @@ fun PaymentsScreen(
                             onSelect = { vm.updateEditDraft(draft.copy(interval = it)) },
                         )
                     }
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         draft.executionDayText,
                         { vm.updateEditDraft(draft.copy(executionDayText = it.filter { c -> c.isDigit() }.take(2))) },
                         label = { Text(s[StringKey.ScheduleDay]) },
@@ -628,14 +628,14 @@ fun PaymentsScreen(
                 }
             },
             confirmButton = {
-                Button(
+                AppButton(
                     enabled = account != null && parsedAmount != null && parsedAmount.signum() > 0 && schedule != null && editError == null && !state.isSending && !unchanged,
                     onClick = {
                         account?.let { vm.reviewEdit(it, o, order!!, schedule!!) }
                     },
                 ) { Text(s[StringKey.ReviewChanges]) }
             },
-            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelEdit) { Text(s[StringKey.Back]) } },
+            dismissButton = { AppTextButton(enabled = !state.isSending, onClick = vm::cancelEdit) { Text(s[StringKey.Back]) } },
         )
     }
 
@@ -670,13 +670,13 @@ fun PaymentsScreen(
                 }
             },
             confirmButton = {
-                Button(
+                AppButton(
                     enabled = acknowledged && !state.isSending,
                     onClick = { vm.confirmDelete() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) { Text(s[StringKey.Delete]) }
             },
-            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelDelete) { Text(s[StringKey.Back]) } },
+            dismissButton = { AppTextButton(enabled = !state.isSending, onClick = vm::cancelDelete) { Text(s[StringKey.Back]) } },
         )
     }
 
@@ -711,13 +711,13 @@ fun PaymentsScreen(
                 }
             },
             confirmButton = {
-                Button(
+                AppButton(
                     enabled = acknowledged && !state.isSending,
                     onClick = { vm.confirmScheduledDelete() },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) { Text(s[StringKey.Delete]) }
             },
-            dismissButton = { TextButton(enabled = !state.isSending, onClick = vm::cancelScheduledDelete) { Text(s[StringKey.Back]) } },
+            dismissButton = { AppTextButton(enabled = !state.isSending, onClick = vm::cancelScheduledDelete) { Text(s[StringKey.Back]) } },
         )
     }
 }
@@ -773,7 +773,7 @@ internal fun ReviewHeader(amount: String, recipient: String, warning: String?) {
             Spacer(Modifier.height(6.dp))
             Surface(
                 color = MaterialTheme.colorScheme.errorContainer,
-                shape = RoundedCornerShape(8.dp),
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -826,7 +826,7 @@ private fun ReviewChangeRow(label: String, oldValue: String, newValue: String, l
 
 @Composable
 private fun paymentStatusColor(status: String) = when (status) {
-    PaymentOrderStatus.ACCEPTED -> de.findesk.ui.theme.Success
+    PaymentOrderStatus.ACCEPTED -> inflowColor()
     PaymentOrderStatus.REJECTED, PaymentOrderStatus.UNKNOWN -> MaterialTheme.colorScheme.error
     PaymentOrderStatus.PENDING, PaymentOrderStatus.TAN_REQUIRED -> MaterialTheme.colorScheme.tertiary
     else -> MaterialTheme.colorScheme.onSurfaceVariant

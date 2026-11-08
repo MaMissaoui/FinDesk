@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -133,7 +132,7 @@ fun AccountsScreen(
                     } else if (state.bankAccesses.count { !it.offline } >= 2) {
                         val anyIncluded = state.bankAccesses.any { it.includeInSyncAll }
                         DisabledReason(s[StringKey.SyncAllNothingIncluded].takeIf { !anyIncluded }) {
-                            OutlinedButton(
+                            AppOutlinedButton(
                                 onClick = { vm.syncAll() },
                                 enabled = !state.isSyncing && anyIncluded,
                                 colors = OutlinedButtonStyle.colors(),
@@ -146,7 +145,7 @@ fun AccountsScreen(
                         }
                     }
                     if (showHeader) {
-                        Button(onClick = { showAddBank = true }) {
+                        AppButton(onClick = { showAddBank = true }) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(s[StringKey.AddBank])
@@ -162,7 +161,7 @@ fun AccountsScreen(
                     AppIcons.AccountBalance,
                     s[StringKey.NoBanksYet],
                     s[StringKey.NoBanksDescription],
-                ) { Button(onClick = { showAddBank = true }) { Text(s[StringKey.AddBank]) } }
+                ) { AppButton(onClick = { showAddBank = true }) { Text(s[StringKey.AddBank]) } }
             }
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -436,7 +435,7 @@ private fun BankCard(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                TextButton(onClick = { onUseCentralBlz(centralBlz) }) { Text(s.format(StringKey.UseBlz, centralBlz)) }
+                                AppTextButton(onClick = { onUseCentralBlz(centralBlz) }) { Text(s.format(StringKey.UseBlz, centralBlz)) }
                             }
                         }
                     }
@@ -447,7 +446,7 @@ private fun BankCard(
                             Text(syncStep ?: s[StringKey.Syncing], style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.width(8.dp))
                         } else {
-                            OutlinedButton(
+                            AppOutlinedButton(
                                 onClick = onSync,
                                 enabled = syncEnabled,
                                 colors = OutlinedButtonStyle.colors(),
@@ -459,7 +458,7 @@ private fun BankCard(
                             }
                         }
                     }
-                    TextButton(onClick = onAddAccount) {
+                    AppTextButton(onClick = onAddAccount) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(s[StringKey.AddAccountShort])
@@ -469,7 +468,7 @@ private fun BankCard(
                     var bankMenu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
-                        DropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
+                        AppDropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
                             // Sync-only entries (history, include in "Sync all", connection settings) exist for online banks only
                             if (!bank.offline) {
                                 DropdownMenuItem(
@@ -573,7 +572,7 @@ private fun BankCard(
                             Text(
                                 Formats.money(account.balance, account.currency),
                                 style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.SemiBold,
                                 color = balanceToneColor(balanceTone(listOf(account), account.currency)),
                             )
                             Spacer(Modifier.width(8.dp))
@@ -616,7 +615,7 @@ internal fun AccountRowMenu(
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
         IconButton(onClick = { expanded = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
                 text = { Text(s[StringKey.ShowTransactions]) },
                 leadingIcon = { Icon(Icons.Default.List, contentDescription = null) },
@@ -729,9 +728,9 @@ internal fun AddBankDialog(
                 )
                 if (offline) {
                     // An offline bank has no BLZ, BIC, login or server: its name is everything
-                    OutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    AppOutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 } else {
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
                         label = { Text(s[StringKey.BankSearchHint]) },
@@ -757,8 +756,8 @@ internal fun AddBankDialog(
                         }
                     }
                     Text(s[StringKey.BankManualEntry], style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    OutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(
+                    AppOutlinedTextField(bankName, { bankName = it }, label = { Text(s[StringKey.BankName]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    AppOutlinedTextField(
                         blz,
                         { input ->
                             blz = input.filter(Char::isDigit).take(8)
@@ -783,22 +782,22 @@ internal fun AddBankDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    OutlinedTextField(bic, { bic = it.uppercase() }, label = { Text(s[StringKey.BicOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.OnlineUserIdOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    AppOutlinedTextField(bic, { bic = it.uppercase() }, label = { Text(s[StringKey.BicOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    AppOutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.OnlineUserIdOptional]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     ConnectionProposal(knownBank, blz)
                 }
                 if (touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = {
-            Button(onClick = {
+            AppButton(onClick = {
                 touched = true
                 if (error == null) {
                     if (offline) onConfirmOffline(bankName) else onConfirm(bankName, blz, bic, userId)
                 }
             }) { Text(s[StringKey.Add]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -808,7 +807,7 @@ private fun BankSuggestionRow(entry: BankDirectory.Entry, onSelect: () -> Unit) 
     val s = strings()
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
@@ -868,7 +867,7 @@ internal fun AddAccountDialog(
         title = { Text(s.format(StringKey.AddAccountAt, bank.bankName)) },
         text = { AddAccountDialogContent(form, validate) },
         confirmButton = {
-            Button(onClick = {
+            AppButton(onClick = {
                 form.touched = true
                 val parsed = form.parsedBalance
                 if (validate(form.iban) == null && parsed != null) {
@@ -876,7 +875,7 @@ internal fun AddAccountDialog(
                 }
             }) { Text(s[StringKey.Add]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -905,7 +904,7 @@ internal fun AddAccountDialogContent(form: AddAccountForm, validate: (String) ->
     val s = strings()
     val error = validate(form.iban) ?: if (form.parsedBalance == null) s[StringKey.BalanceNotANumber] else null
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedTextField(
+        AppOutlinedTextField(
             form.name,
             { form.name = it.take(de.findesk.repository.MAX_ACCOUNT_NAME_LENGTH) },
             label = { Text(s[StringKey.AccountName]) },
@@ -913,7 +912,7 @@ internal fun AddAccountDialogContent(form: AddAccountForm, validate: (String) ->
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
+        AppOutlinedTextField(
             form.iban,
             { form.iban = it.uppercase() },
             label = { Text(if (form.offline) s[StringKey.IbanOrCardLast4] else s[StringKey.Iban]) },
@@ -932,7 +931,7 @@ internal fun AddAccountDialogContent(form: AddAccountForm, validate: (String) ->
             optionLabel = { it },
             onSelect = { form.currency = it },
         )
-        OutlinedTextField(form.balance, { form.balance = it }, label = { Text(s.format(StringKey.CurrentBalanceIn, form.currency)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        AppOutlinedTextField(form.balance, { form.balance = it }, label = { Text(s.format(StringKey.CurrentBalanceIn, form.currency)) }, singleLine = true, modifier = Modifier.fillMaxWidth())
         if (form.touched && error != null) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -955,7 +954,7 @@ internal fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfir
                     optionLabel = { s.accountType(it) },
                     onSelect = { type = it },
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     text,
                     { text = it },
                     label = { Text(s.format(StringKey.CurrentBalanceIn, account.currency)) },
@@ -972,8 +971,8 @@ internal fun BalanceDialog(account: AccountItem, onDismiss: () -> Unit, onConfir
                 }
             }
         },
-        confirmButton = { Button(onClick = { parsed?.let { onConfirm(it, type) } }, enabled = parsed != null) { Text(s[StringKey.Save]) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        confirmButton = { AppButton(onClick = { parsed?.let { onConfirm(it, type) } }, enabled = parsed != null) { Text(s[StringKey.Save]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -988,7 +987,7 @@ private fun RenameAccountDialog(account: AccountItem, onDismiss: () -> Unit, onC
         title = { Text(s[StringKey.RenameAccount]) },
         text = {
             Column(modifier = Modifier.width(460.dp)) {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     text,
                     { text = it.take(de.findesk.repository.MAX_ACCOUNT_NAME_LENGTH) },
                     label = { Text(s[StringKey.AccountName]) },
@@ -1001,8 +1000,8 @@ private fun RenameAccountDialog(account: AccountItem, onDismiss: () -> Unit, onC
                 )
             }
         },
-        confirmButton = { Button(onClick = { onConfirm(text) }) { Text(s[StringKey.Save]) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        confirmButton = { AppButton(onClick = { onConfirm(text) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -1030,7 +1029,7 @@ private fun ConnectionDialog(
             title = { Text(s[StringKey.RenameConnection]) },
             text = {
                 Column(modifier = Modifier.width(460.dp)) {
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         name,
                         { name = it.take(de.findesk.repository.MAX_BANK_NAME_LENGTH) },
                         label = { Text(s[StringKey.ConnectionName]) },
@@ -1041,8 +1040,8 @@ private fun ConnectionDialog(
                     )
                 }
             },
-            confirmButton = { Button(enabled = name.isNotBlank(), onClick = { onConfirm(name, bank.blz, bank.userId, bank.serverUrl.orEmpty()) }) { Text(s[StringKey.Save]) } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+            confirmButton = { AppButton(enabled = name.isNotBlank(), onClick = { onConfirm(name, bank.blz, bank.userId, bank.serverUrl.orEmpty()) }) { Text(s[StringKey.Save]) } },
+            dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
         )
         return
     }
@@ -1066,7 +1065,7 @@ private fun ConnectionDialog(
         title = { Text(s.format(StringKey.OnlineBankingFor, bank.bankName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.width(460.dp)) {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     name,
                     { name = it.take(de.findesk.repository.MAX_BANK_NAME_LENGTH) },
                     label = { Text(s[StringKey.ConnectionName]) },
@@ -1075,7 +1074,7 @@ private fun ConnectionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().focusRequester(nameField),
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     blzField,
                     { blzField = it.filter(Char::isDigit).take(8) },
                     label = { Text(s[StringKey.BlzDigits]) },
@@ -1084,8 +1083,8 @@ private fun ConnectionDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                OutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.UserIdLogin]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(
+                AppOutlinedTextField(userId, { userId = it }, label = { Text(s[StringKey.UserIdLogin]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AppOutlinedTextField(
                     url,
                     { url = it },
                     label = { Text(s[StringKey.FintsServerUrl]) },
@@ -1106,7 +1105,7 @@ private fun ConnectionDialog(
                     hasSavedPin -> Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(s[StringKey.PinSavedForSyncs], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(4.dp))
-                        TextButton(onClick = onForgetPin) { Text(s[StringKey.ForgetPin]) }
+                        AppTextButton(onClick = onForgetPin) { Text(s[StringKey.ForgetPin]) }
                     }
 
                     canRememberPin -> Text(
@@ -1125,12 +1124,12 @@ private fun ConnectionDialog(
         },
         confirmButton = {
             // A warning (unknown BLZ, another bank) never blocks saving; a wrong login is still confirmed with Save
-            Button(
+            AppButton(
                 enabled = name.isNotBlank() && userId.isNotBlank() && blzField.length == 8 && !syncing && (url.isBlank() || url.trim().startsWith("https://")),
                 onClick = { onConfirm(name, blzField, userId, url) },
             ) { Text(s[StringKey.Save]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -1152,7 +1151,7 @@ private fun FetchHistoryDialog(
         title = { Text(s.format(StringKey.FetchHistoryFor, bank.bankName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.width(460.dp)) {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     input,
                     { input = it },
                     label = { Text(s[StringKey.FetchHistoryDate]) },
@@ -1164,14 +1163,14 @@ private fun FetchHistoryDialog(
             }
         },
         confirmButton = {
-            Button(enabled = date != null && error == null, onClick = { date?.let(onFetch) }) { Text(s[StringKey.Fetch]) }
+            AppButton(enabled = date != null && error == null, onClick = { date?.let(onFetch) }) { Text(s[StringKey.Fetch]) }
         },
         dismissButton = {
             Row {
                 if (bank.syncFrom != null) {
-                    TextButton(onClick = onReset) { Text(s[StringKey.Reset]) }
+                    AppTextButton(onClick = onReset) { Text(s[StringKey.Reset]) }
                 }
-                TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) }
+                AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) }
             }
         },
     )
@@ -1202,7 +1201,7 @@ private fun AccountDetailDialog(detail: AccountDetail, bank: BankAccessItem?, on
                         Text(
                             Formats.money(a.balance, a.currency),
                             style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             color = balanceToneColor(balanceTone(listOf(a), a.currency)),
                         )
                     }
@@ -1239,11 +1238,11 @@ private fun AccountDetailDialog(detail: AccountDetail, bank: BankAccessItem?, on
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onAllTransactions) { Text(s[StringKey.AllTransactions]) } },
+        confirmButton = { AppTextButton(onClick = onAllTransactions) { Text(s[StringKey.AllTransactions]) } },
         dismissButton = {
             Row {
-                TextButton(onClick = onRename) { Text(s[StringKey.RenameAccount]) }
-                TextButton(onClick = onClose) { Text(s[StringKey.Close]) }
+                AppTextButton(onClick = onRename) { Text(s[StringKey.RenameAccount]) }
+                AppTextButton(onClick = onClose) { Text(s[StringKey.Close]) }
             }
         },
     )
