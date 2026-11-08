@@ -11,6 +11,10 @@ on:
     types: [published]
   push:
     branches: [main]
+    # A docs-only merge to main builds no installers.
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
     # Installers are expensive to build, so a PR only builds them when a change can alter
     # the packaged result. Kotlin source changes are deliberately not listed: ci.yml compiles
