@@ -101,9 +101,9 @@ class TransactionSelectionUiTest {
             val vm = holder[0] ?: error("the screen did not create its view model")
             val ids = vm.state.value.transactions.map { it.id }
             assertEquals(4, ids.size, "the list shows the four bookings, newest first")
-            // Row centres at 1440x900, density 1; the selection bar above the header moves them down by 64 px
-            val rows = listOf(221f, 276f, 331f, 386f)
-            val withBar = rows.map { it + 64f }
+            // Row centres at 1440x900, density 1; the selection bar above the header moves them down by 52 px
+            val rows = listOf(200f, 256f, 312f, 368f)
+            val withBar = rows.map { it + 52f }
 
             click(rows[0], toggle = true)
             assertEquals(setOf(ids[0]), vm.state.value.selectedIds, "Cmd/Ctrl-click selects the row")

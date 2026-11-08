@@ -2,6 +2,9 @@ package de.findesk.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -14,17 +17,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import de.findesk.document.TesseractOcrEngine
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.StringKey
@@ -40,7 +45,9 @@ import de.findesk.ui.navigation.SettingsSection
 import de.findesk.ui.platform.revealInFileManager
 import de.findesk.ui.platform.revealLabel
 import de.findesk.ui.theme.CategoryColors
+import de.findesk.ui.theme.controlFill
 import de.findesk.ui.theme.inflowColor
+import de.findesk.ui.theme.selectedAccent
 import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsState
@@ -82,52 +89,48 @@ fun SettingsScreen(
     var section by remember { mutableStateOf(args.settingsSection ?: SettingsSection.APPEARANCE) }
     val sectionContent: @Composable () -> Unit = {
         when (section) {
-            SettingsSection.APPEARANCE -> SettingsSectionHeader(s[StringKey.Appearance]) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.DarkTheme], modifier = Modifier.weight(1f))
-                    Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.Language], modifier = Modifier.weight(1f))
-                    DropdownSelector(
-                        label = language.nativeName,
-                        options = AppLanguage.entries,
-                        optionLabel = { option -> option.nativeName },
-                        onSelect = { onLanguageChange(it) },
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(s[StringKey.PrimaryCurrency])
-                        Text(
-                            s[StringKey.PrimaryCurrencyHint],
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.widthIn(max = 640.dp),
-                        )
+            SettingsSection.APPEARANCE -> {
+                val labels = listOf(s[StringKey.DarkTheme], s[StringKey.Language], s[StringKey.PrimaryCurrency])
+                val labelWidth = settingsLabelWidth(labels)
+                SettingsSectionHeader(s[StringKey.Appearance]) {
+                    SettingsForm {
+                        SettingsFormRow(s[StringKey.DarkTheme], labelWidth) {
+                            Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
+                        }
+                        SettingsFormRow(s[StringKey.Language], labelWidth) {
+                            DropdownSelector(
+                                label = language.nativeName,
+                                options = AppLanguage.entries,
+                                optionLabel = { option -> option.nativeName },
+                                onSelect = { onLanguageChange(it) },
+                            )
+                        }
+                        SettingsFormRow(s[StringKey.PrimaryCurrency], labelWidth) {
+                            Column {
+                                DropdownSelector(
+                                    label = state.primaryCurrency,
+                                    options = state.currencyOptions,
+                                    optionLabel = { it },
+                                    onSelect = { vm.setPrimaryCurrency(it) },
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    s[StringKey.PrimaryCurrencyHint],
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.widthIn(max = 720.dp),
+                                )
+                            }
+                        }
                     }
-                    DropdownSelector(
-                        label = state.primaryCurrency,
-                        options = state.currencyOptions,
-                        optionLabel = { it },
-                        onSelect = { vm.setPrimaryCurrency(it) },
-                    )
                 }
             }
 
             SettingsSection.PROFILES -> SettingsSectionHeader(
                 s[StringKey.Profiles],
+                description = s[StringKey.ProfilesHint],
                 actions = { AppButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
             ) {
-                Text(
-                    s[StringKey.ProfilesHint],
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.widthIn(max = 640.dp),
-                )
-                Spacer(Modifier.height(8.dp))
                 state.profiles.forEach { p ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
@@ -241,6 +244,7 @@ fun SettingsScreen(
 
             SettingsSection.RULES -> SettingsSectionHeader(
                 s[StringKey.AutoCategorizationRules],
+                description = s[StringKey.RulesHint],
                 actions = {
                     DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
                         AppButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
@@ -253,13 +257,6 @@ fun SettingsScreen(
                     }) { Text(s[StringKey.ExportRules]) }
                 },
             ) {
-                Text(
-                    s[StringKey.RulesHint],
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.widthIn(max = 640.dp),
-                )
-                Spacer(Modifier.height(8.dp))
                 if (state.rules.isEmpty()) {
                     Text(
                         if (state.categories.isEmpty()) s[StringKey.HintNeedsCategory] else s[StringKey.NoRulesYet],
@@ -283,9 +280,27 @@ fun SettingsScreen(
                                 .padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(r.pattern, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            val category = state.categories.firstOrNull { it.id == r.categoryId }
                             Column(Modifier.weight(1f)) {
-                                Text("→ ${r.categoryName}" + ruleTaxMarker(r, s))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(12.dp).background(categoryColor(category?.color, r.categoryName), CircleShape))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        r.categoryName + ruleTaxMarker(r, s),
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    r.pattern,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                                 val restrictions = listOf(
                                     RuleField.PARTNER to s[StringKey.RuleFieldPartner],
                                     RuleField.PURPOSE to s[StringKey.RuleFieldPurpose],
@@ -309,88 +324,105 @@ fun SettingsScreen(
                 }
             }
 
-            SettingsSection.DATA -> SettingsSectionHeader(s[StringKey.DataAndOcr]) {
-                InfoRow(s[StringKey.Database], state.dataDirectory + "/findesk.db", File(state.dataDirectory, "findesk.db"))
-                InfoRow(s[StringKey.DocumentsFolder], state.documentsDirectory, File(state.documentsDirectory))
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-                    Icon(
-                        if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (state.isOcrAvailable) inflowColor() else MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (state.isOcrAvailable) {
-                            s[StringKey.TesseractAvailable]
-                        } else {
-                            s[StringKey.TesseractMissing]
-                        },
-                    )
-                }
-            }
-
-            SettingsSection.BACKUP -> SettingsSectionHeader(s[StringKey.BackupAndRestore]) {
-                Text(
-                    s[StringKey.BackupHint],
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.widthIn(max = 640.dp),
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (state.isEncrypted) s[StringKey.EncryptionStatus] + " " + s[StringKey.BackupNote] else s[StringKey.EncryptionOff],
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.widthIn(max = 640.dp),
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    AppButton(enabled = !state.isBusy, onClick = {
-                        FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
-                    }) { Text(s[StringKey.CreateBackup]) }
-                    AppOutlinedButton(
-                        enabled = !state.isBusy && !state.hasPendingRestore,
-                        onClick = {
-                            FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
-                        },
-                        colors = OutlinedButtonStyle.colors(),
-                        border = OutlinedButtonStyle.border(enabled = !state.isBusy && !state.hasPendingRestore),
-                    ) { Text(s[StringKey.RestoreFromBackup]) }
-                    if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                }
-                if (state.hasPendingRestore) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
-                        AppTextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
+            SettingsSection.DATA -> {
+                val labels = listOf(s[StringKey.Database], s[StringKey.DocumentsFolder])
+                val labelWidth = settingsLabelWidth(labels)
+                SettingsSectionHeader(s[StringKey.DataAndOcr]) {
+                    SettingsForm {
+                        SettingsFormRow(s[StringKey.Database], labelWidth) {
+                            Text(state.dataDirectory + "/findesk.db", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            val database = File(state.dataDirectory, "findesk.db")
+                            if (database.exists()) {
+                                AppTextButton(onClick = { revealInFileManager(database) }) { Text(s[revealLabel()]) }
+                            }
+                        }
+                        SettingsFormRow(s[StringKey.DocumentsFolder], labelWidth) {
+                            Text(state.documentsDirectory, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            val documents = File(state.documentsDirectory)
+                            if (documents.exists()) {
+                                AppTextButton(onClick = { revealInFileManager(documents) }) { Text(s[revealLabel()]) }
+                            }
+                        }
+                        SettingsFormRow("", labelWidth) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = if (state.isOcrAvailable) inflowColor() else MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    if (state.isOcrAvailable) {
+                                        s[StringKey.TesseractAvailable]
+                                    } else {
+                                        s[StringKey.TesseractMissing]
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
-                state.restoredFrom?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(s.format(StringKey.BackupRestoredAt, it), style = MaterialTheme.typography.bodySmall)
+            }
+
+            SettingsSection.BACKUP -> SettingsSectionHeader(
+                s[StringKey.BackupAndRestore],
+                description = s[StringKey.BackupHint],
+            ) {
+                SettingsForm {
+                    SettingsFormRow("", 0.dp) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (state.isEncrypted) s[StringKey.EncryptionStatus] + " " + s[StringKey.BackupNote] else s[StringKey.EncryptionOff],
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.widthIn(max = 720.dp),
+                            )
+                        }
+                    }
+                    SettingsFormRow("", 0.dp) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AppButton(enabled = !state.isBusy, onClick = {
+                                FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
+                            }) { Text(s[StringKey.CreateBackup]) }
+                            AppOutlinedButton(
+                                enabled = !state.isBusy && !state.hasPendingRestore,
+                                onClick = {
+                                    FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
+                                },
+                            ) { Text(s[StringKey.RestoreFromBackup]) }
+                            if (state.isBusy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        }
+                    }
+                    if (state.hasPendingRestore) {
+                        SettingsFormRow("", 0.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
+                                AppTextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
+                            }
+                        }
+                    }
+                    state.restoredFrom?.let {
+                        SettingsFormRow("", 0.dp) {
+                            Text(s.format(StringKey.BackupRestoredAt, it), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 }
             }
 
-            SettingsSection.TRACE -> SettingsSectionHeader(s[StringKey.ProtocolTraceTitle]) {
-                Text(
-                    s[StringKey.ProtocolTraceHint],
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.widthIn(max = 640.dp),
-                )
-                Spacer(Modifier.height(8.dp))
+            SettingsSection.TRACE -> SettingsSectionHeader(
+                s[StringKey.ProtocolTraceTitle],
+                description = s[StringKey.ProtocolTraceHint],
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(s[StringKey.ProtocolTraceEnable], modifier = Modifier.weight(1f))
                     Switch(checked = state.protocolTraceEnabled, onCheckedChange = { vm.setProtocolTraceEnabled(it) })
@@ -571,7 +603,7 @@ fun SettingsScreen(
 @Composable
 private fun SettingsSectionList(selected: SettingsSection, onSelect: (SettingsSection) -> Unit) {
     val s = strings()
-    Column(Modifier.width(240.dp).fillMaxHeight()) {
+    Column(Modifier.width(240.dp).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SettingsSection.entries.forEach { entry ->
             SettingsSectionRow(
                 section = entry,
@@ -585,32 +617,37 @@ private fun SettingsSectionList(selected: SettingsSection, onSelect: (SettingsSe
 
 @Composable
 private fun SettingsSectionRow(section: SettingsSection, selected: Boolean, label: String, onClick: () -> Unit) {
-    val background = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
-    val labelColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
-    val iconColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-    val barColor = MaterialTheme.colorScheme.primary
-    // The sidebar's and account panel's 3 dp start bar, on the same rounded row
-    val selectionBar = if (selected) {
-        Modifier.drawBehind { drawRect(color = barColor, size = Size(3.dp.toPx(), size.height)) }
-    } else {
-        Modifier
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val background = when {
+        selected -> selectedAccent()
+        hovered -> controlFill()
+        else -> androidx.compose.ui.graphics.Color.Transparent
     }
+    // The selected row is a filled accent tint, not a bar: ink text and icon, no side marker
+    val labelColor = MaterialTheme.colorScheme.onSurface
+    val iconColor = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(48.dp)
             .clip(MaterialTheme.shapes.medium)
             .background(background)
-            .then(selectionBar)
+            .hoverable(interaction)
             .selectable(selected = selected, onClick = onClick, role = Role.Tab)
-            // Long titles ("Sicherung & Wiederherstellung") wrap to a second line instead of being cut off
-            .heightIn(min = 40.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(section.icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(20.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = labelColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Icon(section.icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            color = labelColor,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -627,10 +664,14 @@ private val SettingsSection.icon: ImageVector
         SettingsSection.AUDIT -> AppIcons.History
     }
 
-/** A flush section header: its title and actions, a hairline divider, then the content. */
+/**
+ * A settings group: a 20 sp Semibold title, its existing explanation at 14 sp slate (16 dp below the title), then
+ * the group's rows. Groups inside a section sit 32 dp apart.
+ */
 @Composable
 private fun SettingsSectionHeader(
     title: String,
+    description: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -639,27 +680,57 @@ private fun SettingsSectionHeader(
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f).semantics { heading() },
             )
             actions()
         }
-        Spacer(Modifier.height(8.dp))
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(Modifier.height(12.dp))
+        if (description != null) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.widthIn(max = 720.dp),
+            )
+        }
+        Spacer(Modifier.height(32.dp))
         content()
     }
 }
 
+/** The widest label of a two-column settings form; labels align right in a column exactly this wide. */
 @Composable
-private fun InfoRow(label: String, value: String, reveal: File? = null) {
-    Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(120.dp))
-        Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        if (reveal != null && reveal.exists()) {
-            AppTextButton(onClick = { revealInFileManager(reveal) }) { Text(strings()[revealLabel()]) }
+private fun settingsLabelWidth(labels: List<String>): Dp {
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.bodyMedium
+    val widest = labels.maxOfOrNull { measurer.measure(it, style).size.width } ?: 0
+    return with(LocalDensity.current) { widest.toDp() }
+}
+
+/** Label/control rows of a settings form, 40 dp high, with one right-aligned label column. */
+@Composable
+private fun SettingsForm(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth(), content = content)
+}
+
+@Composable
+private fun SettingsFormRow(label: String, labelWidth: Dp, content: @Composable RowScope.() -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (label.isNotEmpty()) {
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(labelWidth),
+            )
+        } else {
+            Spacer(Modifier.width(labelWidth))
         }
+        Spacer(Modifier.width(12.dp))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, content = content)
     }
 }
 

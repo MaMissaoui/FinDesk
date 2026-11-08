@@ -1175,6 +1175,50 @@ class ScreenshotTest {
         }
     }
 
+    /** The transactions toolbar at the two reference widths and in both languages: one line or two. */
+    @Test
+    fun `render the transaction filters at 1100 and 1440`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-filters").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Sparkasse KölnBonn", "37050198", "COLSDE33XXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("2450.37")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val groceries = de.findesk.repository.CategoryRepositoryImpl().create("Lebensmittel", "#4CAF50").id.value
+        val today = java.time.LocalDate.now()
+        TransactionRepositoryImpl().createAll(
+            listOf(
+                NewTransaction(account, today.minusDays(3), BigDecimal("-20.00"), "EUR", "Bäckerei Muster", "Brötchen", groceries, "filter-1"),
+                NewTransaction(account, today.minusDays(2), BigDecimal("-80.00"), "EUR", "Stadtwerke Beispiel", "Abschlag", null, "filter-2"),
+                NewTransaction(account, today.minusDays(1), BigDecimal("120.00"), "EUR", "Beispiel AG", "Gehalt", null, "filter-3"),
+            ),
+        )
+        listOf(1440 to "1440", 1100 to "1100").forEach { (width, suffix) ->
+            listOf(false, true).forEach { dark ->
+                val theme = if (dark) "-dark" else ""
+                render("transactions-filters-$suffix-en$theme", width, 900) { Frame(Screen.TRANSACTIONS, dark = dark) }
+                render("transactions-filters-$suffix-de$theme", width, 900) { Frame(Screen.TRANSACTIONS, dark = dark, language = AppLanguage.DE) }
+            }
+        }
+    }
+
+    /** The rules list: the target category as the row title, the pattern as its elided secondary line. */
+    @Test
+    fun `render the populated settings rules list`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-rules-shots").toFile().absolutePath)
+        val categories = de.findesk.repository.CategoryRepositoryImpl()
+        val groceries = categories.create("Lebensmittel", "#4CAF50", isTaxRelevant = true).id.value
+        val rent = categories.create("Miete", "#2196F3").id.value
+        val rules = de.findesk.repository.RuleRepositoryImpl()
+        rules.create("Bäckerei|Bäcker", groceries, priority = 2, matchField = de.findesk.model.RuleField.PARTNER)
+        rules.create("Miete\\s+Wohnung", rent, priority = 1, autoApply = false, direction = de.findesk.model.RuleDirection.EXPENSE)
+        rules.create("^Stadtwerke", groceries, priority = 0, taxRelevant = true)
+        render("settings-rules-populated", 1440, 900) {
+            Frame(Screen.SETTINGS, dark = false, settingsArgs = NavigationArgs(settingsSection = SettingsSection.RULES))
+        }
+        render("settings-rules-populated-dark", 1440, 900) {
+            Frame(Screen.SETTINGS, dark = true, settingsArgs = NavigationArgs(settingsSection = SettingsSection.RULES))
+        }
+    }
+
     private fun render(name: String, screen: Screen, dark: Boolean, height: Int = 900) = render(name, 1440, height) { Frame(screen, dark) }
 
     private fun render(name: String, width: Int, height: Int, clickAt: Offset? = null, hoverAt: Offset? = null, afterStable: (() -> Unit)? = null, waitForIdle: Boolean = true, content: @Composable () -> Unit) {

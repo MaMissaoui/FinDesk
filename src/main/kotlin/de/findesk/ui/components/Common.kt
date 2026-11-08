@@ -5,10 +5,12 @@ import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
@@ -19,12 +21,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -35,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.findesk.i18n.StringKey
@@ -42,6 +48,7 @@ import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.controlFill
 import de.findesk.ui.theme.inflowColor
 import de.findesk.ui.theme.readableOn
 import de.findesk.util.Formats
@@ -280,7 +287,64 @@ fun ConfirmDialog(title: String, text: String, confirmLabel: String? = null, onC
     )
 }
 
-/** A compact dropdown selector built on an outlined button. */
+/**
+ * The toolbar's search field and filters: they share one line while the search field keeps at least 240 dp.
+ * Otherwise the search field takes its own full-width line and the filters follow on a second line, wrapping
+ * only when even they do not fit. The filters are measured first, so the decision follows their real width.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun AdaptiveFilterBar(
+    search: @Composable () -> Unit,
+    filters: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SubcomposeLayout(modifier = modifier.fillMaxWidth()) { constraints ->
+        val gap = 8.dp.roundToPx()
+        val minimumSearch = 240.dp.roundToPx()
+        // Measure the filters at their natural single-line width, exactly as the dropdowns lay themselves out.
+        val natural = subcompose("filters") {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                filters()
+            }
+        }.map { it.measure(Constraints()) }
+        val filtersWidth = natural.maxOfOrNull { it.width } ?: 0
+        val filtersHeight = natural.maxOfOrNull { it.height } ?: 0
+
+        if (constraints.maxWidth >= filtersWidth + gap + minimumSearch) {
+            val searchPlaceable = subcompose("search-inline") {
+                Box(Modifier.fillMaxWidth()) { search() }
+            }.first().measure(Constraints(maxWidth = constraints.maxWidth - filtersWidth - gap))
+            val height = maxOf(searchPlaceable.height, filtersHeight)
+            layout(constraints.maxWidth, height) {
+                searchPlaceable.place(0, (height - searchPlaceable.height) / 2)
+                natural.forEach { it.place(constraints.maxWidth - filtersWidth, (height - it.height) / 2) }
+            }
+        } else {
+            val searchPlaceable = subcompose("search-stacked") {
+                Box(Modifier.fillMaxWidth()) { search() }
+            }.first().measure(Constraints(maxWidth = constraints.maxWidth))
+            // One line if the measured filters fit the width, otherwise a second composition that may wrap.
+            val wrapped = if (filtersWidth <= constraints.maxWidth) {
+                natural
+            } else {
+                subcompose("filters-wrapped") {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        filters()
+                    }
+                }.map { it.measure(Constraints(maxWidth = constraints.maxWidth)) }
+            }
+            val wrappedHeight = wrapped.maxOfOrNull { it.height } ?: 0
+            val filterTop = searchPlaceable.height + gap
+            layout(constraints.maxWidth, filterTop + wrappedHeight) {
+                searchPlaceable.place(0, 0)
+                wrapped.forEach { it.place(0, filterTop) }
+            }
+        }
+    }
+}
+
+/** A compact dropdown selector: an outlined field by default, or a filled quiet control for a toolbar filter. */
 @Composable
 fun <T> DropdownSelector(
     label: String,
@@ -289,20 +353,36 @@ fun <T> DropdownSelector(
     onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     leadingIcon: ImageVector? = null,
+    /** True for the toolbar filters: filled `controlFill`, no outline. Form dropdowns keep the outlined field. */
+    filled: Boolean = false,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val buttonContent: @Composable RowScope.() -> Unit = {
+        if (leadingIcon != null) {
+            Icon(leadingIcon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(label, maxLines = 1)
+        Spacer(Modifier.width(4.dp))
+        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+    }
     Box(modifier) {
-        AppOutlinedButton(
-            onClick = { expanded = true },
-            colors = OutlinedButtonStyle.colors(),
-            border = OutlinedButtonStyle.border(),
-        ) {
-            if (leadingIcon != null) {
-                Icon(leadingIcon, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-            }
-            Text(label, maxLines = 1)
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+        if (filled) {
+            AppOutlinedButton(
+                onClick = { expanded = true },
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                content = buttonContent,
+            )
+        } else {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.height(36.dp),
+                shape = MaterialTheme.shapes.small,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                content = buttonContent,
+            )
         }
         AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
@@ -319,8 +399,8 @@ fun <T> DropdownSelector(
 }
 
 /**
- * A 40 dp search field: the same pill and outline as [DropdownSelector], a leading magnifier and a clear button.
- * Built on [BasicTextField] so the height really stays at 40 dp; focus thickens the outline to 2 dp primary.
+ * A 36 dp search field: paper fill with a 1 dp `outlineVariant` outline that turns accent on focus, an 8 dp radius,
+ * a leading magnifier and a clear button. Built on [BasicTextField] so the height really stays at 36 dp.
  */
 @Composable
 fun CompactSearchField(
@@ -341,12 +421,18 @@ fun CompactSearchField(
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         interactionSource = interactionSource,
         // The placeholder disappears once text is typed, so it also names the field for screen readers
-        modifier = modifier.height(40.dp).semantics { contentDescription = placeholder },
+        modifier = modifier.height(36.dp).semantics { contentDescription = placeholder },
         decorationBox = { innerTextField ->
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .border(if (focused) 2.dp else 1.dp, if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, shape)
+                    .clip(shape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(
+                        width = 1.dp,
+                        color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        shape = shape,
+                    )
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -380,8 +466,9 @@ fun CompactSearchField(
 }
 
 /**
- * Exclusive choices as one segmented row, replacing loose chips and tabs that filter. Segments are 40 dp and use
- * the theme's selected container; [enabled] disables an individual option without hiding it.
+ * Exclusive choices as one segmented row on a `controlFill` track: the selected segment is paper with a 1 dp
+ * `outlineVariant` outline and ink text, the others slate, all 36 dp high. [enabled] disables an individual option
+ * without hiding it.
  */
 @Composable
 fun <T> SingleChoiceRow(
@@ -400,16 +487,46 @@ fun <T> SingleChoiceRow(
     val widest = with(density) {
         labels.maxOfOrNull { measurer.measure(it, MaterialTheme.typography.labelLarge).size.width }?.toDp() ?: 0.dp
     }
-    SingleChoiceSegmentedButtonRow(modifier = modifier) {
+    Row(
+        modifier = modifier
+            .height(36.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(controlFill()),
+    ) {
         options.forEachIndexed { index, option ->
-            SegmentedButton(
-                selected = option == selected,
-                onClick = { onSelect(option) },
-                enabled = enabled(option),
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                icon = {},
-                label = { Text(labels[index], maxLines = 1, softWrap = false, modifier = Modifier.widthIn(min = widest)) },
-            )
+            val isSelected = option == selected
+            val isEnabled = enabled(option)
+            val textColor = when {
+                !isEnabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                isSelected -> MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .clip(MaterialTheme.shapes.small)
+                    .then(
+                        if (isSelected) {
+                            Modifier
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .selectable(selected = isSelected, enabled = isEnabled, role = Role.Tab) { onSelect(option) }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    labels[index],
+                    style = MaterialTheme.typography.labelLarge,
+                    color = textColor,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.widthIn(min = widest),
+                )
+            }
         }
     }
 }
@@ -422,22 +539,17 @@ data class OverflowItem(
     val onClick: () -> Unit,
 )
 
-/** A 40 dp outlined More button whose menu holds secondary actions, with a reason line on disabled entries. */
+/** A 36 dp filled More button whose menu holds secondary actions, with a reason line on disabled entries. */
 @Composable
 fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
     val s = strings()
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        AppOutlinedButton(
+        AppIconButton(
+            icon = Icons.Default.MoreVert,
+            contentDescription = s[StringKey.More],
             onClick = { expanded = true },
-            shape = MaterialTheme.shapes.small,
-            contentPadding = PaddingValues(0.dp),
-            border = OutlinedButtonStyle.border(),
-            colors = OutlinedButtonStyle.colors(),
-            modifier = Modifier.size(40.dp),
-        ) {
-            Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(20.dp))
-        }
+        )
         AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             items.forEach { item ->
                 DropdownMenuItem(
@@ -463,18 +575,6 @@ fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
             }
         }
     }
-}
-
-/** Outlined controls: a 1 dp `outlineVariant` border and ink text, as the restyled palette asks. */
-internal object OutlinedButtonStyle {
-    @Composable
-    fun colors(): ButtonColors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
-
-    @Composable
-    fun border(enabled: Boolean = true): BorderStroke = BorderStroke(
-        1.dp,
-        if (enabled) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-    )
 }
 
 /** Native file dialogs (AWT FileDialog renders the platform dialog on macOS and Windows). */

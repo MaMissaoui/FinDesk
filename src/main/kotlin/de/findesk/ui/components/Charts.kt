@@ -42,6 +42,7 @@ import de.findesk.document.ReportService
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
+import de.findesk.ui.theme.caption
 import de.findesk.ui.theme.chartInColor
 import de.findesk.ui.theme.chartOutColor
 import de.findesk.util.Formats
@@ -180,7 +181,7 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
                     Text(
                         // Below €10 the half-way tick needs cents to differ from its neighbours
                         if (top < 10) Formats.money(BigDecimal.valueOf(tick), currency) else Formats.wholeMoney(BigDecimal.valueOf(tick), currency),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         softWrap = false,
@@ -272,7 +273,7 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
             months.forEach { m ->
                 Text(
                     Month.of(m.month).getDisplayName(TextStyle.SHORT, s.language.locale),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
@@ -285,7 +286,7 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
             if (months.any { it.partial }) {
                 Text(
                     s[StringKey.ChartPartialMonthNote],
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -317,7 +318,7 @@ private fun Legend(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).background(color, CircleShape))
         Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall)
+        Text(label, style = MaterialTheme.typography.caption)
     }
 }
 
@@ -484,21 +485,21 @@ fun BalanceLineChart(
         BoxWithConstraints(Modifier.fillMaxWidth().padding(start = axisWidth, top = 2.dp)) {
             Text(
                 Formats.date(points.first().first),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterStart),
             )
             if (maxWidth > 360.dp) {
                 Text(
                     Formats.date(points[points.size / 2].first),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),
                 )
             }
             Text(
                 Formats.date(points.last().first),
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
@@ -515,7 +516,7 @@ private fun ChartYAxis(labels: List<String>, modifier: Modifier, inset: Dp) {
             labels.forEach { label ->
                 Text(
                     label,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     softWrap = false,

@@ -5,12 +5,18 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import de.findesk.ui.components.MonogramColors
 import de.findesk.ui.theme.CategoryColors
+import de.findesk.ui.theme.ControlFillDark
+import de.findesk.ui.theme.ControlFillHoverDark
+import de.findesk.ui.theme.ControlFillHoverLight
+import de.findesk.ui.theme.ControlFillLight
 import de.findesk.ui.theme.DarkColorScheme
 import de.findesk.ui.theme.Error
 import de.findesk.ui.theme.ErrorDark
 import de.findesk.ui.theme.ErrorOnSelectionDark
 import de.findesk.ui.theme.ErrorOnSelectionLight
 import de.findesk.ui.theme.LightColorScheme
+import de.findesk.ui.theme.SelectedAccentDark
+import de.findesk.ui.theme.SelectedAccentLight
 import de.findesk.ui.theme.SelectionDark
 import de.findesk.ui.theme.SelectionLight
 import de.findesk.ui.theme.SidebarDark
@@ -76,6 +82,23 @@ class ContrastTest {
             assertContrast(scheme.onPrimary, scheme.primary, "filled button label ($name)")
             assertContrast(scheme.onSecondaryContainer, scheme.secondaryContainer, "selected filter chip label ($name)")
             assertContrast(scheme.onSurfaceVariant, scheme.surface, "unselected tab label ($name)")
+        }
+    }
+
+    /** The quiet filled controls and the selected settings row carry ink and slate text at 4.5:1. */
+    @Test
+    fun `quiet control fills keep ink and slate readable`() {
+        listOf(
+            "light control fill" to (LightColorScheme to ControlFillLight),
+            "light control fill hover" to (LightColorScheme to ControlFillHoverLight),
+            "dark control fill" to (DarkColorScheme to ControlFillDark),
+            "dark control fill hover" to (DarkColorScheme to ControlFillHoverDark),
+            "light selected settings row" to (LightColorScheme to SelectedAccentLight),
+            "dark selected settings row" to (DarkColorScheme to SelectedAccentDark),
+        ).forEach { (label, pair) ->
+            val (scheme, background) = pair
+            assertContrast(scheme.onSurface, background, "ink on $label")
+            assertContrast(scheme.onSurfaceVariant, background, "slate on $label")
         }
     }
 

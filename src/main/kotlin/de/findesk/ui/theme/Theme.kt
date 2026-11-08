@@ -10,10 +10,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-/** FinDesk's one shape scale: surfaces and dialogs 8 dp, controls 6 dp, small marks 4 dp. */
+/** FinDesk's one shape scale: surfaces and dialogs 8 dp, controls and fields 8 dp, small marks 4 dp. */
 internal val FinDeskShapes = Shapes(
     extraSmall = RoundedCornerShape(4.dp),
-    small = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(8.dp),
     medium = RoundedCornerShape(8.dp),
     large = RoundedCornerShape(8.dp),
     extraLarge = RoundedCornerShape(8.dp),

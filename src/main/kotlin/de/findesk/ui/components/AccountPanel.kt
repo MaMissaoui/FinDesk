@@ -1,6 +1,8 @@
 package de.findesk.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -54,6 +56,7 @@ import de.findesk.repository.MAX_ACCOUNT_GROUP_NAME_LENGTH
 import de.findesk.ui.theme.ErrorOnSelectionDark
 import de.findesk.ui.theme.ErrorOnSelectionLight
 import de.findesk.ui.theme.balanceToneColor
+import de.findesk.ui.theme.caption
 import de.findesk.ui.theme.isLightTheme
 import de.findesk.util.AccountGroupView
 import de.findesk.util.BalanceTone
@@ -160,10 +163,12 @@ fun AccountPanel(
                         }
                     }
 
-                    groups.forEach { view ->
+                    groups.forEachIndexed { index, view ->
                         val visible = view.accounts.filter { matches(it) }
                         // A group with no matching account is hidden while a filter is set.
-                        if (query.isNotEmpty() && visible.isEmpty()) return@forEach
+                        if (query.isNotEmpty() && visible.isEmpty()) return@forEachIndexed
+                        // 12 dp above each group, but not above the first one in the panel
+                        if (index > 0) Spacer(Modifier.height(12.dp))
                         val custom = (view.key as? GroupKey.Custom)?.let { key -> customGroups.firstOrNull { it.id == key.groupId } }
                         // A deleted group must not stay a drop target
                         DisposableEffect(view.key) { onDispose { headers.remove(view.key) } }
@@ -338,7 +343,7 @@ private fun NewCountBadge(count: Int, selected: Boolean) {
     ) {
         Text(
             text = count.toString(),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.caption,
             fontWeight = FontWeight.Medium,
             color = if (selected) LocalContentColor.current else MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
@@ -415,7 +420,7 @@ private fun GroupHeaderRow(
             AccountBankBadge(account)
             Spacer(Modifier.width(8.dp))
         }
-        Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         NewCountBadge(view.newCount, selected = selected)
         Spacer(Modifier.width(8.dp))
         // One line per currency, each coloured by its own currency's loan rule
@@ -423,8 +428,8 @@ private fun GroupHeaderRow(
             view.totals.ifEmpty { mapOf(primaryCurrency to BigDecimal.ZERO) }.forEach { (currency, amount) ->
                 Text(
                     Formats.money(amount, currency),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.End,
                     // Each currency's own loan rule, so a negative-only-because-of-loans total stays calm grey
                     color = panelAmountColor(balanceTone(view.accounts, currency), selected),
@@ -440,6 +445,7 @@ private fun GroupHeaderRow(
  * click is cancelled. The row position is read in root coordinates so the pointer can be hit-tested against the
  * group headers (see [dropTarget]).
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AccountRow(
     account: AccountItem,
@@ -458,56 +464,74 @@ private fun AccountRow(
     val dragBy by rememberUpdatedState(onDragBy)
     val dragEnd by rememberUpdatedState(onDragEnd)
     val dragCancel by rememberUpdatedState(onDragCancel)
-    SelectableRow(
-        selected = selected,
-        onClick = onSelect,
-        alpha = if (dragging) 0.4f else 1f,
-        modifier = Modifier
-            .padding(start = 12.dp)
-            .onGloballyPositioned { topLeft = it.positionInRoot() }
-            .pointerInput(account.id) {
-                detectDragGestures(
-                    onDragStart = { offset -> dragStart(latestTopLeft + offset) },
-                    onDrag = { change, amount ->
-                        change.consume()
-                        dragBy(amount)
-                    },
-                    onDragEnd = { dragEnd() },
-                    onDragCancel = { dragCancel() },
-                )
-            },
-    ) {
-        AccountBankBadge(account)
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                s.accountName(account),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (account.newCount > 0) FontWeight.Bold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            // Only with a user-set name: the default name already ends in the same 4 characters
-            if (account.name != null) {
-                Text("…${account.iban.takeLast(4)}", style = MaterialTheme.typography.bodySmall, color = panelSecondaryColor(selected))
-            }
-            account.lastUpdate?.let {
+    val row: @Composable () -> Unit = {
+        SelectableRow(
+            selected = selected,
+            onClick = onSelect,
+            alpha = if (dragging) 0.4f else 1f,
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .heightIn(min = 52.dp)
+                .onGloballyPositioned { topLeft = it.positionInRoot() }
+                .pointerInput(account.id) {
+                    detectDragGestures(
+                        onDragStart = { offset -> dragStart(latestTopLeft + offset) },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            dragBy(amount)
+                        },
+                        onDragEnd = { dragEnd() },
+                        onDragCancel = { dragCancel() },
+                    )
+                },
+        ) {
+            AccountBankBadge(account)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
                 Text(
-                    s.format(StringKey.LastFetched, Formats.date(it.toLocalDate())),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = panelSecondaryColor(selected),
+                    s.accountName(account),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = if (account.newCount > 0) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                // Only with a user-set name: the default name already ends in the same 4 characters
+                if (account.name != null) {
+                    Text("…${account.iban.takeLast(4)}", style = MaterialTheme.typography.bodySmall, color = panelSecondaryColor(selected))
+                }
             }
+            NewCountBadge(account.newCount, selected = selected)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                Formats.money(account.balance, account.currency),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.End,
+                color = panelAmountColor(balanceTone(listOf(account), account.currency), selected),
+            )
         }
-        NewCountBadge(account.newCount, selected = selected)
-        Spacer(Modifier.width(8.dp))
-        Text(
-            Formats.money(account.balance, account.currency),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.End,
-            color = panelAmountColor(balanceTone(listOf(account), account.currency), selected),
-        )
+    }
+    // The fetch time is a detail, so it lives in the row tooltip instead of a third line; Accounts keeps its own copy
+    val lastUpdate = account.lastUpdate
+    if (lastUpdate == null) {
+        row()
+    } else {
+        TooltipArea(
+            tooltip = {
+                Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 2.dp) {
+                    Text(
+                        s.format(StringKey.LastFetched, Formats.date(lastUpdate.toLocalDate())),
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            },
+            delayMillis = 300,
+        ) {
+            row()
+        }
     }
 }
 
@@ -626,5 +650,6 @@ fun CompactAccountSelector(
         options = options,
         optionLabel = { compactOptionLabel(it, groups, accounts, s) },
         onSelect = onSelect,
+        filled = true,
     )
 }

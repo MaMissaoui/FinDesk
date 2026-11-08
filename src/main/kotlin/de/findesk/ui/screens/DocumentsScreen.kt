@@ -85,6 +85,7 @@ fun DocumentsScreen() {
                 AppButton(
                     enabled = !state.isUploading,
                     onClick = upload,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -228,18 +229,12 @@ private fun DocumentDetail(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AppOutlinedButton(
                     onClick = { openExternally(File(doc.filePath)) },
-                    colors = OutlinedButtonStyle.colors(),
-                    border = OutlinedButtonStyle.border(),
                 ) { Text(s[StringKey.Open]) }
                 AppOutlinedButton(
                     onClick = onReprocess,
-                    colors = OutlinedButtonStyle.colors(),
-                    border = OutlinedButtonStyle.border(),
                 ) { Text(s[StringKey.ReExtractText]) }
                 AppOutlinedButton(
                     onClick = onDelete,
-                    colors = OutlinedButtonStyle.colors(),
-                    border = OutlinedButtonStyle.border(),
                 ) { Text(s[StringKey.Delete]) }
             }
 

@@ -111,11 +111,10 @@ fun AccountsScreen(
                         FigureGroup(
                             label = s.format(if (loans.isEmpty()) StringKey.AccountsTotalLabel else StringKey.AccountsNetLabel, state.accounts.size),
                             value = totalText,
-                            secondary = false,
                             valueColor = totalColor,
                         )
                         if (loans.isNotEmpty()) {
-                            FigureGroup(label = loansLabel, value = loanText, secondary = true, valueColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                            FigureGroup(label = loansLabel, value = loanText, valueColor = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -135,8 +134,7 @@ fun AccountsScreen(
                             AppOutlinedButton(
                                 onClick = { vm.syncAll() },
                                 enabled = !state.isSyncing && anyIncluded,
-                                colors = OutlinedButtonStyle.colors(),
-                                border = OutlinedButtonStyle.border(enabled = !state.isSyncing && anyIncluded),
+                                contentPadding = PaddingValues(horizontal = 12.dp),
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
@@ -145,7 +143,7 @@ fun AccountsScreen(
                         }
                     }
                     if (showHeader) {
-                        AppButton(onClick = { showAddBank = true }) {
+                        AppButton(onClick = { showAddBank = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(s[StringKey.AddBank])
@@ -324,19 +322,19 @@ fun AccountsScreen(
     }
 }
 
-/** One labelled figure of the accounts header: a small label above a strong amount. */
+/** One labelled figure of the accounts header: a small slate label above a 24 sp Semibold amount. */
 @Composable
-private fun FigureGroup(label: String, value: String, secondary: Boolean, valueColor: Color) {
+private fun FigureGroup(label: String, value: String, valueColor: Color) {
     Column {
         Text(
             label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
         )
         Text(
             value,
-            style = if (secondary) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = valueColor,
             maxLines = 1,
@@ -388,12 +386,11 @@ private fun BankCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // The chevron only folds the account rows away; sync and every header action stay reachable
-                    IconButton(onClick = onToggleCollapse) {
-                        Icon(
-                            if (collapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
-                            contentDescription = s[if (collapsed) StringKey.Expand else StringKey.Collapse],
-                        )
-                    }
+                    AppIconButton(
+                        icon = if (collapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                        contentDescription = s[if (collapsed) StringKey.Expand else StringKey.Collapse],
+                        onClick = onToggleCollapse,
+                    )
                     BankBadge(name = bank.bankName, blz = bank.blz, bic = bank.bic, size = 32.dp)
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
@@ -449,8 +446,7 @@ private fun BankCard(
                             AppOutlinedButton(
                                 onClick = onSync,
                                 enabled = syncEnabled,
-                                colors = OutlinedButtonStyle.colors(),
-                                border = OutlinedButtonStyle.border(enabled = syncEnabled),
+                                contentPadding = PaddingValues(horizontal = 12.dp),
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(4.dp))
@@ -467,7 +463,11 @@ private fun BankCard(
                     // yet removes the bank with all its accounts
                     var bankMenu by remember { mutableStateOf(false) }
                     Box {
-                        IconButton(onClick = { bankMenu = true }) { Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More]) }
+                        AppIconButton(
+                            icon = Icons.Default.MoreVert,
+                            contentDescription = s[StringKey.More],
+                            onClick = { bankMenu = true },
+                        )
                         AppDropdownMenu(expanded = bankMenu, onDismissRequest = { bankMenu = false }) {
                             // Sync-only entries (history, include in "Sync all", connection settings) exist for online banks only
                             if (!bank.offline) {

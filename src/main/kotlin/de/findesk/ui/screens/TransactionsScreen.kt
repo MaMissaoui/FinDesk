@@ -137,6 +137,8 @@ fun TransactionsScreen(
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         // The panel needs the room; below this the screen falls back to the compact account selector
         val showPanel = maxWidth >= 1000.dp
+        // A 1280 dp window leaves 1040 dp beside the 240 dp sidebar: from there the panel gets 300 dp
+        val panelWidth = if (maxWidth >= 1040.dp) 300.dp else 260.dp
         Row(modifier = Modifier.fillMaxSize().padding(24.dp)) {
             if (showPanel && state.accounts.isNotEmpty()) {
                 AccountPanel(
@@ -157,7 +159,7 @@ fun TransactionsScreen(
                     onMoveGroup = { id, up -> vm.moveGroup(id, up) },
                     onMoveAccount = { id, groupId -> vm.moveAccountToGroup(id, groupId) },
                     onMarkRead = { vm.markRead(it) },
-                    modifier = Modifier.width(260.dp).fillMaxHeight(),
+                    modifier = Modifier.width(panelWidth).fillMaxHeight(),
                 )
                 Spacer(Modifier.width(16.dp))
             }
@@ -265,7 +267,7 @@ fun TransactionsScreen(
                     )
                     // Without accounts the empty state's button is the only way to add a bank: no disabled "+ Add" here
                     if (state.accounts.isNotEmpty()) {
-                        AppButton(onClick = { showAdd = true }) {
+                        AppButton(onClick = { showAdd = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text(s[StringKey.Add], maxLines = 1, softWrap = false)
@@ -276,56 +278,59 @@ fun TransactionsScreen(
                 Spacer(Modifier.height(16.dp))
                 MessageBanner(state.message, state.error, vm::clearMessages)
 
-                // One row of 40 dp controls; it wraps instead of crushing the search field, which keeps a usable minimum
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    CompactSearchField(
-                        value = state.searchQuery,
-                        onValueChange = { vm.updateSearchQuery(it) },
-                        placeholder = s[StringKey.SearchPartnerPurpose],
-                        // The pills keep a 48 dp touch area around their 40 dp outline, so centre the field on them
-                        modifier = Modifier.weight(1f).widthIn(min = 200.dp).align(Alignment.CenterVertically),
-                    )
-                    // While a single month is navigated (from the dashboard), its label wins over the period's;
-                    // otherwise a custom From/To shows as "from – to" and only then the period's own label
-                    DropdownSelector(
-                        label = state.month?.let { s.month(it) }
-                            ?: state.customRange?.let { (from, to) -> "${Formats.date(from)} – ${Formats.date(to)}" }
-                            ?: s.period(state.period),
-                        options = Period.entries + listOf<Period?>(null),
-                        optionLabel = { it?.let { p -> s.period(p) } ?: s[StringKey.PeriodCustomRange] },
-                        onSelect = { if (it == null) showCustomRangeDialog = true else vm.updatePeriod(it) },
-                        leadingIcon = Icons.Default.DateRange,
-                    )
-                    DropdownSelector(
-                        label = categoryFilterLabel(state.categoryFilter, state.categories, s),
-                        options = listOf<CategoryFilter>(CategoryFilter.Any, CategoryFilter.None) + state.categories.map { CategoryFilter.Only(it.id) },
-                        optionLabel = { categoryFilterLabel(it, state.categories, s) },
-                        onSelect = { vm.updateCategoryFilter(it) },
-                    )
-                    // Only without the panel: the compact account picker takes the old account dropdown's place
-                    if (!showPanel && state.accounts.isNotEmpty()) {
-                        CompactAccountSelector(
-                            accounts = state.accounts,
-                            groups = state.groups,
-                            selection = state.selection,
-                            onSelect = { vm.selectAccounts(it) },
+                // The search field and the filters share a line while the search keeps 240 dp; the bar measures the
+                // filters themselves and otherwise gives the search its own full-width line
+                AdaptiveFilterBar(
+                    search = {
+                        CompactSearchField(
+                            value = state.searchQuery,
+                            onValueChange = { vm.updateSearchQuery(it) },
+                            placeholder = s[StringKey.SearchPartnerPurpose],
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                    }
-                    DropdownSelector(
-                        label = if (state.direction == Direction.ALL) s[StringKey.DirectionAnyLabel] else s.direction(state.direction),
-                        options = Direction.entries,
-                        optionLabel = { if (it == Direction.ALL) s[StringKey.DirectionAnyLabel] else s.direction(it) },
-                        onSelect = { vm.updateDirection(it) },
-                    )
-                    // Labelled in the primary currency, which the grand total lists first
-                    AmountFilter(state.minAmount, state.maxAmount, state.grandTotal.keys.firstOrNull() ?: state.primaryCurrency) { min, max ->
-                        vm.updateAmountRange(min, max)
-                    }
-                }
+                    },
+                    filters = {
+                        // While a single month is navigated (from the dashboard), its label wins over the period's;
+                        // otherwise a custom From/To shows as "from – to" and only then the period's own label
+                        DropdownSelector(
+                            label = state.month?.let { s.month(it) }
+                                ?: state.customRange?.let { (from, to) -> "${Formats.date(from)} – ${Formats.date(to)}" }
+                                ?: s.period(state.period),
+                            options = Period.entries + listOf<Period?>(null),
+                            optionLabel = { it?.let { p -> s.period(p) } ?: s[StringKey.PeriodCustomRange] },
+                            onSelect = { if (it == null) showCustomRangeDialog = true else vm.updatePeriod(it) },
+                            leadingIcon = Icons.Default.DateRange,
+                            filled = true,
+                        )
+                        DropdownSelector(
+                            label = categoryFilterLabel(state.categoryFilter, state.categories, s),
+                            options = listOf<CategoryFilter>(CategoryFilter.Any, CategoryFilter.None) + state.categories.map { CategoryFilter.Only(it.id) },
+                            optionLabel = { categoryFilterLabel(it, state.categories, s) },
+                            onSelect = { vm.updateCategoryFilter(it) },
+                            filled = true,
+                        )
+                        // Only without the panel: the compact account picker takes the old account dropdown's place
+                        if (!showPanel && state.accounts.isNotEmpty()) {
+                            CompactAccountSelector(
+                                accounts = state.accounts,
+                                groups = state.groups,
+                                selection = state.selection,
+                                onSelect = { vm.selectAccounts(it) },
+                            )
+                        }
+                        DropdownSelector(
+                            label = if (state.direction == Direction.ALL) s[StringKey.DirectionAnyLabel] else s.direction(state.direction),
+                            options = Direction.entries,
+                            optionLabel = { if (it == Direction.ALL) s[StringKey.DirectionAnyLabel] else s.direction(it) },
+                            onSelect = { vm.updateDirection(it) },
+                            filled = true,
+                        )
+                        // Labelled in the primary currency, which the grand total lists first
+                        AmountFilter(state.minAmount, state.maxAmount, state.grandTotal.keys.firstOrNull() ?: state.primaryCurrency) { min, max ->
+                            vm.updateAmountRange(min, max)
+                        }
+                    },
+                )
 
                 Spacer(Modifier.height(16.dp))
 
@@ -807,8 +812,7 @@ private fun SelectionBar(
         AppOutlinedButton(onClick = onClear) { Text(s[StringKey.ClearSelection]) }
         AppOutlinedButton(
             onClick = onDelete,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+            contentColor = MaterialTheme.colorScheme.error,
         ) { Text(s[StringKey.DeleteSelected]) }
     }
 }
@@ -1528,12 +1532,11 @@ internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String =
     Box {
         AppOutlinedButton(
             onClick = { expanded = true },
-            shape = RoundedCornerShape(50),
-            colors = OutlinedButtonStyle.colors(),
-            border = OutlinedButtonStyle.border(),
+            contentPadding = PaddingValues(horizontal = 12.dp),
         ) {
             Text(labelText, maxLines = 1)
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
         }
         AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             Column(Modifier.width(240.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
