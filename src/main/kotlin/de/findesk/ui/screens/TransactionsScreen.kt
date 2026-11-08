@@ -265,7 +265,7 @@ fun TransactionsScreen(
                     )
                     // Without accounts the empty state's button is the only way to add a bank: no disabled "+ Add" here
                     if (state.accounts.isNotEmpty()) {
-                        Button(onClick = { showAdd = true }) {
+                        AppButton(onClick = { showAdd = true }) {
                             Icon(Icons.Default.Add, contentDescription = null)
                             Spacer(Modifier.width(6.dp))
                             Text(s[StringKey.Add], maxLines = 1, softWrap = false)
@@ -362,7 +362,7 @@ fun TransactionsScreen(
                                 s[StringKey.NoTransactions],
                                 if (state.accounts.isEmpty()) s[StringKey.NoTransactionsAddBank] else s[StringKey.NothingMatches],
                                 action = if (state.accounts.isEmpty()) {
-                                    { Button(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddBank]) } }
+                                    { AppButton(onClick = { onNavigate(Screen.ACCOUNTS, NavigationArgs()) }) { Text(s[StringKey.AddBank]) } }
                                 } else {
                                     null
                                 },
@@ -581,13 +581,13 @@ internal fun MultiDeleteDialog(confirmation: MultiDeleteConfirmation, onConfirm:
         title = { Text(s.format(StringKey.DeleteTransactionsTitle, confirmation.ids.size)) },
         text = { MultiDeleteDialogContent(confirmation.bookings) },
         confirmButton = {
-            Button(
+            AppButton(
                 onClick = onConfirm,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             ) { Text(s[StringKey.Delete]) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text(s[StringKey.Cancel]) }
+            AppTextButton(onClick = onDismiss, modifier = Modifier.focusRequester(cancelFocus)) { Text(s[StringKey.Cancel]) }
         },
     )
     LaunchedEffect(confirmation) { runCatching { cancelFocus.requestFocus() } }
@@ -634,7 +634,7 @@ private fun CustomRangeDialog(initial: Pair<LocalDate, LocalDate>, onApply: (Loc
         title = { Text(s[StringKey.CustomRange]) },
         text = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.width(320.dp)) {
-                OutlinedTextField(
+                AppOutlinedTextField(
                     fromText,
                     { fromText = it },
                     label = { Text(s[StringKey.FromDate]) },
@@ -643,7 +643,7 @@ private fun CustomRangeDialog(initial: Pair<LocalDate, LocalDate>, onApply: (Loc
                     supportingText = { if (from == null) Text(s[StringKey.EnterValidDate]) },
                     modifier = Modifier.weight(1f),
                 )
-                OutlinedTextField(
+                AppOutlinedTextField(
                     toText,
                     { toText = it },
                     label = { Text(s[StringKey.ToDate]) },
@@ -661,9 +661,9 @@ private fun CustomRangeDialog(initial: Pair<LocalDate, LocalDate>, onApply: (Loc
             }
         },
         confirmButton = {
-            Button(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text(s[StringKey.Apply]) }
+            AppButton(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text(s[StringKey.Apply]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -719,11 +719,11 @@ private fun ReapplyRulesDialog(
             }
         },
         confirmButton = {
-            Button(enabled = tickedCount > 0, onClick = { onConfirm(ticked.filterValues { !it }.keys) }) {
+            AppButton(enabled = tickedCount > 0, onClick = { onConfirm(ticked.filterValues { !it }.keys) }) {
                 Text(s.format(StringKey.ReapplyRulesConfirm, tickedCount))
             }
         },
-        dismissButton = { TextButton(onClick = onCancel) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onCancel) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -764,11 +764,11 @@ private fun SelectionBar(
         )
         Spacer(Modifier.weight(1f))
         Box {
-            Button(onClick = { categoryMenu = true }) {
+            AppButton(onClick = { categoryMenu = true }) {
                 Text(s[StringKey.CategoryMenu], maxLines = 1, softWrap = false)
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null)
             }
-            DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+            AppDropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                 DropdownMenuItem(text = { Text(s[StringKey.Uncategorized]) }, onClick = {
                     categoryMenu = false
                     onCategory(null)
@@ -785,11 +785,11 @@ private fun SelectionBar(
             }
         }
         Box {
-            OutlinedButton(onClick = { taxMenu = true }) {
+            AppOutlinedButton(onClick = { taxMenu = true }) {
                 Text(s[StringKey.TaxMenu], maxLines = 1, softWrap = false)
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null)
             }
-            DropdownMenu(expanded = taxMenu, onDismissRequest = { taxMenu = false }) {
+            AppDropdownMenu(expanded = taxMenu, onDismissRequest = { taxMenu = false }) {
                 DropdownMenuItem(text = { Text(s[StringKey.MarkTaxRelevant]) }, onClick = {
                     taxMenu = false
                     onTax(true)
@@ -804,8 +804,8 @@ private fun SelectionBar(
                 })
             }
         }
-        OutlinedButton(onClick = onClear) { Text(s[StringKey.ClearSelection]) }
-        OutlinedButton(
+        AppOutlinedButton(onClick = onClear) { Text(s[StringKey.ClearSelection]) }
+        AppOutlinedButton(
             onClick = onDelete,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
@@ -1038,7 +1038,7 @@ private fun TransactionRow(
             } else {
                 CategoryBadge(txn.categoryName, txn.categoryColor, categoryClick)
             }
-            DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+            AppDropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
                 DropdownMenuItem(text = { Text(s[StringKey.Uncategorized]) }, onClick = {
                     categoryMenu = false
                     onCategory(null)
@@ -1089,7 +1089,7 @@ private fun TransactionRow(
                             Icons.Default.Warning,
                             contentDescription = message,
                             modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.error,
+                            tint = MaterialTheme.colorScheme.tertiary,
                         )
                     }
                     Spacer(Modifier.width(4.dp))
@@ -1106,7 +1106,7 @@ private fun TransactionRow(
             IconButton(onClick = { rowMenu = true }, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(18.dp))
             }
-            DropdownMenu(expanded = rowMenu, onDismissRequest = { rowMenu = false }) {
+            AppDropdownMenu(expanded = rowMenu, onDismissRequest = { rowMenu = false }) {
                 DropdownMenuItem(text = { Text(deleteLabel) }, onClick = {
                     rowMenu = false
                     onDelete()
@@ -1211,7 +1211,7 @@ private fun AddTransactionDialog(
                     onSelect = { isExpense = it },
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         dateText,
                         { dateText = it },
                         label = { Text(s[StringKey.DateFormat]) },
@@ -1220,7 +1220,7 @@ private fun AddTransactionDialog(
                         supportingText = { if (date == null) Text(s[StringKey.EnterValidDate]) },
                         modifier = Modifier.weight(1f),
                     )
-                    OutlinedTextField(
+                    AppOutlinedTextField(
                         amountText,
                         { amountText = it },
                         label = { Text(s.format(StringKey.AmountIn, Formats.currencySymbol(account.currency))) },
@@ -1230,8 +1230,8 @@ private fun AddTransactionDialog(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                OutlinedTextField(partner, { partner = it }, label = { Text(s[StringKey.PartnerPayee]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(purpose, { purpose = it }, label = { Text(s[StringKey.Purpose]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AppOutlinedTextField(partner, { partner = it }, label = { Text(s[StringKey.PartnerPayee]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                AppOutlinedTextField(purpose, { purpose = it }, label = { Text(s[StringKey.Purpose]) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 DropdownSelector(
                     label = category?.name ?: s[StringKey.CategoryAuto],
                     options = listOf<CategoryItem?>(null) + categories,
@@ -1241,12 +1241,12 @@ private fun AddTransactionDialog(
             }
         },
         confirmButton = {
-            Button(enabled = valid, onClick = {
+            AppButton(enabled = valid, onClick = {
                 val signed = if (isExpense) amount!!.negate() else amount!!
                 onConfirm(account.id, date!!, signed, partner, purpose, category?.id)
             }) { Text(s[StringKey.Add]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -1276,11 +1276,11 @@ internal fun ImportDialog(
         },
         text = { ImportDialogContent(preview, accounts, updateBalance, onUpdateBalance = { updateBalance = it }, onAccount = onAccount, onRemap = onRemap) },
         confirmButton = {
-            Button(enabled = !importing && preview.accountId != null && preview.bookingCount > 0, onClick = { onImport(updateBalance) }) {
+            AppButton(enabled = !importing && preview.accountId != null && preview.bookingCount > 0, onClick = { onImport(updateBalance) }) {
                 Text(if (importing) s[StringKey.Importing] else s.format(StringKey.ImportCount, preview.bookingCount))
             }
         },
-        dismissButton = { TextButton(enabled = !importing, onClick = onCancel) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(enabled = !importing, onClick = onCancel) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -1526,7 +1526,7 @@ internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String =
         else -> s[StringKey.AmountFilterAny]
     }
     Box {
-        OutlinedButton(
+        AppOutlinedButton(
             onClick = { expanded = true },
             shape = RoundedCornerShape(50),
             colors = OutlinedButtonStyle.colors(),
@@ -1535,7 +1535,7 @@ internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String =
             Text(labelText, maxLines = 1)
             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             Column(Modifier.width(240.dp).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactAmountField(
@@ -1558,7 +1558,7 @@ internal fun AmountFilter(min: BigDecimal?, max: BigDecimal?, currency: String =
                     )
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = {
+                    AppTextButton(onClick = {
                         minText = ""
                         maxText = ""
                         onChange(null, null)
@@ -1583,7 +1583,7 @@ private fun CompactAmountField(value: String, onValueChange: (String) -> Unit, p
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
                     .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1630,7 +1630,7 @@ internal fun TransactionDetailDialog(
                 Text(
                     Formats.money(txn.amount, txn.currency, signed = true),
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = amountColor(txn.isExpense),
                 )
                 DetailRow(s[StringKey.DetailDate], Formats.date(txn.date))
@@ -1648,7 +1648,7 @@ internal fun TransactionDetailDialog(
                     )
                     if (txn.isTaxRelevant) {
                         Spacer(Modifier.width(8.dp))
-                        CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
+                        CategoryBadge(s[StringKey.TaxRelevant], null, tintColor = MaterialTheme.colorScheme.tertiary)
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1670,13 +1670,13 @@ internal fun TransactionDetailDialog(
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(s[StringKey.LinkedTransaction], style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onAttach) { Text(s[StringKey.AttachReceiptEllipsis]) }
+                    AppTextButton(onClick = onAttach) { Text(s[StringKey.AttachReceiptEllipsis]) }
                 }
                 if (documents.isEmpty()) Text(s[StringKey.NoDocumentsLinked], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 documents.forEach { d ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(d.fileName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = {
+                        AppTextButton(onClick = {
                             val f = java.io.File(d.filePath)
                             if (f.exists() && java.awt.Desktop.isDesktopSupported()) Thread { java.awt.Desktop.getDesktop().open(f) }.start()
                         }) { Text(s[StringKey.Open]) }
@@ -1687,7 +1687,7 @@ internal fun TransactionDetailDialog(
                     HorizontalDivider()
                     Text(s[StringKey.CategorizeSimilar], style = MaterialTheme.typography.labelLarge)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
+                        AppOutlinedTextField(
                             pattern,
                             { pattern = it },
                             label = { Text(s[StringKey.PatternRegex]) },
@@ -1697,12 +1697,12 @@ internal fun TransactionDetailDialog(
                             modifier = Modifier.weight(1f),
                         )
                         DropdownSelector(ruleCategory?.name ?: s[StringKey.DetailCategory], categories, { it.name }, { ruleCategory = it })
-                        Button(enabled = patternValid && ruleCategory != null, onClick = { onCreateRule(pattern, ruleCategory!!.id) }) { Text(s[StringKey.CreateRule]) }
+                        AppButton(enabled = patternValid && ruleCategory != null, onClick = { onCreateRule(pattern, ruleCategory!!.id) }) { Text(s[StringKey.CreateRule]) }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onClose) { Text(s[StringKey.Close]) } },
+        confirmButton = { AppTextButton(onClick = onClose) { Text(s[StringKey.Close]) } },
     )
 }
 

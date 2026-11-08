@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.semantics.Role
@@ -31,7 +32,7 @@ import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.platform.revealInFileManager
 import de.findesk.ui.platform.revealLabel
-import de.findesk.ui.theme.Success
+import de.findesk.ui.theme.inflowColor
 import de.findesk.util.Formats
 import de.findesk.viewmodel.DocumentTab
 import de.findesk.viewmodel.DocumentsState
@@ -81,7 +82,7 @@ fun DocumentsScreen() {
                 Spacer(Modifier.width(12.dp))
             }
             if (!libraryEmpty) {
-                Button(
+                AppButton(
                     enabled = !state.isUploading,
                     onClick = upload,
                 ) {
@@ -117,7 +118,7 @@ fun DocumentsScreen() {
                         if (state.searchQuery.isBlank()) s[StringKey.UploadHint] else s[StringKey.TryAnotherSearch],
                         // Upload only when there is nothing at all; a search or tab with no hits keeps just the hint
                         action = if (state.searchQuery.isBlank() && state.tab == DocumentTab.ALL) {
-                            { Button(enabled = !state.isUploading, onClick = upload) { Text(s[StringKey.Upload]) } }
+                            { AppButton(enabled = !state.isUploading, onClick = upload) { Text(s[StringKey.Upload]) } }
                         } else {
                             null
                         },
@@ -165,10 +166,12 @@ fun DocumentsScreen() {
 @Composable
 private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Unit) {
     val s = strings()
+    val barColor = MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else Color.Transparent)
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .drawBehind { if (selected) drawRect(barColor, size = Size(3.dp.toPx(), size.height)) }
             .clickable(
                 onClick = onClick,
                 onClickLabel = s[StringKey.OpenDocument],
@@ -195,7 +198,7 @@ private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Uni
             )
         }
         if (doc.hasOcr) {
-            Icon(Icons.Default.CheckCircle, contentDescription = s[StringKey.TextExtracted], tint = Success, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.CheckCircle, contentDescription = s[StringKey.TextExtracted], tint = inflowColor(), modifier = Modifier.size(16.dp))
         } else {
             Icon(Icons.Default.Clear, contentDescription = s[StringKey.NoText], tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(16.dp))
         }
@@ -223,17 +226,17 @@ private fun DocumentDetail(
                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = s[StringKey.Close]) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
+                AppOutlinedButton(
                     onClick = { openExternally(File(doc.filePath)) },
                     colors = OutlinedButtonStyle.colors(),
                     border = OutlinedButtonStyle.border(),
                 ) { Text(s[StringKey.Open]) }
-                OutlinedButton(
+                AppOutlinedButton(
                     onClick = onReprocess,
                     colors = OutlinedButtonStyle.colors(),
                     border = OutlinedButtonStyle.border(),
                 ) { Text(s[StringKey.ReExtractText]) }
-                OutlinedButton(
+                AppOutlinedButton(
                     onClick = onDelete,
                     colors = OutlinedButtonStyle.colors(),
                     border = OutlinedButtonStyle.border(),
@@ -265,14 +268,14 @@ private fun DocumentDetail(
             if (doc.linkedTransactionLabel != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(doc.linkedTransactionLabel, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
-                    TextButton(onClick = onUnlink) { Text(s[StringKey.Unlink]) }
+                    AppTextButton(onClick = onUnlink) { Text(s[StringKey.Unlink]) }
                 }
             } else {
                 if (state.suggestions.isNotEmpty()) {
                     Text(s[StringKey.SuggestedMatches], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     state.suggestions.forEach { s2 -> LinkCandidateRow(s2.transaction, s.format(StringKey.MatchPercent, Formats.percent(s2.score))) { onLink(s2.transaction.id) } }
                 }
-                OutlinedTextField(
+                AppOutlinedTextField(
                     value = pickerQuery,
                     onValueChange = { pickerQuery = it },
                     placeholder = { Text(s[StringKey.FindTransactionToLink]) },
@@ -296,7 +299,7 @@ private fun DocumentDetail(
                 s[StringKey.ExtractedText] + (doc.ocrConfidence?.let { s.format(StringKey.ExtractedTextConfidence, it.toInt()) } ?: ""),
                 style = MaterialTheme.typography.labelLarge,
             )
-            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
+            Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 Text(
                     state.selectedOcrText ?: s[StringKey.NoTextExtracted],
                     style = MaterialTheme.typography.bodySmall,
@@ -319,7 +322,7 @@ private fun LinkCandidateRow(txn: TransactionItem, badge: String?, onLink: () ->
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onLink) { Text(strings()[StringKey.Link]) }
+        AppTextButton(onClick = onLink) { Text(strings()[StringKey.Link]) }
     }
 }
 

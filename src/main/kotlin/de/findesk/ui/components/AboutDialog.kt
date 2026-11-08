@@ -32,6 +32,6 @@ fun AboutDialog(onDismiss: () -> Unit) {
                 Text(s[StringKey.AboutTypeface], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Close]) } },
+        confirmButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Close]) } },
     )
 }

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -41,8 +40,7 @@ import de.findesk.ui.navigation.SettingsSection
 import de.findesk.ui.platform.revealInFileManager
 import de.findesk.ui.platform.revealLabel
 import de.findesk.ui.theme.CategoryColors
-import de.findesk.ui.theme.Success
-import de.findesk.ui.theme.Warning
+import de.findesk.ui.theme.inflowColor
 import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
 import de.findesk.viewmodel.SettingsState
@@ -121,7 +119,7 @@ fun SettingsScreen(
 
             SettingsSection.PROFILES -> SettingsSectionHeader(
                 s[StringKey.Profiles],
-                actions = { Button(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
+                actions = { AppButton(onClick = { newProfile = true }) { Text(s[StringKey.NewProfile]) } },
             ) {
                 Text(
                     s[StringKey.ProfilesHint],
@@ -136,7 +134,7 @@ fun SettingsScreen(
                         if (p.slug == state.openProfile) {
                             Surface(
                                 color = MaterialTheme.colorScheme.secondaryContainer,
-                                shape = RoundedCornerShape(12.dp),
+                                shape = MaterialTheme.shapes.small,
                             ) {
                                 Text(
                                     s[StringKey.ProfileOpen],
@@ -153,9 +151,9 @@ fun SettingsScreen(
                         }
                         if (onSwitchProfile != null) {
                             // The same live switch as the top bar's profile menu
-                            TextButton(enabled = p.slug != state.openProfile && profileSwitchEnabled, onClick = { onSwitchProfile(p.slug) }) { Text(s[StringKey.OpenProfile]) }
+                            AppTextButton(enabled = p.slug != state.openProfile && profileSwitchEnabled, onClick = { onSwitchProfile(p.slug) }) { Text(s[StringKey.OpenProfile]) }
                         } else {
-                            TextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
+                            AppTextButton(enabled = p.slug != state.nextProfile, onClick = { vm.switchProfile(p.slug) }) { Text(s[StringKey.SwitchProfile]) }
                         }
                         IconButton(onClick = { renameProfile = p }) { Icon(Icons.Default.Edit, contentDescription = s.format(StringKey.RenameProfile, p.name)) }
                         IconButton(enabled = !p.isDefault && p.slug != state.openProfile, onClick = { confirmDeleteProfile = p }) {
@@ -167,7 +165,7 @@ fun SettingsScreen(
                     val next = state.profiles.firstOrNull { it.slug == state.nextProfile }?.name.orEmpty()
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(s.format(StringKey.RestartToOpenProfile, next))
                     }
@@ -179,14 +177,14 @@ fun SettingsScreen(
                 actions = {
                     // The empty state below leads with the first step, so its own two buttons stand alone there
                     if (state.categories.isNotEmpty()) {
-                        Button(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
+                        AppButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
                     }
                     // Only while two or more categories share a colour: otherwise there is nothing to fix
                     if (state.categories.hasSharedColours()) {
-                        TextButton(onClick = { vm.fixDuplicateColours() }) { Text(s[StringKey.FixDuplicateColours]) }
+                        AppTextButton(onClick = { vm.fixDuplicateColours() }) { Text(s[StringKey.FixDuplicateColours]) }
                     }
                     if (state.categories.isNotEmpty()) {
-                        TextButton(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
+                        AppTextButton(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
                     }
                 },
             ) {
@@ -194,8 +192,8 @@ fun SettingsScreen(
                     Text(s[StringKey.NoCategoriesYet], color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
-                        TextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
+                        AppButton(onClick = { vm.addDefaultCategories() }) { Text(s[StringKey.AddDefaultCategories]) }
+                        AppTextButton(onClick = { newCategory = true }) { Text(s[StringKey.AddCategory]) }
                     }
                 }
                 state.categories.forEach { c ->
@@ -222,7 +220,7 @@ fun SettingsScreen(
                                 Spacer(Modifier.width(8.dp))
                             }
                             if (c.isTaxRelevant) {
-                                CategoryBadge(s[StringKey.TaxRelevant], "#F59E0B")
+                                CategoryBadge(s[StringKey.TaxRelevant], null, tintColor = MaterialTheme.colorScheme.tertiary)
                                 Spacer(Modifier.width(8.dp))
                             }
                             c.budgetLimit?.let {
@@ -245,12 +243,12 @@ fun SettingsScreen(
                 s[StringKey.AutoCategorizationRules],
                 actions = {
                     DisabledReason(s[StringKey.HintNeedsCategory].takeIf { state.categories.isEmpty() }) {
-                        Button(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
+                        AppButton(onClick = { newRule = true }, enabled = state.categories.isNotEmpty()) { Text(s[StringKey.AddRule]) }
                     }
-                    TextButton(onClick = {
+                    AppTextButton(onClick = {
                         FileDialogs.openFiles(s[StringKey.ImportRules], setOf("tsv", "txt")).firstOrNull()?.let { vm.chooseRuleImport(it) }
                     }) { Text(s[StringKey.ImportRules]) }
-                    TextButton(onClick = {
+                    AppTextButton(onClick = {
                         FileDialogs.saveFile(s[StringKey.ExportRules], "findesk-rules-${java.time.LocalDate.now()}.tsv")?.let { vm.exportRules(it) }
                     }) { Text(s[StringKey.ExportRules]) }
                 },
@@ -318,7 +316,7 @@ fun SettingsScreen(
                     Icon(
                         if (state.isOcrAvailable) Icons.Default.CheckCircle else Icons.Default.Warning,
                         contentDescription = null,
-                        tint = if (state.isOcrAvailable) Success else Warning,
+                        tint = if (state.isOcrAvailable) inflowColor() else MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
@@ -344,7 +342,7 @@ fun SettingsScreen(
                     Icon(
                         if (state.isEncrypted) Icons.Default.Lock else Icons.Default.Warning,
                         contentDescription = null,
-                        tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else Warning,
+                        tint = if (state.isEncrypted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(6.dp))
@@ -357,10 +355,10 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(enabled = !state.isBusy, onClick = {
+                    AppButton(enabled = !state.isBusy, onClick = {
                         FileDialogs.saveFile(s[StringKey.SaveBackup], "findesk-backup-${java.time.LocalDate.now()}.zip")?.let { vm.createBackup(it) }
                     }) { Text(s[StringKey.CreateBackup]) }
-                    OutlinedButton(
+                    AppOutlinedButton(
                         enabled = !state.isBusy && !state.hasPendingRestore,
                         onClick = {
                             FileDialogs.openFiles(s[StringKey.RestoreBackup], setOf("zip")).firstOrNull()?.let { vm.chooseRestore(it) }
@@ -373,10 +371,10 @@ fun SettingsScreen(
                 if (state.hasPendingRestore) {
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = Warning, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(s[StringKey.RestoreWaiting], modifier = Modifier.weight(1f))
-                        TextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
+                        AppTextButton(onClick = { vm.cancelPendingRestore() }) { Text(s[StringKey.CancelRestore]) }
                     }
                 }
                 state.restoredFrom?.let {
@@ -399,7 +397,7 @@ fun SettingsScreen(
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(
+                    AppButton(
                         enabled = state.hasProtocolTrace,
                         onClick = {
                             FileDialogs.saveFile(s[StringKey.ProtocolTraceSave], "findesk-fints-trace-${java.time.LocalDate.now()}.txt")?.let { vm.saveProtocolTrace(it) }
@@ -539,8 +537,8 @@ fun SettingsScreen(
                     Text(s[StringKey.RestoreExplanation])
                 }
             },
-            confirmButton = { Button(onClick = { vm.confirmRestore() }) { Text(s[StringKey.PrepareRestore]) } },
-            dismissButton = { TextButton(onClick = vm::cancelRestoreChoice) { Text(s[StringKey.Cancel]) } },
+            confirmButton = { AppButton(onClick = { vm.confirmRestore() }) { Text(s[StringKey.PrepareRestore]) } },
+            dismissButton = { AppTextButton(onClick = vm::cancelRestoreChoice) { Text(s[StringKey.Cancel]) } },
         )
     }
     state.restorePassphraseFor?.let { file ->
@@ -601,7 +599,7 @@ private fun SettingsSectionRow(section: SettingsSection, selected: Boolean, labe
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(MaterialTheme.shapes.medium)
             .background(background)
             .then(selectionBar)
             .selectable(selected = selected, onClick = onClick, role = Role.Tab)
@@ -660,7 +658,7 @@ private fun InfoRow(label: String, value: String, reveal: File? = null) {
         Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(120.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         if (reveal != null && reveal.exists()) {
-            TextButton(onClick = { revealInFileManager(reveal) }) { Text(strings()[revealLabel()]) }
+            AppTextButton(onClick = { revealInFileManager(reveal) }) { Text(strings()[revealLabel()]) }
         }
     }
 }
@@ -692,7 +690,7 @@ private fun CategoryDialog(
         title = { Text(if (existing == null) s[StringKey.AddCategory] else s[StringKey.EditCategory]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(name, { name = it }, label = { Text(s[StringKey.Name]) }, singleLine = true)
+                AppOutlinedTextField(name, { name = it }, label = { Text(s[StringKey.Name]) }, singleLine = true)
                 // The swatches wrap over several rows instead of one row
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -708,7 +706,7 @@ private fun CategoryDialog(
                         )
                     }
                 }
-                OutlinedTextField(budget, { budget = it }, label = { Text(s[StringKey.MonthlyBudgetOptional]) }, singleLine = true)
+                AppOutlinedTextField(budget, { budget = it }, label = { Text(s[StringKey.MonthlyBudgetOptional]) }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = tax, onCheckedChange = { tax = it })
                     Text(s[StringKey.TaxRelevantHint])
@@ -721,8 +719,8 @@ private fun CategoryDialog(
                 if (error != null && name.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         },
-        confirmButton = { Button(enabled = error == null, onClick = { onConfirm(name, color, parsedBudget, tax, isTransfer) }) { Text(s[StringKey.Save]) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        confirmButton = { AppButton(enabled = error == null, onClick = { onConfirm(name, color, parsedBudget, tax, isTransfer) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -749,7 +747,7 @@ internal fun RuleDialog(
         title = { Text(if (existing == null) s[StringKey.AddRule] else s[StringKey.EditRule]) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(pattern, { pattern = it }, label = { Text(s[StringKey.PatternExample]) }, singleLine = true)
+                AppOutlinedTextField(pattern, { pattern = it }, label = { Text(s[StringKey.PatternExample]) }, singleLine = true)
                 DropdownSelector(s.format(StringKey.RuleCategoryLabel, category.name), categories, { it.name }, { category = it })
                 val fieldLabel: (RuleField) -> String = {
                     s[
@@ -773,7 +771,7 @@ internal fun RuleDialog(
                 DropdownSelector("${s[StringKey.RuleSearchIn]}: ${fieldLabel(matchField)}", RuleField.entries, fieldLabel, { matchField = it })
                 DropdownSelector("${s[StringKey.RuleAppliesTo]}: ${directionLabel(direction)}", RuleDirection.entries, directionLabel, { direction = it })
                 DropdownSelector("${s[StringKey.TaxMenu]}: ${ruleTaxLabel(taxRelevant, s)}", listOf<Boolean?>(null, true, false), { ruleTaxLabel(it, s) }, { taxRelevant = it })
-                OutlinedTextField(priority, { priority = it }, label = { Text(s[StringKey.Priority]) }, singleLine = true)
+                AppOutlinedTextField(priority, { priority = it }, label = { Text(s[StringKey.Priority]) }, singleLine = true)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = autoApply, onCheckedChange = { autoApply = it })
                     Text(s[StringKey.ApplyAutomatically])
@@ -782,11 +780,11 @@ internal fun RuleDialog(
             }
         },
         confirmButton = {
-            Button(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply, matchField, direction, taxRelevant) }) {
+            AppButton(enabled = error == null, onClick = { onConfirm(pattern, category.id, priority.toInt(), autoApply, matchField, direction, taxRelevant) }) {
                 Text(s[StringKey.Save])
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -801,7 +799,7 @@ private fun BackupPassphraseDialog(fileName: String, wrong: Boolean, onConfirm: 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(fileName, style = MaterialTheme.typography.labelLarge)
                 Text(s[StringKey.BackupPassphraseText])
-                OutlinedTextField(
+                AppOutlinedTextField(
                     passphrase,
                     { passphrase = it },
                     label = { Text(s[StringKey.Passphrase]) },
@@ -816,8 +814,8 @@ private fun BackupPassphraseDialog(fileName: String, wrong: Boolean, onConfirm: 
                 )
             }
         },
-        confirmButton = { Button(enabled = passphrase.isNotEmpty(), onClick = { onConfirm(passphrase) }) { Text(s[StringKey.PrepareRestore]) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        confirmButton = { AppButton(enabled = passphrase.isNotEmpty(), onClick = { onConfirm(passphrase) }) { Text(s[StringKey.PrepareRestore]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -830,7 +828,7 @@ private fun ProfileNameDialog(initial: String, onDismiss: () -> Unit, onConfirm:
         onDismissRequest = onDismiss,
         title = { Text(if (initial.isEmpty()) s[StringKey.NewProfile] else s.format(StringKey.RenameProfile, initial)) },
         text = {
-            OutlinedTextField(
+            AppOutlinedTextField(
                 name,
                 { name = it.take(ProfileStore.MAX_NAME_LENGTH) },
                 label = { Text(s[StringKey.ProfileName]) },
@@ -838,8 +836,8 @@ private fun ProfileNameDialog(initial: String, onDismiss: () -> Unit, onConfirm:
                 supportingText = { Text("${name.trim().length}/${ProfileStore.MAX_NAME_LENGTH}") },
             )
         },
-        confirmButton = { Button(enabled = valid, onClick = { onConfirm(name) }) { Text(s[StringKey.Save]) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        confirmButton = { AppButton(enabled = valid, onClick = { onConfirm(name) }) { Text(s[StringKey.Save]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -892,14 +890,14 @@ private fun RuleImportDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(
+                AppButton(
                     enabled = !isImporting && (preview.newRules.isNotEmpty() || preview.categoriesToCreate.isNotEmpty()),
                     onClick = { onConfirm(categorize) },
                 ) { Text(s[StringKey.Import]) }
                 if (isImporting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             }
         },
-        dismissButton = { TextButton(enabled = !isImporting, onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(enabled = !isImporting, onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -941,25 +939,25 @@ private fun TaxSuggestionKeywordsCard(state: SettingsState, vm: SettingsViewMode
         if (!expanded) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(s.format(StringKey.TaxKeywordsCount, count), modifier = Modifier.weight(1f))
-                TextButton(onClick = { expanded = true }) { Text(s[StringKey.Edit]) }
+                AppTextButton(onClick = { expanded = true }) { Text(s[StringKey.Edit]) }
             }
         } else {
-            OutlinedTextField(
+            AppOutlinedTextField(
                 text,
                 { text = it },
                 minLines = 6,
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = {
+                AppTextButton(onClick = {
                     vm.saveTaxKeywords(text)
                     expanded = false
                 }) { Text(s[StringKey.Save]) }
-                TextButton(onClick = {
+                AppTextButton(onClick = {
                     vm.resetTaxKeywords()
                     expanded = false
                 }) { Text(s[StringKey.ResetToDefaults]) }
-                TextButton(onClick = {
+                AppTextButton(onClick = {
                     text = state.taxKeywords
                     expanded = false
                 }) { Text(s[StringKey.Cancel]) }

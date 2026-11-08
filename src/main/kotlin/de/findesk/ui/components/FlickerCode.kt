@@ -75,13 +75,13 @@ fun FlickerCodeView(code: String, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(strings()[StringKey.FlickerSpeed], style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(
+            AppOutlinedButton(
                 onClick = { frequency = (frequency - 2).coerceAtLeast(FlickerRenderer.FREQUENCY_MIN) },
                 colors = OutlinedButtonStyle.colors(),
                 border = OutlinedButtonStyle.border(),
             ) { Text("−") }
             Text("$frequency Hz", style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(
+            AppOutlinedButton(
                 onClick = { frequency = (frequency + 2).coerceAtMost(FlickerRenderer.FREQUENCY_MAX) },
                 colors = OutlinedButtonStyle.colors(),
                 border = OutlinedButtonStyle.border(),

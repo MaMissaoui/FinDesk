@@ -41,8 +41,8 @@ import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
 import de.findesk.ui.theme.CategoryColors
-import de.findesk.ui.theme.Success
 import de.findesk.ui.theme.amountColor
+import de.findesk.ui.theme.inflowColor
 import de.findesk.ui.theme.readableOn
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BaseViewModel
@@ -77,8 +77,8 @@ fun MessageBanner(message: String?, error: String?, onDismiss: () -> Unit) {
             .semantics(mergeDescendants = true) {
                 liveRegion = if (isError) LiveRegionMode.Assertive else LiveRegionMode.Polite
             },
-        shape = RoundedCornerShape(8.dp),
-        color = if (isError) MaterialTheme.colorScheme.errorContainer else Success.copy(alpha = 0.12f),
+        shape = MaterialTheme.shapes.medium,
+        color = if (isError) MaterialTheme.colorScheme.errorContainer else inflowColor().copy(alpha = 0.12f),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -87,7 +87,7 @@ fun MessageBanner(message: String?, error: String?, onDismiss: () -> Unit) {
             Icon(
                 if (isError) Icons.Default.Warning else Icons.Default.CheckCircle,
                 contentDescription = null,
-                tint = if (isError) MaterialTheme.colorScheme.error else Success,
+                tint = if (isError) MaterialTheme.colorScheme.error else inflowColor(),
                 modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.width(12.dp))
@@ -127,15 +127,16 @@ fun EmptyState(icon: ImageVector, title: String, description: String, modifier: 
 }
 
 /**
- * FinDesk's card: the theme's card colour (surfaceContainerHighest) with a hairline outline, so it stands off the page
- * in both themes. Text contrast on it is checked in ContrastTest.
+ * FinDesk's card: the theme's paper surface with a hairline outline, so it stands off the desk in both themes. No
+ * shadow, 8 dp corners. Text contrast on it is checked in ContrastTest.
  */
 @Composable
 fun FinDeskCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         content = content,
     )
 }
@@ -192,7 +193,7 @@ fun StatCard(
             // so the colour is passed explicitly (or the value is black on the dark theme's cards)
             BasicText(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, color = valueColor),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold, color = valueColor),
                 maxLines = 1,
                 autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.headlineSmall.fontSize),
                 onTextLayout = onValueLayout,
@@ -243,11 +244,11 @@ fun categoryColor(hex: String?, fallbackKey: String? = null): Color {
 }
 
 @Composable
-fun CategoryBadge(name: String?, colorHex: String?, modifier: Modifier = Modifier) {
+fun CategoryBadge(name: String?, colorHex: String?, modifier: Modifier = Modifier, tintColor: Color? = null) {
     val label = name ?: strings()[StringKey.Uncategorized]
-    val color = if (name == null) MaterialTheme.colorScheme.onSurfaceVariant else categoryColor(colorHex, name)
+    val color = tintColor ?: if (name == null) MaterialTheme.colorScheme.onSurfaceVariant else categoryColor(colorHex, name)
     val tint = color.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surfaceContainerHighest)
-    Surface(modifier = modifier, shape = RoundedCornerShape(4.dp), color = tint) {
+    Surface(modifier = modifier, shape = MaterialTheme.shapes.extraSmall, color = tint) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
@@ -267,7 +268,7 @@ fun ConfirmDialog(title: String, text: String, confirmLabel: String? = null, onC
         title = { Text(title) },
         text = { Text(text) },
         confirmButton = {
-            Button(
+            AppButton(
                 onClick = {
                     onConfirm()
                     onDismiss()
@@ -275,7 +276,7 @@ fun ConfirmDialog(title: String, text: String, confirmLabel: String? = null, onC
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
             ) { Text(confirmLabel ?: s[StringKey.Delete]) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
+        dismissButton = { AppTextButton(onClick = onDismiss) { Text(s[StringKey.Cancel]) } },
     )
 }
 
@@ -291,7 +292,7 @@ fun <T> DropdownSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        OutlinedButton(
+        AppOutlinedButton(
             onClick = { expanded = true },
             colors = OutlinedButtonStyle.colors(),
             border = OutlinedButtonStyle.border(),
@@ -303,7 +304,7 @@ fun <T> DropdownSelector(
             Text(label, maxLines = 1)
             Icon(Icons.Default.ArrowDropDown, contentDescription = null)
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             options.forEach { option ->
                 DropdownMenuItem(
                     text = { Text(optionLabel(option)) },
@@ -331,7 +332,7 @@ fun CompactSearchField(
     val s = strings()
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(50)
+    val shape = MaterialTheme.shapes.small
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -427,9 +428,9 @@ fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
     val s = strings()
     var expanded by remember { mutableStateOf(false) }
     Box(modifier) {
-        OutlinedButton(
+        AppOutlinedButton(
             onClick = { expanded = true },
-            shape = RoundedCornerShape(50),
+            shape = MaterialTheme.shapes.small,
             contentPadding = PaddingValues(0.dp),
             border = OutlinedButtonStyle.border(),
             colors = OutlinedButtonStyle.colors(),
@@ -437,7 +438,7 @@ fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
         ) {
             Icon(Icons.Default.MoreVert, contentDescription = s[StringKey.More], modifier = Modifier.size(20.dp))
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        AppDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             items.forEach { item ->
                 DropdownMenuItem(
                     text = {
@@ -464,15 +465,15 @@ fun OverflowMenu(items: List<OverflowItem>, modifier: Modifier = Modifier) {
     }
 }
 
-/** Outlined button style as Material3 drew it before Compose 1.12: `outline` border and `primary` text, not the faint `outlineVariant` / grey of newer releases. */
+/** Outlined controls: a 1 dp `outlineVariant` border and ink text, as the restyled palette asks. */
 internal object OutlinedButtonStyle {
     @Composable
-    fun colors(): ButtonColors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+    fun colors(): ButtonColors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface)
 
     @Composable
     fun border(enabled: Boolean = true): BorderStroke = BorderStroke(
         1.dp,
-        if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+        if (enabled) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
     )
 }
 

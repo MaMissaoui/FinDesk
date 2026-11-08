@@ -3,71 +3,82 @@ package de.findesk.ui.theme
 import androidx.compose.foundation.DefaultContextMenuRepresentation
 import androidx.compose.foundation.LocalContextMenuRepresentation
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+
+/** FinDesk's one shape scale: surfaces and dialogs 8 dp, controls 6 dp, small marks 4 dp. */
+internal val FinDeskShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(8.dp),
+    extraLarge = RoundedCornerShape(8.dp),
+)
 
 internal val LightColorScheme = lightColorScheme(
-    primary = PrimaryBlue,
-    onPrimary = Color.White,
-    primaryContainer = PrimaryBlueLight,
-    onPrimaryContainer = Color.White,
-    secondary = PrimaryBlue,
-    onSecondary = Color.White,
-    secondaryContainer = SelectionLight,
-    onSecondaryContainer = OnSelectionLight,
-    tertiary = Color(0xFF7C5800),
+    primary = AccentLight,
+    onPrimary = OnAccentLight,
+    primaryContainer = AccentContainerLight,
+    onPrimaryContainer = OnAccentContainerLight,
+    secondary = AccentLight,
+    onSecondary = OnAccentLight,
+    // Selection is a neutral fill, not a blue tint: the accent bar does the pointing.
+    secondaryContainer = SelectedFillLight,
+    onSecondaryContainer = OnSelectedFillLight,
+    tertiary = Warning,
     onTertiary = Color.White,
-    background = BackgroundLight,
-    onBackground = DarkGray,
-    surface = SurfaceWhite,
-    onSurface = DarkGray,
-    surfaceVariant = LightGray,
-    // Darker than MediumGray so secondary text keeps 4.5:1 on surfaceVariant too (table headers; see ContrastTest)
-    onSurfaceVariant = Color(0xFF5B6472),
-    // Material 3 draws cards and dialogs on these roles; left unset they fall back to its purple-tinted baseline, on
-    // which secondary text and amounts dropped below 4.5:1. White cards keep every text colour readable.
-    surfaceContainerLowest = SurfaceWhite,
-    surfaceContainerLow = SurfaceWhite,
-    surfaceContainer = SurfaceWhite,
-    surfaceContainerHigh = SurfaceWhite,
-    surfaceContainerHighest = SurfaceWhite,
+    background = DeskLight,
+    onBackground = InkLight,
+    surface = PaperLight,
+    onSurface = InkLight,
+    surfaceVariant = DeskLight,
+    onSurfaceVariant = SlateLight,
+    // Material 3 draws cards and dialogs on these roles; all work surfaces are paper in this palette.
+    surfaceContainerLowest = PaperLight,
+    surfaceContainerLow = PaperLight,
+    surfaceContainer = PaperLight,
+    surfaceContainerHigh = PaperLight,
+    surfaceContainerHighest = PaperLight,
     error = Error,
     onError = Color.White,
-    outline = MediumGray,
-    outlineVariant = LightGray,
+    errorContainer = Color(0xFFF9DEDC),
+    onErrorContainer = Color(0xFF410E0B),
+    outline = OutlineLight,
+    outlineVariant = RuleLight,
 )
 
 internal val DarkColorScheme = darkColorScheme(
-    primary = PrimaryBlueLight,
-    // White on the light blue was 3.2:1 on every filled button; a deep navy reads at 5:1
-    onPrimary = Color(0xFF0A1F44),
-    primaryContainer = PrimaryBlue,
-    onPrimaryContainer = Color.White,
-    secondary = PrimaryBlueLight,
-    onSecondary = Color(0xFF0A1F44),
-    // Selection is a tint of the primary, so one accent colour carries both actions and selected states
-    secondaryContainer = SelectionDark,
-    onSecondaryContainer = OnSelectionDark,
-    tertiary = Color(0xFFFFD99D),
-    onTertiary = DarkGray,
-    background = Color(0xFF1C1B1F),
-    onBackground = Color(0xFFE6E1E5),
-    surface = Color(0xFF1C1B1F),
-    onSurface = Color(0xFFE6E1E5),
-    surfaceVariant = Color(0xFF49454F),
-    onSurfaceVariant = Color(0xFFCAC4D0),
-    // Neutral greys instead of Material 3's purple baseline; #232529 keeps the blue text buttons at 4.5:1
-    surfaceContainerLowest = Color(0xFF17181B),
-    surfaceContainerLow = Color(0xFF1E2023),
-    surfaceContainer = Color(0xFF202226),
-    surfaceContainerHigh = Color(0xFF232529),
-    surfaceContainerHighest = Color(0xFF232529),
+    primary = AccentDark,
+    onPrimary = OnAccentDark,
+    primaryContainer = AccentContainerDark,
+    onPrimaryContainer = OnAccentContainerDark,
+    secondary = AccentDark,
+    onSecondary = OnAccentDark,
+    secondaryContainer = SelectedFillDark,
+    onSecondaryContainer = OnSelectedFillDark,
+    tertiary = WarningDark,
+    onTertiary = InkLight,
+    background = DeskDark,
+    onBackground = InkDark,
+    surface = PaperDark,
+    onSurface = InkDark,
+    surfaceVariant = SelectedFillDark,
+    onSurfaceVariant = SlateDark,
+    surfaceContainerLowest = PaperDark,
+    surfaceContainerLow = PaperDark,
+    surfaceContainer = PaperDark,
+    surfaceContainerHigh = PaperDark,
+    surfaceContainerHighest = PaperDark,
     error = ErrorDark,
-    onError = Color(0xFF690005),
-    outline = Color(0xFF938F99),
-    outlineVariant = Color(0xFF49454F),
+    onError = Color(0xFF410E0B),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+    outline = OutlineDark,
+    outlineVariant = RuleDark,
 )
 
 @Composable
@@ -80,6 +91,7 @@ fun FinDeskTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = FinDeskTypography,
+        shapes = FinDeskShapes,
     ) {
         // Right-click menus (rows, and the text fields' Cut/Copy/Paste) are drawn by Compose Desktop, light-only by default
         val menu = DefaultContextMenuRepresentation(

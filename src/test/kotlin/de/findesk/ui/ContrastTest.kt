@@ -128,6 +128,24 @@ class ContrastTest {
         }
     }
 
+    /** The new roles must read on paper and on the neutral selection fill, in both themes. */
+    @Test
+    fun `palette roles keep their contrast on paper and selection`() {
+        listOf("light" to LightColorScheme, "dark" to DarkColorScheme).forEach { (name, scheme) ->
+            val light = name == "light"
+            val inflow = if (light) Success else SuccessDark
+            val inflowOnSelection = if (light) SuccessOnSelectionLight else SuccessOnSelectionDark
+            listOf("paper" to scheme.surface, "selection" to scheme.secondaryContainer).forEach { (where, bg) ->
+                assertContrast(if (where == "paper") inflow else inflowOnSelection, bg, "inflow on $where ($name)")
+                assertContrast(scheme.error, bg, "alert on $where ($name)")
+                assertContrast(scheme.tertiary, bg, "caution on $where ($name)")
+                assertContrast(scheme.primary, bg, "accent on $where ($name)")
+                assertContrast(scheme.onSurfaceVariant, bg, "slate on $where ($name)")
+            }
+            assertContrastAtLeast(scheme.outline, scheme.surface, 3f, "outline on paper ($name)")
+        }
+    }
+
     private fun assertContrast(foreground: Color, background: Color, label: String) {
         assertContrastAtLeast(foreground, background, 4.5f, label)
     }

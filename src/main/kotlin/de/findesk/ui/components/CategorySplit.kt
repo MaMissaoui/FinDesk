@@ -115,7 +115,7 @@ private fun SplitRow(slice: CategoryShare, percent: Int, currency: String, onSel
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(MaterialTheme.shapes.medium)
             .then(
                 // Only a clickable row takes focus and highlights on hover; clickable() makes it focusable
                 if (onSelect != null) {

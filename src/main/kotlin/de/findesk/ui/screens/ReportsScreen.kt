@@ -30,16 +30,12 @@ import de.findesk.model.TransactionItem
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
-import de.findesk.ui.theme.Error
-import de.findesk.ui.theme.PrimaryBlue
-import de.findesk.ui.theme.Success
-import de.findesk.ui.theme.Warning
 import de.findesk.ui.theme.amountColor
-import de.findesk.ui.theme.balanceToneColor
+import de.findesk.ui.theme.inflowColor
+import de.findesk.ui.theme.netColor
 import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
-import de.findesk.util.balanceTone
 import de.findesk.viewmodel.Period
 import de.findesk.viewmodel.ReportsState
 import de.findesk.viewmodel.ReportsViewModel
@@ -111,13 +107,13 @@ fun ReportsScreen(
                 // An empty period has nothing to export; the disabled button says so
                 val nothingToExport = report?.takeIf { it.transactionCount == 0 }
                 DisabledReason(nothingToExport?.let { s.format(StringKey.NothingToExport, it.title) }) {
-                    Button(enabled = !state.isExporting && !state.isLoading && nothingToExport == null, onClick = { exportMenu = true }) {
+                    AppButton(enabled = !state.isExporting && !state.isLoading && nothingToExport == null, onClick = { exportMenu = true }) {
                         Icon(AppIcons.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(s[StringKey.Export])
                     }
                 }
-                DropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
+                AppDropdownMenu(expanded = exportMenu, onDismissRequest = { exportMenu = false }) {
                     // The tax bookings tab brings its own export actions into this one menu
                     if (selectedTab == ReportsTab.TAX_BOOKINGS) {
                         val tax = state.taxBookings
@@ -179,7 +175,14 @@ fun ReportsScreen(
                 ReportsTab.CATEGORY_ANALYSIS to StringKey.TabCategoryAnalysis,
                 ReportsTab.RECURRING to StringKey.TabRecurring,
             ).forEach { (tab, key) ->
-                Tab(selected = selectedTab == tab, onClick = { selectedTab = tab }, text = { Text(s[key]) }, unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant)
+                Tab(
+                    selected = selectedTab == tab,
+                    onClick = { selectedTab = tab },
+                    text = { Text(s[key]) },
+                    modifier = Modifier.background(if (selectedTab == tab) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent),
+                    selectedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -251,17 +254,17 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
         }
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f), valueColor = amountColor(false))
-                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(s[StringKey.TotalIncome], Formats.money(report.totalIncome, report.currency), AppIcons.AddCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(false))
+                StatCard(s[StringKey.TotalExpenses], Formats.money(report.totalExpenses, report.currency), AppIcons.RemoveCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(true))
                 StatCard(
                     s[StringKey.NetIncome],
                     Formats.money(report.netIncome, report.currency),
                     AppIcons.BarChart,
-                    PrimaryBlue,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                     Modifier.weight(1f),
-                    valueColor = balanceToneColor(balanceTone(report.netIncome, isLoan = false)),
+                    valueColor = netColor(report.netIncome),
                 )
-                StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), Icons.Default.Info, Warning, Modifier.weight(1f))
+                StatCard(s[StringKey.TaxRelevantAmount], Formats.money(report.taxRelevantTotal, report.currency), Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f))
             }
         }
         item {
@@ -285,14 +288,14 @@ private fun TaxSummaryTab(report: ReportService.TaxReport) {
             }
             val highest = report.monthlyBreakdown.maxByOrNull { it.expenses }
             Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.StatTransactions], report.transactionCount.toString(), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
-                StatCard(s[StringKey.CategoriesUsed], report.categoriesUsed.toString(), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight())
-                StatCard(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency), null, PrimaryBlue, Modifier.weight(1f).fillMaxHeight(), valueColor = amountColor(true))
+                StatCard(s[StringKey.StatTransactions], report.transactionCount.toString(), null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f).fillMaxHeight())
+                StatCard(s[StringKey.CategoriesUsed], report.categoriesUsed.toString(), null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f).fillMaxHeight())
+                StatCard(s[StringKey.AvgMonthlyExpenses], Formats.money(avgMonthly, report.currency), null, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f).fillMaxHeight(), valueColor = amountColor(true))
                 StatCard(
                     s[StringKey.HighestMonth],
                     highest?.takeIf { it.expenses.signum() > 0 }?.let { "${monthName(it.month, TextStyle.SHORT, s)} ${Formats.money(it.expenses, report.currency)}" } ?: "—",
                     null,
-                    PrimaryBlue,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                     Modifier.weight(1f).fillMaxHeight(),
                 )
             }
@@ -320,7 +323,7 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
             itemsIndexed(report.monthlyBreakdown) { _, m ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                     Text(monthName(m.month, TextStyle.FULL, s) + if (report.isCalendarYear) "" else " ${m.year}", modifier = Modifier.weight(1f))
-                    // A quiet month: its zero amounts stay grey and the net carries no sign and no emphasis
+                    // A quiet month: its zero income and expense amounts stay grey; the net follows the net rule
                     Text(
                         Formats.money(m.income, report.currency),
                         color = if (m.income.signum() == 0) MaterialTheme.colorScheme.onSurfaceVariant else amountColor(false),
@@ -336,7 +339,7 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
                     Text(
                         Formats.money(m.net, report.currency, signed = m.net.signum() != 0),
                         fontWeight = if (m.net.signum() == 0) FontWeight.Normal else FontWeight.SemiBold,
-                        color = if (m.net.signum() == 0) MaterialTheme.colorScheme.onSurfaceVariant else amountColor(m.net.signum() < 0),
+                        color = netColor(m.net),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
                     )
@@ -352,7 +355,7 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
                     Text(
                         Formats.money(report.netIncome, report.currency, signed = true),
                         fontWeight = FontWeight.Bold,
-                        color = amountColor(report.netIncome.signum() < 0),
+                        color = netColor(report.netIncome),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
                     )
@@ -413,7 +416,7 @@ private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (Local
     val from = parse(fromText)
     val to = parse(toText)
     val s = strings()
-    OutlinedTextField(
+    AppOutlinedTextField(
         fromText,
         { fromText = it },
         label = { Text(s[StringKey.FromDate]) },
@@ -422,7 +425,7 @@ private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (Local
         supportingText = { if (from == null) Text(s[StringKey.EnterValidDate]) },
         modifier = Modifier.width(150.dp),
     )
-    OutlinedTextField(
+    AppOutlinedTextField(
         toText,
         { toText = it },
         label = { Text(s[StringKey.ToDate]) },
@@ -437,7 +440,7 @@ private fun DateRangeInputs(initial: Pair<LocalDate, LocalDate>, onApply: (Local
         },
         modifier = Modifier.width(150.dp),
     )
-    Button(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text(s[StringKey.Apply]) }
+    AppButton(enabled = from != null && to != null && !from.isAfter(to), onClick = { onApply(from!!, to!!) }) { Text(s[StringKey.Apply]) }
 }
 
 @Composable
@@ -452,9 +455,9 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.RecurringPayments], payments.size.toString(), Icons.Default.Refresh, PrimaryBlue, Modifier.weight(1f))
-                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, primaryCurrency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
-                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, primaryCurrency), Icons.Default.DateRange, Warning, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(s[StringKey.RecurringPayments], payments.size.toString(), Icons.Default.Refresh, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f))
+                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, primaryCurrency), AppIcons.RemoveCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, primaryCurrency), Icons.Default.DateRange, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(true))
             }
         }
         item {
@@ -500,15 +503,15 @@ private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState,
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), AppIcons.AddCircleOutline, Success, Modifier.weight(1f), valueColor = amountColor(false))
-                StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), AppIcons.RemoveCircleOutline, Error, Modifier.weight(1f), valueColor = amountColor(true))
+                StatCard(s[StringKey.TaxIncomeTotal], Formats.money(info.incomeTotal, info.currency), AppIcons.AddCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(false))
+                StatCard(s[StringKey.TaxDeductionTotal], Formats.money(info.deductionTotal, info.currency), AppIcons.RemoveCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(true))
                 StatCard(
                     s[StringKey.NetIncome],
                     Formats.money(info.netTotal, info.currency),
                     AppIcons.BarChart,
-                    PrimaryBlue,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                     Modifier.weight(1f),
-                    valueColor = balanceToneColor(balanceTone(info.netTotal, isLoan = false)),
+                    valueColor = netColor(info.netTotal),
                 )
                 // Receipts: the card says what's missing and turns the missing-receipts filter on in one click
                 val missing = info.bookingCount - info.withReceipt
@@ -517,21 +520,23 @@ private fun TaxBookingsTab(info: ReportService.TaxBookings, state: ReportsState,
                         s[StringKey.TaxReceipts],
                         s.format(StringKey.ReceiptsMissing, missing),
                         Icons.Default.Warning,
-                        Warning,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
                         Modifier.weight(1f).clickable(
                             role = Role.Button,
                             onClickLabel = s[StringKey.MissingReceiptsOnly],
                         ) { vm.setMissingReceiptsOnly(true) },
                         subtitle = s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount),
+                        valueColor = MaterialTheme.colorScheme.tertiary,
                     )
                 } else {
                     StatCard(
                         s[StringKey.TaxReceipts],
                         s[StringKey.ReceiptsComplete],
                         Icons.Default.CheckCircle,
-                        Success,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
                         Modifier.weight(1f),
                         subtitle = s.format(StringKey.TaxReceiptsOf, info.withReceipt, info.bookingCount),
+                        valueColor = inflowColor(),
                     )
                 }
             }
@@ -694,7 +699,7 @@ private fun TaxSuggestionsCard(suggestions: List<TaxSuggestion>, vm: ReportsView
             if (index < shown.lastIndex) HorizontalDivider()
         }
         if (!showAll && suggestions.size > 20) {
-            TextButton(onClick = { showAll = true }) { Text(s.format(StringKey.ShowAllCount, suggestions.size)) }
+            AppTextButton(onClick = { showAll = true }) { Text(s.format(StringKey.ShowAllCount, suggestions.size)) }
         }
     }
 }
@@ -727,7 +732,7 @@ private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
             textAlign = TextAlign.End,
             modifier = Modifier.width(110.dp),
         )
-        TextButton(onClick = { vm.acceptSuggestion(txn.id) }) { Text(s[StringKey.Accept]) }
-        TextButton(onClick = { vm.dismissSuggestion(txn.id) }) { Text(s[StringKey.DismissSuggestion]) }
+        AppTextButton(onClick = { vm.acceptSuggestion(txn.id) }) { Text(s[StringKey.Accept]) }
+        AppTextButton(onClick = { vm.dismissSuggestion(txn.id) }) { Text(s[StringKey.DismissSuggestion]) }
     }
 }
