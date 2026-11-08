@@ -29,7 +29,7 @@ class BankLogosTest {
 
     @Test
     fun `matches DKB by name, BLZ and BIC`() {
-        assertEquals(BankLogo.DKB, BankLogos.bankLogo("DKB MAM & Sarah", "12030000", "BYLADEM1001"))
+        assertEquals(BankLogo.DKB, BankLogos.bankLogo("DKB Privat", "12030000", "BYLADEM1001"))
         assertEquals(BankLogo.DKB, BankLogos.bankLogo("Deutsche Kreditbank", null, null))
         assertEquals(BankLogo.DKB, BankLogos.bankLogo("Some bank", "12030000", null))
         assertEquals(BankLogo.DKB, BankLogos.bankLogo("Some bank", null, "BYLADEM1001XXX"))
@@ -119,7 +119,7 @@ class BankLogosTest {
     @Test
     fun `uses an all-caps acronym when the name has one`() {
         assertEquals("HVB", BankLogos.monogram("HVB Mastercard").letters)
-        assertEquals("DKB", BankLogos.monogram("DKB MAM & Sarah").letters)
+        assertEquals("DKB", BankLogos.monogram("DKB Privat").letters)
         assertEquals("ING", BankLogos.monogram("ING DiBa").letters)
         assertEquals("AG", BankLogos.monogram("Muster AG").letters)
     }
