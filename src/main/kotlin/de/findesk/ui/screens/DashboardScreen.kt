@@ -15,8 +15,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
@@ -26,17 +24,11 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.SettingsSection
-import de.findesk.ui.theme.amountColor
-import de.findesk.ui.theme.balanceToneColor
-import de.findesk.util.BalanceTone
 import de.findesk.util.BankText
-import de.findesk.util.Currencies
 import de.findesk.util.Formats
-import de.findesk.util.balanceTone
 import de.findesk.viewmodel.BudgetStatus
 import de.findesk.viewmodel.DashboardViewModel
 import de.findesk.viewmodel.Period
-import java.time.YearMonth
 
 @Composable
 fun DashboardScreen(
@@ -113,7 +105,29 @@ fun DashboardScreen(
 
         // Hidden with the other cards on the first-run dashboard (its block above returns early)
         if (state.hasAccounts) {
-            item { MonthHeader(state.selectedMonth, state.earliestMonth, state.currentMonth, state.isCurrentMonth, vm) }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    PeriodNavigator(
+                        label = s.month(state.selectedMonth),
+                        // Every month from the current one back to the oldest booking, newest first
+                        options = generateSequence(state.currentMonth) { it.minusMonths(1) }
+                            .takeWhile { it >= state.earliestMonth }
+                            .toList(),
+                        optionLabel = { s.month(it) },
+                        onSelect = { vm.selectMonth(it) },
+                        onPrevious = { vm.previousMonth() },
+                        onNext = { vm.nextMonth() },
+                        previousEnabled = state.selectedMonth > state.earliestMonth,
+                        nextEnabled = !state.isCurrentMonth,
+                        previousContentDescription = s[StringKey.PreviousMonth],
+                        nextContentDescription = s[StringKey.NextMonth],
+                    )
+                    // A past month offers the way back to today's month, as the old month header did
+                    if (!state.isCurrentMonth) {
+                        AppTextButton(onClick = { vm.currentMonth() }) { Text(s[StringKey.CurrentMonth]) }
+                    }
+                }
+            }
         }
         // The figures below are still the loaded month's until the new load publishes
         if (state.isLoading) {
@@ -123,105 +137,24 @@ fun DashboardScreen(
         }
 
         item {
-            // Loans are money owed: the first card shows what is available, and squeezes the loans in as its subtitle
-            val loanAmountText = Formats.money(state.loanBalance, state.currency)
-            val netAmountText = Formats.money(state.totalBalance, state.currency)
-            val loansText = state.hasLoans.takeIf { it }?.let {
-                s.format(StringKey.LoansSubtitle, loanAmountText, netAmountText)
-            }
-            val otherText = state.otherBalances.takeIf { it.isNotEmpty() }
-                ?.let { s.format(StringKey.PlusOtherCurrencies, Currencies.format(it, state.currency)) }
-            // A total negative only because of loans is calm grey, not the warning red
-            val netTone = when {
-                state.totalBalance.signum() > 0 -> BalanceTone.POSITIVE
-                state.totalBalance.signum() == 0 -> BalanceTone.ZERO
-                state.availableBalance.signum() < 0 -> BalanceTone.NEGATIVE
-                else -> BalanceTone.LOAN
-            }
-            val loanColor = MaterialTheme.colorScheme.onSurfaceVariant
-            val netColor = balanceToneColor(netTone)
-            // One AnnotatedString in reading order: carry-forward, other movements, loans, other currencies. An empty
-            // one still keeps the card as tall as its neighbours when no line applies.
-            val subtitleText = buildAnnotatedString {
-                val carryForward = state.carryForward
-                if (carryForward != null) {
-                    val amountText = Formats.money(carryForward, state.currency)
-                    val line = s.format(StringKey.CarryForwardFrom, s.month(loadedMonth.minusMonths(1)), amountText)
-                    val base = length
-                    append(line)
-                    val start = line.indexOf(amountText)
-                    if (start >= 0) addStyle(SpanStyle(color = balanceToneColor(balanceTone(carryForward, isLoan = false))), base + start, base + start + amountText.length)
-                }
-                val otherMovements = state.otherMovements
-                if (otherMovements != null && otherMovements.signum() != 0) {
-                    if (length > 0) append("\n")
-                    append(s.format(StringKey.OtherMovements, Formats.money(otherMovements, state.currency, signed = true)))
-                }
-                if (loansText != null) {
-                    if (length > 0) append("\n")
-                    // Keep the formatted sentence exactly; colour only the two amounts found inside it
-                    val base = length
-                    append(loansText)
-                    val loanStart = loansText.indexOf(loanAmountText)
-                    if (loanStart >= 0) addStyle(SpanStyle(color = loanColor), base + loanStart, base + loanStart + loanAmountText.length)
-                    val netStart = loansText.indexOf(netAmountText)
-                    if (netStart >= 0) addStyle(SpanStyle(color = netColor), base + netStart, base + netStart + netAmountText.length)
-                }
-                if (otherText != null) {
-                    if (length > 0) append("\n")
-                    append(otherText)
-                }
-            }
-            val balanceDate = state.balanceDate
-            val title = if (balanceDate == null) s[StringKey.AvailableBalance] else s.format(StringKey.AvailableAsOf, Formats.date(balanceDate))
-            // Equal heights even when a subtitle wraps in a narrow window
-            Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(
-                    title,
-                    Formats.money(state.availableBalance, state.currency),
-                    AppIcons.AccountBalance,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                    Modifier.weight(1f).fillMaxHeight(),
-                    subtitle = null,
-                    valueColor = balanceToneColor(balanceTone(state.availableBalance, isLoan = false)),
-                    subtitleText = subtitleText,
-                )
-                StatCard(
-                    if (isCurrentLoadedMonth) s[StringKey.IncomeThisMonth] else s.format(StringKey.IncomeInMonth, s.month(loadedMonth)),
-                    Formats.money(state.monthlyIncome, state.currency),
-                    AppIcons.AddCircleOutline,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                    Modifier.weight(1f).fillMaxHeight(),
-                    valueColor = amountColor(false),
-                )
-                StatCard(
-                    if (isCurrentLoadedMonth) s[StringKey.ExpensesThisMonth] else s.format(StringKey.ExpensesInMonth, s.month(loadedMonth)),
-                    Formats.money(state.monthlyExpenses, state.currency),
-                    AppIcons.RemoveCircleOutline,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                    Modifier.weight(1f).fillMaxHeight(),
-                    valueColor = amountColor(true),
-                )
-                PendingTasksCard(
-                    pendingTasks = state.pendingTasks,
-                    uncategorizedCount = state.uncategorizedCount,
-                    unlinkedDocumentCount = state.unlinkedDocumentCount,
-                    onOpenTasks = { openTransactionsCategory(null) },
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                )
-            }
+            MonthStatementCard(
+                state = state,
+                loadedMonth = loadedMonth,
+                // The uncategorized line keeps opening the bookings its count counts
+                onOpenTasks = { openTransactionsCategory(null) },
+                onOpenDocuments = { onNavigate(Screen.DOCUMENTS, leaveWithBackArgs(NavigationArgs())) },
+            )
         }
 
         item {
-            // Tall enough for every split row (up to 8, the "more" row and the transfers line): the chart beside it
-            // measures with BoxWithConstraints, so the row can't take its height from the content's intrinsics
-            val splitRows = minOf(state.expensesByCategory.size, 8) +
-                (if (state.expensesByCategory.size > 8) 1 else 0) +
-                (if (state.transfersThisMonth.signum() > 0) 1 else 0)
-            Row(modifier = Modifier.fillMaxWidth().height(maxOf(300.dp, 104.dp + 34.dp * splitRows)), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
                 SectionCard(
                     if (isCurrentLoadedMonth) s[StringKey.ExpensesByCategory] else s.format(StringKey.ExpensesByCategoryInMonth, s.month(loadedMonth)),
-                    Modifier.weight(1f).fillMaxHeight(),
+                    Modifier.weight(3f),
                 ) {
                     if (state.expensesByCategory.isEmpty()) {
                         Text(
@@ -237,7 +170,7 @@ fun DashboardScreen(
                         )
                     }
                 }
-                SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(1f).fillMaxHeight()) {
+                SectionCard(s[StringKey.IncomeVsExpenses], Modifier.weight(2f)) {
                     if (state.lastMonths.all { it.income.signum() == 0 && it.expenses.signum() == 0 }) {
                         Text(
                             if (isCurrentLoadedMonth) {
@@ -248,7 +181,8 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxSize(), currency = state.currency)
+                        // The chart keeps its own minimum height, so its legend never spills outside the card
+                        IncomeExpenseBars(state.lastMonths, s[StringKey.IncomeVsExpenses], Modifier.fillMaxWidth().height(260.dp), currency = state.currency)
                     }
                 }
             }
@@ -389,41 +323,7 @@ private fun GettingStartedStep(number: Int, title: String, description: String, 
     }
 }
 
-/** The ◀/month-list/▶ row above the dashboard's stat cards; a past month also offers "Current month". */
-@Composable
-internal fun MonthHeader(
-    selected: YearMonth,
-    earliest: YearMonth,
-    current: YearMonth,
-    isCurrentMonth: Boolean,
-    vm: DashboardViewModel,
-    modifier: Modifier = Modifier,
-) {
-    val s = strings()
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { vm.previousMonth() }, enabled = selected > earliest) {
-            Icon(Icons.Default.KeyboardArrowLeft, contentDescription = s[StringKey.PreviousMonth])
-        }
-        // Every month from the current one back to the oldest booking, newest first
-        DropdownSelector(
-            label = s.month(selected),
-            options = generateSequence(current) { it.minusMonths(1) }
-                .takeWhile { it >= earliest }
-                .toList(),
-            optionLabel = { s.month(it) },
-            onSelect = { vm.selectMonth(it) },
-            leadingIcon = Icons.Default.DateRange,
-        )
-        IconButton(onClick = { vm.nextMonth() }, enabled = !isCurrentMonth) {
-            Icon(Icons.Default.KeyboardArrowRight, contentDescription = s[StringKey.NextMonth])
-        }
-        if (!isCurrentMonth) {
-            Spacer(Modifier.width(8.dp))
-            AppTextButton(onClick = { vm.currentMonth() }) { Text(s[StringKey.CurrentMonth]) }
-        }
-    }
-}
-
+/** The pending tasks as their own stat card; the dashboard's statement now carries the same list inline. */
 @Composable
 internal fun PendingTasksCard(
     pendingTasks: Int,

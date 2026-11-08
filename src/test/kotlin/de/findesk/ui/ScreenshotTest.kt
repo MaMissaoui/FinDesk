@@ -935,8 +935,18 @@ class ScreenshotTest {
                 selectMonth(java.time.YearMonth.from(today).minusMonths(1)).join()
             }
         }
+
+        // Its oldest booking is inside that month, so no carry-forward line is known
+        fun noHistory(): DashboardViewModel = DashboardViewModel().apply {
+            runBlocking {
+                loadDashboard().join()
+                selectMonth(java.time.YearMonth.from(today).minusMonths(2)).join()
+            }
+        }
         render("dashboard-carry-forward", 1440, 900) { Frame(Screen.DASHBOARD, dark = false, dashboard = ::pastMonth) }
+        render("dashboard-carry-forward-de", 1440, 900) { Frame(Screen.DASHBOARD, dark = false, language = AppLanguage.DE, dashboard = ::pastMonth) }
         render("dashboard-carry-forward-fr", 1440, 900) { Frame(Screen.DASHBOARD, dark = true, language = AppLanguage.FR, dashboard = ::pastMonth) }
+        render("dashboard-no-carry-forward", 1440, 900) { Frame(Screen.DASHBOARD, dark = false, dashboard = ::noHistory) }
     }
 
     /** An HVB connection whose branch BLZ only the central code's FinTS server accepts shows the central-BLZ hint. */
