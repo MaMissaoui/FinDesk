@@ -58,11 +58,12 @@ val FinDeskTypography = Typography(
         letterSpacing = 0.sp,
         fontFeatureSettings = "tnum",
     ),
+    // Material 3's AlertDialog title reads headlineSmall, so this is every dialog title: page-title size, not a figure.
     headlineSmall = TextStyle(
         fontFamily = FinDeskFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 24.sp,
-        lineHeight = 32.sp,
+        fontSize = 20.sp,
+        lineHeight = 28.sp,
         letterSpacing = 0.sp,
         fontFeatureSettings = "tnum",
     ),
@@ -146,3 +147,15 @@ val FinDeskTypography = Typography(
  */
 val Typography.caption: TextStyle
     get() = labelSmall.copy(fontSize = 12.sp, lineHeight = 16.sp)
+
+/** KPI figures, the statement result, period titles, review amounts and account header figures. */
+val Typography.figure: TextStyle
+    get() = titleLarge.copy(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold)
+
+/** The Settings section list: slightly larger than a row title, still in the navigation role. */
+val Typography.navigation: TextStyle
+    get() = labelLarge.copy(fontSize = 15.sp, lineHeight = 20.sp)
+
+/** An amount in a list row: body size at the one row-amount weight the rest of the app uses. */
+val Typography.rowAmount: TextStyle
+    get() = bodyMedium.copy(fontWeight = FontWeight.SemiBold)

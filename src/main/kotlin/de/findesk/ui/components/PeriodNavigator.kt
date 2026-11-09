@@ -21,8 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.findesk.ui.theme.figure
 
 /**
  * A period switcher as a statement header reads it: a round previous button, the period between two, and a round
@@ -108,7 +108,7 @@ private fun PeriodArrow(icon: ImageVector, contentDescription: String, enabled: 
     }
 }
 
-/** The period itself: 24 sp ink with a small slate chevron, opening the menu on click or keyboard activation. */
+/** The period itself: a figure-sized ink label with a small slate chevron, opening the menu on click or keyboard activation. */
 @Composable
 private fun PeriodLabel(label: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
@@ -123,7 +123,7 @@ private fun PeriodLabel(label: String, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(label, style = MaterialTheme.typography.figure)
         Icon(
             Icons.Default.KeyboardArrowDown,
             contentDescription = null,

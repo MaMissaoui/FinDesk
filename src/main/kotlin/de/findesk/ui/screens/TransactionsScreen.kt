@@ -72,6 +72,8 @@ import de.findesk.ui.navigation.ScreenRequest
 import de.findesk.ui.platform.Platform
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceToneColor
+import de.findesk.ui.theme.figure
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.AccountGroupView
 import de.findesk.util.BankText
 import de.findesk.util.Currencies
@@ -413,7 +415,7 @@ fun TransactionsScreen(
                                 item(key = "pending-header") {
                                     Text(
                                         s.format(StringKey.PendingHeader, Formats.dateTime(state.pendingBookings.first().fetchedAt)),
-                                        style = MaterialTheme.typography.titleSmall,
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)).padding(horizontal = 16.dp, vertical = 10.dp),
                                     )
@@ -757,8 +759,7 @@ private fun SelectionBar(
     ) {
         Text(
             s.format(StringKey.SelectedCount, count),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge,
         )
         Text(
             totals.entries.joinToString(" · ") { (currency, value) -> Formats.money(value, currency, signed = true) },
@@ -830,7 +831,6 @@ private fun SummaryFigure(label: String, value: String, color: Color, modifier: 
         Text(
             value,
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
             color = color,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -848,7 +848,7 @@ private fun categoryFilterLabel(filter: CategoryFilter, categories: List<Categor
 private fun RowScope.HeaderCell(text: String, weight: Float, align: TextAlign = TextAlign.Start) {
     Text(
         text,
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.weight(weight),
         textAlign = align,
@@ -894,8 +894,7 @@ private fun BalanceHistoryCard(
                 }
                 Text(
                     s[StringKey.BalanceHistory],
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
                 // The chart's axis is chosen from the points; say when it leaves zero out, where money looks like height alone
@@ -1009,12 +1008,12 @@ private fun TransactionRow(
             Text(
                 Formats.date(txn.date),
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isNew) FontWeight.Bold else FontWeight.Normal,
+                fontWeight = if (isNew) FontWeight.Bold else null,
             )
         }
         Column(Modifier.weight(COL_DESCRIPTION_WEIGHT)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = if (isNew) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = if (isNew) FontWeight.Bold else null, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (txn.documentCount > 0) {
                     Spacer(Modifier.width(6.dp))
                     Icon(AppIcons.AttachFile, contentDescription = s.format(StringKey.DocumentsCount, txn.documentCount), modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
@@ -1060,8 +1059,8 @@ private fun TransactionRow(
         }
         Text(
             Formats.money(txn.amount, txn.currency, signed = true),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = if (isNew) FontWeight.Bold else FontWeight.SemiBold,
+            style = MaterialTheme.typography.rowAmount,
+            fontWeight = if (isNew) FontWeight.Bold else null,
             color = amountColor(txn.isExpense),
             modifier = Modifier.weight(COL_AMOUNT_WEIGHT),
             textAlign = TextAlign.End,
@@ -1100,7 +1099,7 @@ private fun TransactionRow(
                 }
                 Text(
                     Formats.money(balance.balance, currency),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.rowAmount,
                     color = balanceToneColor(balanceTone(balance.balance, balanceIsLoan)),
                     textAlign = TextAlign.End,
                 )
@@ -1144,7 +1143,7 @@ private fun PendingRow(line: PendingBookingItem, showBalanceColumn: Boolean) {
         Column(Modifier.weight(COL_DESCRIPTION_WEIGHT)) {
             Text(
                 BankText.displayPartner(line.partnerName) ?: BankText.displayPurpose(line.purpose) ?: "—",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1165,7 +1164,7 @@ private fun PendingRow(line: PendingBookingItem, showBalanceColumn: Boolean) {
         Spacer(Modifier.weight(COL_CATEGORY_WEIGHT))
         Text(
             Formats.money(line.amount, line.currency, signed = true),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.rowAmount,
             fontStyle = FontStyle.Italic,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(COL_AMOUNT_WEIGHT),
@@ -1382,7 +1381,7 @@ internal fun ImportDialogContent(
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(s[StringKey.IntoAccount], fontWeight = FontWeight.Medium)
+            Text(s[StringKey.IntoAccount], style = MaterialTheme.typography.labelLarge)
             DropdownSelector(
                 label = account?.let { accountLabel(it) } ?: s[StringKey.ChooseAccount],
                 options = accounts,
@@ -1420,7 +1419,7 @@ internal fun ImportDialogContent(
         val firstCsvEntry = preview.entries.firstOrNull { it.statement.csv != null }
         val csv = firstCsvEntry?.statement?.csv
         if (csv != null) {
-            Text(s[StringKey.Columns], style = MaterialTheme.typography.labelLarge)
+            Text(s[StringKey.Columns], style = MaterialTheme.typography.labelMedium)
             if (multi) {
                 // Column indexes only mean something for files with the same header row; the hint says how many are covered
                 val same = preview.entries.count { it.statement.csv?.headers == csv.headers }
@@ -1456,7 +1455,7 @@ internal fun ImportDialogContent(
 
         val allBookings = preview.entries.flatMap { it.statement.bookings }
         if (allBookings.isNotEmpty()) {
-            Text(s[StringKey.Preview], style = MaterialTheme.typography.labelLarge)
+            Text(s[StringKey.Preview], style = MaterialTheme.typography.labelMedium)
             allBookings.take(8).forEach { b ->
                 Row(Modifier.fillMaxWidth()) {
                     Text(Formats.date(b.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
@@ -1632,8 +1631,7 @@ internal fun TransactionDetailDialog(
             Column(Modifier.width(560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     Formats.money(txn.amount, txn.currency, signed = true),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.figure,
                     color = amountColor(txn.isExpense),
                 )
                 DetailRow(s[StringKey.DetailDate], Formats.date(txn.date))
@@ -1642,7 +1640,7 @@ internal fun TransactionDetailDialog(
                 PaymentProviders.merchantOf(txn.purpose, txn.partnerName)?.let { DetailRow(s[StringKey.DetailShop], it) }
                 txn.purpose?.let { DetailRow(s[StringKey.DetailPurpose], it) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.DetailCategory], fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+                    Text(s[StringKey.DetailCategory], style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(90.dp))
                     DropdownSelector(
                         label = txn.categoryName ?: s[StringKey.Uncategorized],
                         options = listOf<CategoryItem?>(null) + categories,
@@ -1655,7 +1653,7 @@ internal fun TransactionDetailDialog(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.TaxMenu], fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+                    Text(s[StringKey.TaxMenu], style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(90.dp))
                     Text(
                         taxStateLine(txn, s),
                         modifier = Modifier.weight(1f),
@@ -1672,13 +1670,13 @@ internal fun TransactionDetailDialog(
 
                 HorizontalDivider()
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s[StringKey.LinkedTransaction], style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    Text(s[StringKey.LinkedTransaction], style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
                     AppTextButton(onClick = onAttach) { Text(s[StringKey.AttachReceiptEllipsis]) }
                 }
                 if (documents.isEmpty()) Text(s[StringKey.NoDocumentsLinked], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 documents.forEach { d ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(d.fileName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(d.fileName, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
                         AppTextButton(onClick = {
                             val f = java.io.File(d.filePath)
                             if (f.exists() && java.awt.Desktop.isDesktopSupported()) Thread { java.awt.Desktop.getDesktop().open(f) }.start()
@@ -1688,7 +1686,7 @@ internal fun TransactionDetailDialog(
 
                 if (categories.isNotEmpty()) {
                     HorizontalDivider()
-                    Text(s[StringKey.CategorizeSimilar], style = MaterialTheme.typography.labelLarge)
+                    Text(s[StringKey.CategorizeSimilar], style = MaterialTheme.typography.labelMedium)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AppOutlinedTextField(
                             pattern,
@@ -1712,7 +1710,7 @@ internal fun TransactionDetailDialog(
 @Composable
 private fun DetailRow(label: String, value: String) {
     Row {
-        Text(label, fontWeight = FontWeight.Medium, modifier = Modifier.width(90.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(90.dp))
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }

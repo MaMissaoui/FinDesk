@@ -13,7 +13,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
@@ -21,6 +20,7 @@ import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
 import de.findesk.ui.components.FinDeskCard
 import de.findesk.ui.theme.balanceToneColor
+import de.findesk.ui.theme.figure
 import de.findesk.ui.theme.inflowColor
 import de.findesk.util.BalanceTone
 import de.findesk.util.Currencies
@@ -132,7 +132,7 @@ internal fun MonthStatementCard(
 private fun StatementSide(state: DashboardState, loadedMonth: YearMonth) {
     val s = strings()
     Column(Modifier.widthIn(max = 560.dp)) {
-        Text(s.month(loadedMonth), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(s.month(loadedMonth), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(12.dp))
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             statementLines(state, loadedMonth, s).forEach { line ->
@@ -176,8 +176,7 @@ private fun StatementRow(line: StatementLine, resultNegative: Boolean) {
         Spacer(Modifier.width(8.dp))
         Text(
             line.amountText,
-            style = if (result) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyMedium,
-            fontWeight = if (result) FontWeight.SemiBold else FontWeight.Normal,
+            style = if (result) MaterialTheme.typography.figure else MaterialTheme.typography.bodyMedium,
             color = amountColor,
             textAlign = TextAlign.End,
             maxLines = 1,
@@ -231,9 +230,9 @@ private fun TasksSide(state: DashboardState, onOpenTasks: () -> Unit, onOpenDocu
     val s = strings()
     val countColor = if (state.pendingTasks > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth()) {
-        Text(s[StringKey.PendingTasks], style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(s[StringKey.PendingTasks], style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
-        Text(state.pendingTasks.toString(), style = MaterialTheme.typography.headlineSmall, color = countColor)
+        Text(state.pendingTasks.toString(), style = MaterialTheme.typography.figure, color = countColor)
         Spacer(Modifier.height(12.dp))
         if (state.pendingTasks == 0) {
             Row(verticalAlignment = Alignment.CenterVertically) {

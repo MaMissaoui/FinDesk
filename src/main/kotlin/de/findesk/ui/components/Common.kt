@@ -36,7 +36,6 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,8 +48,10 @@ import de.findesk.model.AccountItem
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.controlFill
+import de.findesk.ui.theme.figure
 import de.findesk.ui.theme.inflowColor
 import de.findesk.ui.theme.readableOn
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BaseViewModel
 import kotlinx.coroutines.delay
@@ -119,7 +120,7 @@ fun EmptyState(icon: ImageVector, title: String, description: String, modifier: 
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(title, style = MaterialTheme.typography.titleLarge)
         Text(
             description,
             style = MaterialTheme.typography.bodyMedium,
@@ -156,7 +157,6 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, actions: @Composab
                 Text(
                     title,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f).semantics { heading() },
                 )
                 actions()
@@ -191,18 +191,18 @@ fun StatCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Weighted so a long title wraps instead of squeezing the icon
-                Text(title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(end = 8.dp))
+                Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f).padding(end = 8.dp))
                 if (icon != null) Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             }
             Spacer(Modifier.height(8.dp))
-            // One line that shrinks to fit below headlineSmall, at most down to 14.sp: a money amount is never
+            // One line that shrinks to fit below the figure size, at most down to 14.sp: a money amount is never
             // wrapped or ellipsized, however wide the card is. BasicText, unlike Text, ignores LocalContentColor,
             // so the colour is passed explicitly (or the value is black on the dark theme's cards)
             BasicText(
                 text = value,
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold, color = valueColor),
+                style = MaterialTheme.typography.figure.copy(color = valueColor),
                 maxLines = 1,
-                autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.headlineSmall.fontSize),
+                autoSize = TextAutoSize.StepBased(minFontSize = 14.sp, maxFontSize = MaterialTheme.typography.figure.fontSize),
                 onTextLayout = onValueLayout,
             )
             // Always laid out, empty or not, so a card without one is as tall as its neighbours
@@ -227,12 +227,12 @@ fun LedgerRow(date: String, title: String, meta: String?, amount: String, isExpe
     ) {
         Text(date, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(100.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (meta != null) {
                 Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Text(amount, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = amountColor(isExpense))
+        Text(amount, style = MaterialTheme.typography.rowAmount, color = amountColor(isExpense))
     }
 }
 

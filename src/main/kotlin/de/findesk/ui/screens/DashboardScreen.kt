@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
@@ -24,6 +23,7 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.SettingsSection
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.BankText
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BudgetStatus
@@ -282,7 +282,8 @@ internal fun GettingStartedCard(onAddBank: () -> Unit, onOpenSettings: () -> Uni
     val s = strings()
     FinDeskCard(modifier = modifier.widthIn(max = 640.dp).fillMaxWidth()) {
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(s[StringKey.WelcomeTitle], style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            // The card title other Dashboard cards use (SectionCard), not a page title
+            Text(s[StringKey.WelcomeTitle], style = MaterialTheme.typography.titleMedium)
             Text(
                 s[StringKey.GettingStartedIntro],
                 style = MaterialTheme.typography.bodyMedium,
@@ -311,12 +312,11 @@ private fun GettingStartedStep(number: Int, title: String, description: String, 
             Text(
                 number.toString(),
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(title, style = MaterialTheme.typography.labelLarge)
             Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (action != null) action()
         }
@@ -361,11 +361,10 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float, currency: String) {
     val overBudgetTextColor = MaterialTheme.colorScheme.tertiary
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            Text(b.categoryName, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(b.categoryName, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             Text(
                 s.format(StringKey.SpentOfLimit, Formats.money(b.spent, currency), Formats.money(b.limit, currency)),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.rowAmount,
                 color = if (b.isOver) overBudgetTextColor else MaterialTheme.colorScheme.onSurface,
             )
         }

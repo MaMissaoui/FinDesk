@@ -125,7 +125,7 @@ fun UnlockScreen(
                 if (state.plaintextLeftovers.isNotEmpty()) {
                     Text(
                         s[StringKey.PlaintextLeftoversTitle],
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.semantics { heading() },
                     )

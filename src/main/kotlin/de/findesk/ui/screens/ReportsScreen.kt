@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,8 +34,10 @@ import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.chartOutColor
+import de.findesk.ui.theme.figure
 import de.findesk.ui.theme.inflowColor
 import de.findesk.ui.theme.netColor
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.BankText
 import de.findesk.util.Currencies
 import de.findesk.util.Formats
@@ -325,7 +326,7 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
             listOf(s[StringKey.ColMonth], s[StringKey.ColIncome], s[StringKey.ColExpenses], s[StringKey.ColNet]).forEachIndexed { i, h ->
                 Text(
                     h,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                     textAlign = if (i == 0) TextAlign.Start else TextAlign.End,
@@ -340,19 +341,21 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
                     // A quiet month: its zero income and expense amounts stay grey; the net follows the net rule
                     Text(
                         Formats.money(m.income, report.currency),
+                        style = MaterialTheme.typography.rowAmount,
                         color = if (m.income.signum() == 0) MaterialTheme.colorScheme.onSurfaceVariant else amountColor(false),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
                     )
                     Text(
                         Formats.money(m.expenses, report.currency),
+                        style = MaterialTheme.typography.rowAmount,
                         color = if (m.expenses.signum() == 0) MaterialTheme.colorScheme.onSurfaceVariant else amountColor(true),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
                     )
                     Text(
                         Formats.money(m.net, report.currency, signed = m.net.signum() != 0),
-                        fontWeight = if (m.net.signum() == 0) FontWeight.Normal else FontWeight.SemiBold,
+                        style = if (m.net.signum() == 0) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.rowAmount,
                         color = netColor(m.net),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
@@ -363,12 +366,12 @@ private fun MonthlyBreakdownTab(report: ReportService.TaxReport) {
             item {
                 // The whole period's totals, bold like a table footer
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                    Text(s[StringKey.ReportTotal], fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text(Formats.money(report.totalIncome, report.currency), color = amountColor(false), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-                    Text(Formats.money(report.totalExpenses, report.currency), color = amountColor(true), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(s[StringKey.ReportTotal], style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    Text(Formats.money(report.totalIncome, report.currency), style = MaterialTheme.typography.rowAmount, color = amountColor(false), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                    Text(Formats.money(report.totalExpenses, report.currency), style = MaterialTheme.typography.rowAmount, color = amountColor(true), modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                     Text(
                         Formats.money(report.netIncome, report.currency, signed = true),
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.rowAmount,
                         color = netColor(report.netIncome),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
@@ -400,8 +403,8 @@ private fun CategoryAnalysisTab(report: ReportService.TaxReport, linkablePeriod:
                 report.topVendors.forEachIndexed { index, (vendor, amount) ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("${index + 1}.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(28.dp))
-                        Text(BankText.displayPartner(vendor) ?: vendor, modifier = Modifier.weight(1f))
-                        Text(Formats.money(amount, report.currency), fontWeight = FontWeight.SemiBold)
+                        Text(BankText.displayPartner(vendor) ?: vendor, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                        Text(Formats.money(amount, report.currency), style = MaterialTheme.typography.rowAmount)
                     }
                     if (index < report.topVendors.size - 1) HorizontalDivider()
                 }
@@ -431,8 +434,7 @@ private fun SummaryFigures(figures: List<KpiFigure>) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         figure.value,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.figure,
                         color = figure.color,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -471,8 +473,7 @@ private fun AmountRow(label: String, amount: BigDecimal, currency: String, total
         Spacer(Modifier.width(12.dp))
         Text(
             Formats.money(amount, currency),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.rowAmount,
             textAlign = TextAlign.End,
             modifier = Modifier.width(120.dp),
         )
@@ -529,24 +530,31 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
     val s = strings()
     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                StatCard(s[StringKey.RecurringPayments], payments.size.toString(), Icons.Default.Refresh, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f))
-                StatCard(s[StringKey.CostPerYear], Currencies.format(yearlyCost, primaryCurrency), AppIcons.RemoveCircleOutline, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(true))
-                StatCard(s[StringKey.PerMonth], Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, primaryCurrency), Icons.Default.DateRange, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.weight(1f), valueColor = amountColor(true))
-            }
+            // The same one-surface KPI block as the summary tab, so the three figures divide with hairlines
+            SummaryFigures(
+                listOf(
+                    KpiFigure(s[StringKey.RecurringPayments], payments.size.toString(), MaterialTheme.colorScheme.onSurface),
+                    KpiFigure(s[StringKey.CostPerYear], Currencies.format(yearlyCost, primaryCurrency), amountColor(true)),
+                    KpiFigure(
+                        s[StringKey.PerMonth],
+                        Currencies.format(yearlyCost.mapValues { it.value.divide(BigDecimal(12), 2, RoundingMode.HALF_UP) }, primaryCurrency),
+                        amountColor(true),
+                    ),
+                ),
+            )
         }
         item {
             SectionCard(s[StringKey.SubscriptionsTitle], Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth()) {
                     listOf(s[StringKey.ColName] to 3f, s[StringKey.ColEvery] to 1f, s[StringKey.ColNext] to 1f, s[StringKey.ColAmount] to 1f, s[StringKey.ColPerYear] to 1f).forEach { (h, w) ->
-                        Text(h, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(w))
+                        Text(h, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(w))
                     }
                 }
                 HorizontalDivider()
                 recurring.sortedByDescending { it.yearlyAmount.abs() }.forEach { r ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(3f)) {
-                            Text(r.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(r.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 s.format(StringKey.TimesSeen, r.occurrences) + (r.categoryName?.let { " · $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
@@ -555,8 +563,8 @@ private fun RecurringTab(recurring: List<de.findesk.document.RecurringDetector.R
                         }
                         Text(s.cadence(r.cadence), modifier = Modifier.weight(1f))
                         Text(Formats.date(r.nextDate), modifier = Modifier.weight(1f))
-                        Text((if (r.fixedAmount) "" else "≈ ") + Formats.money(r.typicalAmount, r.currency, signed = true), color = amountColor(!r.isIncome), modifier = Modifier.weight(1f))
-                        Text(Formats.money(r.yearlyAmount.abs(), r.currency), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text((if (r.fixedAmount) "" else "≈ ") + Formats.money(r.typicalAmount, r.currency, signed = true), style = MaterialTheme.typography.rowAmount, color = amountColor(!r.isIncome), modifier = Modifier.weight(1f))
+                        Text(Formats.money(r.yearlyAmount.abs(), r.currency), style = MaterialTheme.typography.rowAmount, modifier = Modifier.weight(1f))
                     }
                     HorizontalDivider()
                 }
@@ -670,7 +678,7 @@ private fun TaxOtherCurrenciesHint(info: ReportService.TaxBookings) {
 /** A bold, muted section label above the groups of one net sign. */
 @Composable
 private fun TaxSectionHeader(title: String) {
-    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Text(title, style = MaterialTheme.typography.titleMedium)
 }
 
 @Composable
@@ -681,8 +689,8 @@ private fun TaxGroupCard(group: ReportService.TaxGroup, rows: List<TransactionIt
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).background(categoryColor(group.color, group.name), CircleShape))
                 Spacer(Modifier.width(12.dp))
-                Text(group.name, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text(s.format(StringKey.BookingsCountTotal, group.bookings.size, Formats.money(group.net, currency, signed = true)), style = MaterialTheme.typography.bodyMedium)
+                Text(group.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text(s.format(StringKey.BookingsCountTotal, group.bookings.size, Formats.money(group.net, currency, signed = true)), style = MaterialTheme.typography.rowAmount)
             }
             Spacer(Modifier.height(8.dp))
             rows.forEachIndexed { index, txn ->
@@ -708,6 +716,7 @@ private fun TaxBookingRow(txn: TransactionItem, currency: String, vm: ReportsVie
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         txn.displayTitle,
+                        style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -747,8 +756,8 @@ private fun TaxBookingRow(txn: TransactionItem, currency: String, vm: ReportsVie
             }
             Text(
                 Formats.money(txn.amount, currency, signed = true),
+                style = MaterialTheme.typography.rowAmount,
                 color = amountColor(txn.amount.signum() < 0),
-                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.End,
                 modifier = Modifier.width(110.dp),
             )
@@ -789,6 +798,7 @@ private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
         Column(Modifier.weight(1f)) {
             Text(
                 txn.displayTitle,
+                style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -802,8 +812,8 @@ private fun TaxSuggestionRow(suggestion: TaxSuggestion, vm: ReportsViewModel) {
         }
         Text(
             Formats.money(txn.amount, txn.currency, signed = true),
+            style = MaterialTheme.typography.rowAmount,
             color = amountColor(txn.amount.signum() < 0),
-            fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.End,
             modifier = Modifier.width(110.dp),
         )

@@ -25,7 +25,6 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -40,6 +39,8 @@ import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.amountColor
 import de.findesk.ui.theme.balanceToneColor
+import de.findesk.ui.theme.figure
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.ACCOUNT_TYPES
 import de.findesk.util.AccountIds
 import de.findesk.util.Currencies
@@ -322,7 +323,7 @@ fun AccountsScreen(
     }
 }
 
-/** One labelled figure of the accounts header: a small slate label above a 24 sp Semibold amount. */
+/** One labelled figure of the accounts header: a small slate label above a figure-sized amount. */
 @Composable
 private fun FigureGroup(label: String, value: String, valueColor: Color) {
     Column {
@@ -334,8 +335,7 @@ private fun FigureGroup(label: String, value: String, valueColor: Color) {
         )
         Text(
             value,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.figure,
             color = valueColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -398,7 +398,6 @@ private fun BankCard(
                             Text(
                                 bank.bankName,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false),
@@ -407,7 +406,7 @@ private fun BankCard(
                                 Spacer(Modifier.width(8.dp))
                                 Text(s.format(StringKey.AccountCount, accounts.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.width(8.dp))
-                                Text(Currencies.format(totals, primaryCurrency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = totalColor)
+                                Text(Currencies.format(totals, primaryCurrency), style = MaterialTheme.typography.labelMedium, color = totalColor)
                             }
                         }
                         Text(
@@ -561,7 +560,7 @@ private fun BankCard(
                             BankBadge(name = bank.bankName, blz = bank.blz, bic = bank.bic, size = 24.dp)
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(s.accountName(account), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                Text(s.accountName(account), style = MaterialTheme.typography.labelLarge)
                                 val subtitle = account.name?.let { "${s.accountType(account.accountType)} · ${AccountIds.display(account.iban)}" } ?: AccountIds.display(account.iban)
                                 Text(
                                     subtitle + (account.lastUpdate?.let { " · ${s.format(StringKey.LastFetched, Formats.date(it.toLocalDate()))}" } ?: ""),
@@ -571,8 +570,7 @@ private fun BankCard(
                             }
                             Text(
                                 Formats.money(account.balance, account.currency),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
+                                style = MaterialTheme.typography.rowAmount,
                                 color = balanceToneColor(balanceTone(listOf(account), account.currency)),
                             )
                             Spacer(Modifier.width(8.dp))
@@ -815,7 +813,7 @@ private fun BankSuggestionRow(entry: BankDirectory.Entry, onSelect: () -> Unit) 
     ) {
         Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(entry.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text(entry.name, style = MaterialTheme.typography.labelLarge)
                 Text(
                     listOf(entry.city, entry.blz, entry.bic).filter { it.isNotBlank() }.joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
@@ -1200,8 +1198,7 @@ private fun AccountDetailDialog(detail: AccountDetail, bank: BankAccessItem?, on
                         Text(AccountIds.display(a.iban), style = MaterialTheme.typography.bodySmall)
                         Text(
                             Formats.money(a.balance, a.currency),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.figure,
                             color = balanceToneColor(balanceTone(listOf(a), a.currency)),
                         )
                     }
@@ -1218,15 +1215,15 @@ private fun AccountDetailDialog(detail: AccountDetail, bank: BankAccessItem?, on
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 BalanceLineChart(detail.history, modifier = Modifier.fillMaxWidth().height(220.dp), currency = a.currency)
-                Text(s[StringKey.RecentBookings], style = MaterialTheme.typography.labelLarge)
+                Text(s[StringKey.RecentBookings], style = MaterialTheme.typography.labelMedium)
                 if (detail.recent.isEmpty()) Text(s[StringKey.NoneInPeriod], color = MaterialTheme.colorScheme.onSurfaceVariant)
                 detail.recent.forEach { t ->
                     Row(Modifier.fillMaxWidth()) {
                         Text(Formats.date(t.date), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(90.dp))
-                        Text(t.displayTitle, style = MaterialTheme.typography.bodySmall, maxLines = 1, modifier = Modifier.weight(1f))
+                        Text(t.displayTitle, style = MaterialTheme.typography.labelLarge, maxLines = 1, modifier = Modifier.weight(1f))
                         Text(
                             Formats.money(t.amount, t.currency, signed = true),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.rowAmount,
                             color = amountColor(t.isExpense),
                         )
                     }

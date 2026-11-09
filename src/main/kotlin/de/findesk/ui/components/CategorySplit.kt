@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.CategoryShare
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.Formats
 import de.findesk.viewmodel.DashboardViewModel
 import java.math.BigDecimal
@@ -131,7 +132,7 @@ private fun SplitRow(slice: CategoryShare, percent: Int, currency: String, onSel
             .semantics(mergeDescendants = true) { contentDescription = "$name, $percentText, $amountText" },
     ) {
         Box(Modifier.size(10.dp).background(colorOf(slice), CircleShape))
-        Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(name, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
             percentText,
             style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
@@ -140,7 +141,7 @@ private fun SplitRow(slice: CategoryShare, percent: Int, currency: String, onSel
         )
         Text(
             amountText,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.rowAmount,
             textAlign = TextAlign.End,
             modifier = Modifier.width(96.dp),
         )
@@ -179,7 +180,7 @@ private fun MutedRow(label: String, percent: String, amount: String, chevronSpac
         )
         Text(
             amount,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.rowAmount,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
             modifier = Modifier.width(96.dp),
