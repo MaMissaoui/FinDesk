@@ -911,6 +911,62 @@ class ScreenshotTest {
         render("dashboard-past-month-dark", 1440, 900) { Frame(Screen.DASHBOARD, dark = true, dashboard = ::pastMonth) }
     }
 
+    /** The dashboard charts with data: expense split, six-month bars, budgets and the tax card. */
+    @Test
+    fun `render the dashboard charts with data`() {
+        DatabaseFactory.init(Files.createTempDirectory("findesk-dashboard-charts").toFile().absolutePath)
+        val bank = BankAccessRepositoryImpl().create("Beispiel Bank", "12345678", "TESTDEFFXXX", "demo-user").id.value
+        val account = AccountRepositoryImpl().create(bank, "DE89370400440532013000", balance = BigDecimal("3240.00")).id.value
+        AccountRepositoryImpl().rename(account, "Haushalt")
+        val categories = de.findesk.repository.CategoryRepositoryImpl()
+        val groceries = categories.create("Groceries", "#E76530", budgetLimit = BigDecimal("500.00")).id.value
+        val housing = categories.create("Housing", "#4693F3", budgetLimit = BigDecimal("1200.00")).id.value
+        val transport = categories.create("Transport", "#C38400", budgetLimit = BigDecimal("500.00")).id.value
+        val leisure = categories.create("Leisure", "#D56A93", budgetLimit = BigDecimal("200.00")).id.value
+        val restaurants = categories.create("Restaurants", "#867DFF").id.value
+        val online = categories.create("Online shopping", "#14AC77").id.value
+        val health = categories.create("Health", "#CF4E12", isTaxRelevant = true).id.value
+        val donations = categories.create("Donations", "#2F7DDB", isTaxRelevant = true).id.value
+        val work = categories.create("Work equipment", "#A77105", isTaxRelevant = true).id.value
+        val today = java.time.LocalDate.now()
+        val current = today.withDayOfMonth(1)
+        var seed = 0
+        fun booking(day: java.time.LocalDate, amount: String, partner: String, purpose: String, category: Int?) = NewTransaction(
+            account,
+            day,
+            BigDecimal(amount),
+            "EUR",
+            partner,
+            purpose,
+            category,
+            "dashboard-charts-${seed++}",
+        )
+
+        val bookings = mutableListOf(
+            booking(current, "2800.00", "Beispiel AG", "Salary", null),
+            booking(current.withDayOfMonth(2), "-320.00", "Beispiel Markt", "Weekly shop", groceries),
+            booking(current.withDayOfMonth(3), "-950.00", "Beispiel Hausverwaltung", "Rent", housing),
+            booking(current.withDayOfMonth(4), "-140.00", "Beispiel Verkehr", "Monthly ticket", transport),
+            booking(current.withDayOfMonth(5), "-90.00", "Beispiel Kino", "Evening show", leisure),
+            booking(current.withDayOfMonth(6), "-75.00", "Beispiel Restaurant", "Dinner", restaurants),
+            booking(current.withDayOfMonth(7), "-60.00", "Beispiel Shop", "Household goods", online),
+            booking(current.withDayOfMonth(8), "-45.00", "Beispiel Apotheke", "Medicine", health),
+            booking(current.withDayOfMonth(9), "-30.00", "Beispielhilfe e. V.", "Donation", donations),
+            booking(current.withDayOfMonth(9), "-20.00", "Beispiel Büro", "Printer paper", work),
+            booking(current.withDayOfMonth(9), "-15.00", "Beispiel Kiosk", "Snack", null),
+        )
+        // Five earlier months give the income/expense bars a full history
+        (1..5).forEach { monthsBack ->
+            val month = today.minusMonths(monthsBack.toLong())
+            bookings += booking(month.withDayOfMonth(5), "2800.00", "Beispiel AG", "Salary", null)
+            bookings += booking(month.withDayOfMonth(12), "-1800.00", "Beispiel Markt", "Monthly shop", groceries)
+        }
+        TransactionRepositoryImpl().createAll(bookings)
+
+        render("dashboard-charts", 1440, 1800) { Frame(Screen.DASHBOARD, dark = false) }
+        render("dashboard-charts-dark", 1440, 1800) { Frame(Screen.DASHBOARD, dark = true) }
+    }
+
     /** The month-aware balance card: carry-forward, a loan repayment as other movements and the loans line. */
     @Test
     fun `render the dashboard carry-forward card`() {

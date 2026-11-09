@@ -19,7 +19,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -33,11 +32,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import de.findesk.document.ReportService
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Strings
 import de.findesk.i18n.strings
@@ -46,7 +43,6 @@ import de.findesk.ui.theme.chartInColor
 import de.findesk.ui.theme.chartOutColor
 import de.findesk.ui.theme.rowAmount
 import de.findesk.util.Formats
-import de.findesk.viewmodel.ChartSlice
 import de.findesk.viewmodel.MonthBar
 import java.math.BigDecimal
 import java.time.Month
@@ -56,64 +52,27 @@ import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Donut chart with a legend; slices beyond [maxSlices] are folded into "Other". */
-@Composable
-fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Modifier, maxSlices: Int = 6, currency: String = "EUR") {
-    val s = strings()
-    val shown = if (slices.size > maxSlices) {
-        slices.take(maxSlices - 1) + ChartSlice(s[StringKey.ChartOther], slices.drop(maxSlices - 1).fold(BigDecimal.ZERO) { a, s -> a + s.amount }, "#9E9E9E")
-    } else {
-        slices
-    }
-    val total = shown.fold(BigDecimal.ZERO) { a, s -> a + s.amount }.toFloat()
-    val colors = shown.map { categoryColor(it.color, it.label) }
-    val track = MaterialTheme.colorScheme.surfaceVariant
-    val description = buildDonutDescription(title, shown, currency, strings())
-
-    Row(modifier = modifier.semantics { contentDescription = description }, verticalAlignment = Alignment.CenterVertically) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(160.dp)) {
-            Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                val stroke = size.minDimension * 0.18f
-                val inset = stroke / 2
-                val arcSize = Size(size.width - stroke, size.height - stroke)
-                if (total <= 0f) {
-                    drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
-                } else {
-                    var start = -90f
-                    shown.forEachIndexed { i, slice ->
-                        val sweep = slice.amount.toFloat() / total * 360f
-                        drawArc(colors[i], start, sweep - 1f.coerceAtMost(sweep), false, Offset(inset, inset), arcSize, style = Stroke(stroke))
-                        start += sweep
-                    }
-                }
-            }
-            Text(
-                Formats.money(shown.fold(BigDecimal.ZERO) { a, x -> a + x.amount }, currency),
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
-        Spacer(Modifier.width(16.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f, fill = false).widthIn(max = 360.dp)) {
-            shown.forEachIndexed { i, slice ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).background(colors[i], CircleShape))
-                    Spacer(Modifier.width(8.dp))
-                    // Ellipsis and a gap, so a long name never runs into its amount in a narrow window
-                    Text(sliceLabel(slice, s), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.width(8.dp))
-                    Text(Formats.money(slice.amount, currency), style = MaterialTheme.typography.rowAmount)
-                }
-            }
-        }
-    }
-}
-
 /** The smallest 1, 2, 2.5 or 5 times a power of ten that is at least [value], so axis labels read as round numbers. */
 internal fun niceCeiling(value: Double): Double {
     if (value <= 0.0) return 1.0
     val magnitude = Math.pow(10.0, Math.floor(Math.log10(value)))
     return listOf(1.0, 2.0, 2.5, 5.0, 10.0).first { it * magnitude >= value * (1 - 1e-9) } * magnitude
 }
+
+/**
+ * One money format per axis: cents only when some tick is not a whole amount, then on every tick, so round euro steps
+ * stay short and a "€25" never sits next to a "€12.50".
+ */
+internal fun axisTickLabels(ticks: List<Double>, currency: String): List<String> {
+    val cents = ticks.any { abs(it - Math.rint(it)) >= 1e-9 }
+    return ticks.map { tick ->
+        val value = BigDecimal.valueOf(tick)
+        if (cents) Formats.money(value, currency) else Formats.wholeMoney(value, currency)
+    }
+}
+
+/** One income or expense bar: at most 30 % of its month group, and never wider than the 24 dp cap. */
+internal fun incomeExpenseBarWidth(groupWidthPx: Float, maxBarWidthPx: Float): Float = min(groupWidthPx * 0.3f, maxBarWidthPx)
 
 /**
  * Round axis ticks covering [min]..[max], lowest first: the step is a 1/2/2.5/5 × 10ⁿ value, the first tick is the
@@ -165,12 +124,16 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
     val chartIn = chartInColor()
     val chartOut = chartOutColor()
     val description = buildBarsDescription(title, months, currency, s)
-    val axisWidth = 64.dp
     // Gridlines sit at the vertical centre of their labels
     val labelInset = 8.dp
     val hoverStyle = MaterialTheme.typography.labelMedium
+    val axisStyle = MaterialTheme.typography.caption
+    val tickLabels = axisTickLabels(ticks, currency)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
+    // At least the old 64 dp, but wide enough for the widest label the ticks actually produce
+    val widestLabel = tickLabels.maxOfOrNull { measurer.measure(it, axisStyle).size.width } ?: 0
+    val axisWidth = maxOf(64.dp, with(density) { widestLabel.toFloat().toDp() } + 8.dp)
     var hovered by remember(months) { mutableStateOf<Int?>(null) }
 
     Column(modifier.semantics { contentDescription = description }) {
@@ -179,9 +142,8 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
                 ticks.forEachIndexed { i, tick ->
                     if (i > 0) Spacer(Modifier.weight(1f))
                     Text(
-                        // Below €10 the half-way tick needs cents to differ from its neighbours
-                        if (top < 10) Formats.money(BigDecimal.valueOf(tick), currency) else Formats.wholeMoney(BigDecimal.valueOf(tick), currency),
-                        style = MaterialTheme.typography.caption,
+                        tickLabels[i],
+                        style = axisStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         softWrap = false,
@@ -214,22 +176,25 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
                     },
                 ) {
                     val groupWidth = size.width / months.size.coerceAtLeast(1)
-                    val barWidth = groupWidth * 0.3f
+                    val gap = 2.dp.toPx()
+                    val barWidth = incomeExpenseBarWidth(groupWidth, 24.dp.toPx())
+                    val corner = 4.dp.toPx()
                     if (max > 0.0) listOf(0f, 0.5f).forEach { f -> drawLine(grid, Offset(0f, size.height * f), Offset(size.width, size.height * f), strokeWidth = 1f) }
                     hovered?.let { index ->
                         drawRect(hoverBand, Offset(index * groupWidth, 0f), Size(groupWidth, size.height))
                     }
                     months.forEachIndexed { i, m ->
-                        val x = i * groupWidth + groupWidth * 0.18f
+                        // The pair is centred in its month group, with the two bars a fixed gap apart
+                        val x = i * groupWidth + (groupWidth - (barWidth * 2 + gap)) / 2f
                         val incomeH = (m.income.toDouble() / top).toFloat() * size.height
                         val expenseH = (m.expenses.toDouble() / top).toFloat() * size.height
                         // Pale bars mark a still-running month: its totals are so far, not final
                         if (m.partial) {
-                            drawRoundedTopBar(chartIn.copy(alpha = 0.45f), x, barWidth, incomeH)
-                            drawRoundedTopBar(chartOut.copy(alpha = 0.45f), x + barWidth + 2f, barWidth, expenseH)
+                            drawRoundedTopBar(chartIn.copy(alpha = 0.45f), x, barWidth, incomeH, corner)
+                            drawRoundedTopBar(chartOut.copy(alpha = 0.45f), x + barWidth + gap, barWidth, expenseH, corner)
                         } else {
-                            drawRoundedTopBar(chartIn, x, barWidth, incomeH)
-                            drawRoundedTopBar(chartOut, x + barWidth + 2f, barWidth, expenseH)
+                            drawRoundedTopBar(chartIn, x, barWidth, incomeH, corner)
+                            drawRoundedTopBar(chartOut, x + barWidth + gap, barWidth, expenseH, corner)
                         }
                     }
                     drawLine(grid, Offset(0f, size.height), Offset(size.width, size.height), strokeWidth = 1f)
@@ -299,10 +264,10 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
     }
 }
 
-/** A bar with 3 px rounded top corners and a square base, so it sits on the axis. */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRoundedTopBar(color: Color, x: Float, width: Float, height: Float) {
+/** A bar with 4 dp rounded top corners and a square base, so it sits on the axis. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRoundedTopBar(color: Color, x: Float, width: Float, height: Float, radiusPx: Float) {
     if (height <= 0f || width <= 0f) return
-    val radius = min(3f, min(width / 2f, height))
+    val radius = min(radiusPx, min(width / 2f, height))
     val corner = CornerRadius(radius, radius)
     val path = Path().apply {
         addRoundRect(
@@ -345,10 +310,7 @@ fun BalanceLineChart(
     val low = ticks.first()
     val high = ticks.last()
     val span = (high - low).takeIf { it > 0.0 } ?: 1.0
-    val step = if (ticks.size > 1) ticks[1] - ticks[0] else 0.0
-    val labels = ticks.asReversed().map { tick ->
-        if (step < 10.0) Formats.money(BigDecimal.valueOf(tick), currency) else Formats.wholeMoney(BigDecimal.valueOf(tick), currency)
-    }
+    val labels = axisTickLabels(ticks.asReversed(), currency)
     val line = MaterialTheme.colorScheme.primary
     val surface = MaterialTheme.colorScheme.surface
     val zero = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
@@ -357,9 +319,12 @@ fun BalanceLineChart(
     val description = buildLineDescription(title, points, currency, s)
     val valueStyle = MaterialTheme.typography.rowAmount
     val hoverStyle = MaterialTheme.typography.labelMedium
+    val axisStyle = MaterialTheme.typography.caption
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val axisWidth = 64.dp
+    // At least the old 64 dp, but wide enough for the widest label the ticks actually produce
+    val widestLabel = labels.maxOfOrNull { measurer.measure(it, axisStyle).size.width } ?: 0
+    val axisWidth = maxOf(64.dp, with(density) { widestLabel.toFloat().toDp() } + 8.dp)
     val labelInset = 8.dp
     val horizontalInset = 4.dp
     val lastValueText = Formats.money(points.last().second, currency)
@@ -410,14 +375,7 @@ fun BalanceLineChart(
                         lineTo(xAt(0), size.height)
                         close()
                     }
-                    drawPath(
-                        fillPath,
-                        Brush.verticalGradient(
-                            listOf(line.copy(alpha = 0.18f), line.copy(alpha = 0.02f)),
-                            startY = 0f,
-                            endY = size.height,
-                        ),
-                    )
+                    drawPath(fillPath, line.copy(alpha = 0.10f))
                     drawPath(linePath, line, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 
                     val lastX = xAt(points.lastIndex)
@@ -555,17 +513,6 @@ private fun buildBarsDescription(title: String, months: List<MonthBar>, currency
     val more = months.size - 5
     val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""
     return "$title: ${parts.joinToString(", ")}$suffix"
-}
-
-/** A slice's label, translating the service's uncategorized sentinel; other slices keep their own label. */
-private fun sliceLabel(slice: ChartSlice, s: Strings): String = if (slice.label == ReportService.UNCATEGORIZED) s[StringKey.Uncategorized] else slice.label
-
-private fun buildDonutDescription(title: String, slices: List<ChartSlice>, currency: String, s: Strings): String {
-    if (slices.isEmpty()) return "$title: ${s[StringKey.NotEnoughData]}"
-    val parts = slices.take(5).map { "${sliceLabel(it, s)} ${Formats.money(it.amount, currency)}" }
-    val more = slices.size - 5
-    val suffix = if (more > 0) " · ${s.format(StringKey.AndMore, more)}" else ""
-    return "$title: ${parts.joinToString(", ")}$suffix · ${Formats.money(slices.fold(BigDecimal.ZERO) { a, x -> a + x.amount }, currency)}"
 }
 
 private fun buildLineDescription(title: String, points: List<Pair<java.time.LocalDate, BigDecimal>>, currency: String, s: Strings): String {

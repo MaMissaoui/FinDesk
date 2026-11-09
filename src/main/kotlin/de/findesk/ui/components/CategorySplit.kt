@@ -59,12 +59,12 @@ fun CategorySplit(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(12.dp)
-                .clip(RoundedCornerShape(6.dp))
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
                 .background(track),
         ) {
             if (total.signum() > 0) {
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                     sorted.forEach { slice ->
                         val fraction = slice.amount.toFloat() / total.toFloat()
                         if (fraction > 0f) {

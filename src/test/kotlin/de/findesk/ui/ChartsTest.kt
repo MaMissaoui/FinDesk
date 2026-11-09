@@ -67,6 +67,25 @@ class ChartsTest {
     }
 
     @Test
+    fun `a flat history labels whole ticks without cents`() = runComposeUiTest {
+        val points = listOf(
+            LocalDate.of(2026, 10, 1) to BigDecimal("2450.37"),
+            LocalDate.of(2026, 10, 10) to BigDecimal("2450.37"),
+            LocalDate.of(2026, 10, 19) to BigDecimal("2450.37"),
+        )
+        setContent {
+            CompositionLocalProvider(LocalStrings provides Translations.of(AppLanguage.EN)) {
+                FinDeskTheme {
+                    BalanceLineChart(points = points, modifier = Modifier.size(600.dp, 200.dp))
+                }
+            }
+        }
+        onNodeWithText(Formats.wholeMoney(BigDecimal("2449"), "EUR")).assertExists()
+        onNodeWithText(Formats.wholeMoney(BigDecimal("2450"), "EUR")).assertExists()
+        onNodeWithText(Formats.money(BigDecimal("2449"), "EUR")).assertDoesNotExist()
+    }
+
+    @Test
     fun `the bars' hover names the month and shows signed income and expenses`() = runComposeUiTest {
         val months = listOf(
             MonthBar(2026, 10, BigDecimal("1200.00"), BigDecimal("800.00")),
