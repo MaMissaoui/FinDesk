@@ -85,6 +85,32 @@ Selection is the selected fill plus a 3 dp accent bar on the leading edge (sideb
 rows are the exception: an 8 dp `selectedAccent()` tint with ink text and no bar. Destructive icons in slate; alert
 only on hover and in the confirmation.
 
+## Charts
+
+Charts follow the same roles; colour is chosen by the job it does, and the palette is checked with a validator, not
+by eye.
+
+- **Forms.** Part-to-whole (spending by category, tax-deductible by category) is `CategorySplit`: a thin 8 dp bar,
+  fully rounded, 2 dp gaps between segments, and one row per category in the same order (dot, name, share, amount),
+  extra categories folded into a muted "more" row. No donuts. Income against expenses is `IncomeExpenseBars`; a
+  balance over time is `BalanceLineChart`. A single number is a figure, not a chart.
+- **Marks.** Bars at most 24 dp wide, a 4 dp rounded data end and a square base, 2 dp between neighbours. Lines 2 dp
+  with an 8 dp end dot in a 2 dp surface ring and the last value as a direct label. Area fills a flat 10 % wash.
+  Gridlines and axes solid 1 px hairlines in `outlineVariant`. Axis labels use one money format per axis, cents only
+  when a tick needs them, and are never clipped.
+- **Colour.** Income bars inflow, expense bars a neutral slate (`chartOutColor()`), balance lines accent. Categories
+  wear their own colour on marks only; text stays ink or slate. Budget meters show state: accent, caution when over or
+  ahead of the month.
+- **Category palette.** `DefaultCategories.colors` is 24 colours: six hues (orange, blue, yellow, magenta, violet,
+  aqua) in four tones, ordered so neighbours differ in hue. In that order it passes the checks in light and dark:
+  every colour in the lightness band and above the chroma floor, worst neighbouring pair ΔE 9.6 for colour-blind
+  readers and 16.2 for full colour vision. One aqua is below 3:1 on white, which the rows' names and values make up
+  for. Green and red are not category colours, because they mean money in and alert. Users can still pick any
+  colour, and existing categories keep theirs. Within a chart, segments are ordered by amount, so any two colours can
+  end up side by side; the gaps and the labelled rows carry identity.
+- **Hover.** Bars and lines show a tooltip on hover (inverse surface); every value is also readable without it (rows,
+  direct labels, the screen-reader description).
+
 ## The signature element
 
 The Dashboard opens with the month's reconciliation set like the foot of a bank statement
