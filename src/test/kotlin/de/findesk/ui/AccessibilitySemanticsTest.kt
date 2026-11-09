@@ -22,15 +22,12 @@ import de.findesk.i18n.LocalStrings
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.Translations
 import de.findesk.ui.components.DisabledReason
-import de.findesk.ui.components.DonutChart
 import de.findesk.ui.components.MessageBanner
 import de.findesk.ui.components.SectionCard
 import de.findesk.ui.components.Sidebar
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.theme.FinDeskTheme
-import de.findesk.viewmodel.ChartSlice
 import org.junit.jupiter.api.Test
-import java.math.BigDecimal
 
 @OptIn(ExperimentalTestApi::class)
 class AccessibilitySemanticsTest {
@@ -93,26 +90,6 @@ class AccessibilitySemanticsTest {
 
         onNodeWithText("Something went wrong")
             .assert(hasLiveRegion(LiveRegionMode.Assertive))
-    }
-
-    @Test
-    fun `Donut chart exposes a textual summary of its data`() = runComposeUiTest {
-        val slices = listOf(
-            ChartSlice("Groceries", BigDecimal("320.00"), "#4CAF50"),
-            ChartSlice("Rent", BigDecimal("900.00"), "#2196F3"),
-        )
-        setContent {
-            CompositionLocalProvider(LocalStrings provides strings) {
-                FinDeskTheme {
-                    DonutChart(slices = slices, title = strings[StringKey.ExpensesByCategory])
-                }
-            }
-        }
-
-        onNode(hasContentDescription("Groceries", substring = true))
-            .assertExists()
-        onNode(hasContentDescription("Rent", substring = true))
-            .assertExists()
     }
 
     @Test

@@ -1,11 +1,17 @@
 package de.findesk.ui
 
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import de.findesk.ui.components.axisTickLabels
+import de.findesk.ui.components.incomeExpenseBarWidth
 import de.findesk.ui.components.nearestIndex
 import de.findesk.ui.components.niceCeiling
 import de.findesk.ui.components.niceTicks
+import de.findesk.util.Formats
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.math.BigDecimal
 
 class ChartAxisTest {
     @Test
@@ -65,6 +71,30 @@ class ChartAxisTest {
         assertEquals(0, nearestIndex(-25f, 100f, 4))
         assertEquals(3, nearestIndex(125f, 100f, 4))
         assertEquals(0, nearestIndex(50f, 100f, 1))
+    }
+
+    @Test
+    fun `axis labels show cents only when a tick is not whole, then on every tick`() {
+        assertEquals(
+            listOf(Formats.wholeMoney(BigDecimal("2450"), "EUR"), Formats.wholeMoney(BigDecimal("0"), "EUR")),
+            axisTickLabels(listOf(2450.0, 0.0), "EUR"),
+        )
+        assertEquals(
+            listOf(Formats.money(BigDecimal("25"), "EUR"), Formats.money(BigDecimal("12.50"), "EUR"), Formats.money(BigDecimal("0"), "EUR")),
+            axisTickLabels(listOf(25.0, 12.5, 0.0), "EUR"),
+        )
+    }
+
+    @Test
+    fun `a wide chart never draws an income or expense bar wider than 24 dp`() {
+        val density = Density(1f)
+        val maxBar = with(density) { 24.dp.toPx() }
+        assertEquals(maxBar, incomeExpenseBarWidth(groupWidthPx = 10_000f, maxBarWidthPx = maxBar), 1e-6f)
+        assertEquals(15f, incomeExpenseBarWidth(groupWidthPx = 50f, maxBarWidthPx = maxBar), 1e-6f)
+
+        val retina = Density(2f)
+        val retinaMaxBar = with(retina) { 24.dp.toPx() }
+        assertEquals(retinaMaxBar, incomeExpenseBarWidth(groupWidthPx = 10_000f, maxBarWidthPx = retinaMaxBar), 1e-6f)
     }
 
     private fun assertTicks(min: Double, max: Double, ticks: List<Double>, expectedCounts: IntRange) {

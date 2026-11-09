@@ -23,12 +23,15 @@ import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
 import de.findesk.ui.navigation.SettingsSection
+import de.findesk.ui.theme.figure
 import de.findesk.ui.theme.rowAmount
 import de.findesk.util.BankText
 import de.findesk.util.Formats
 import de.findesk.viewmodel.BudgetStatus
+import de.findesk.viewmodel.ChartSlice
 import de.findesk.viewmodel.DashboardViewModel
 import de.findesk.viewmodel.Period
+import java.math.BigDecimal
 
 @Composable
 fun DashboardScreen(
@@ -234,7 +237,18 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else {
-                        DonutChart(state.taxDeductionsByCategory, s[StringKey.TaxDeductibleYtd], currency = state.currency)
+                        val shares = taxCategoryShares(state.taxDeductionsByCategory)
+                        Text(
+                            Formats.money(shares.fold(BigDecimal.ZERO) { acc, share -> acc + share.amount }, state.currency),
+                            style = MaterialTheme.typography.figure,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        CategorySplit(
+                            slices = shares,
+                            currency = state.currency,
+                            excludedTransfers = BigDecimal.ZERO,
+                            onSelect = null,
+                        )
                     }
                 }
             }
@@ -270,6 +284,12 @@ fun DashboardScreen(
         }
     }
 }
+
+/**
+ * The tax card's slices in the shape [CategorySplit] takes: each category keeps its own name and colour, and an
+ * uncategorized slice keeps its null id so the split shows the shared neutral label.
+ */
+internal fun taxCategoryShares(slices: List<ChartSlice>): List<CategoryShare> = slices.map { CategoryShare(it.categoryId, it.label, it.amount, it.color ?: "") }
 
 /**
  * The amount column for one upcoming payment. Varying amounts carry no "~" prefix: their meta line already says
@@ -356,7 +376,7 @@ private fun BudgetRow(b: BudgetStatus, monthProgress: Float, currency: String) {
     val color = when {
         b.isOver -> MaterialTheme.colorScheme.tertiary
         b.ratio > monthProgress + 0.1f -> MaterialTheme.colorScheme.tertiary
-        else -> categoryColor(b.color, b.categoryName)
+        else -> MaterialTheme.colorScheme.primary
     }
     val overBudgetTextColor = MaterialTheme.colorScheme.tertiary
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
