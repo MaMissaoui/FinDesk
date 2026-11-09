@@ -11,6 +11,7 @@ import de.findesk.ui.theme.FinDeskFontFamily
 import de.findesk.ui.theme.FinDeskTheme
 import de.findesk.ui.theme.FinDeskTypography
 import de.findesk.ui.theme.caption
+import de.findesk.ui.theme.figure
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -34,11 +35,12 @@ class TypographyTest {
         "labelLarge" to FinDeskTypography.labelLarge,
         "labelMedium" to FinDeskTypography.labelMedium,
         "labelSmall" to FinDeskTypography.labelSmall,
+        "figure" to FinDeskTypography.figure,
     )
 
     @Test
     fun `every style uses IBM Plex Sans with tabular figures`() {
-        assertEquals(15, styles.size)
+        assertEquals(16, styles.size)
         styles.forEach { (name, style) ->
             assertEquals(FinDeskFontFamily, style.fontFamily, "$name font family")
             assertEquals("tnum", style.fontFeatureSettings, "$name font features")
@@ -47,7 +49,8 @@ class TypographyTest {
 
     @Test
     fun `the type scale is the one in the spec`() {
-        assertScale("headlineSmall", FinDeskTypography.headlineSmall, 24, 32, FontWeight.SemiBold)
+        assertScale("headlineSmall", FinDeskTypography.headlineSmall, 20, 28, FontWeight.SemiBold)
+        assertScale("figure", FinDeskTypography.figure, 24, 32, FontWeight.SemiBold)
         assertScale("titleLarge", FinDeskTypography.titleLarge, 20, 28, FontWeight.SemiBold)
         assertScale("titleMedium", FinDeskTypography.titleMedium, 16, 24, FontWeight.SemiBold)
         assertScale("bodyMedium", FinDeskTypography.bodyMedium, 14, 20, FontWeight.Normal)

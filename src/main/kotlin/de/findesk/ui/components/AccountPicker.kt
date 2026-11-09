@@ -31,13 +31,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
 import de.findesk.i18n.strings
 import de.findesk.model.AccountItem
 import de.findesk.ui.theme.balanceToneColor
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.Formats
 import de.findesk.util.balanceTone
 
@@ -73,14 +73,14 @@ fun AccountPicker(
                 if (selected != null) {
                     Text(
                         s.accountName(selected),
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         " · ${selected.bankName}",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -88,7 +88,7 @@ fun AccountPicker(
                     )
                     Text(
                         Formats.money(selected.balance, selected.currency),
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.rowAmount,
                         color = balanceToneColor(balanceTone(listOf(selected), selected.currency)),
                         maxLines = 1,
                         modifier = Modifier.padding(start = 12.dp),
@@ -96,7 +96,7 @@ fun AccountPicker(
                 } else {
                     Text(
                         s[StringKey.ChooseAccount],
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -144,8 +144,7 @@ private fun AccountPickerItem(account: AccountItem, isSelected: Boolean, onSelec
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         s.accountName(account),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -153,6 +152,7 @@ private fun AccountPickerItem(account: AccountItem, isSelected: Boolean, onSelec
                     Spacer(Modifier.width(12.dp))
                     Text(
                         balance,
+                        style = MaterialTheme.typography.rowAmount,
                         color = balanceToneColor(balanceTone(listOf(account), account.currency)),
                     )
                 }

@@ -26,7 +26,7 @@ fun AboutDialog(onDismiss: () -> Unit) {
         title = { Text(AppInfo.NAME) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(s.format(StringKey.AboutVersion, AppInfo.VERSION), style = MaterialTheme.typography.titleSmall)
+                Text(s.format(StringKey.AboutVersion, AppInfo.VERSION), style = MaterialTheme.typography.labelLarge)
                 Text(s[StringKey.AboutText], style = MaterialTheme.typography.bodyMedium)
                 Text(AppInfo.HOMEPAGE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(s[StringKey.AboutTypeface], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

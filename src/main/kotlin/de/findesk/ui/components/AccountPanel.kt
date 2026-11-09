@@ -58,6 +58,7 @@ import de.findesk.ui.theme.ErrorOnSelectionLight
 import de.findesk.ui.theme.balanceToneColor
 import de.findesk.ui.theme.caption
 import de.findesk.ui.theme.isLightTheme
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.AccountGroupView
 import de.findesk.util.BalanceTone
 import de.findesk.util.Formats
@@ -152,12 +153,12 @@ fun AccountPanel(
                         if (totalNew > 0) menuItem(s[StringKey.MarkAsRead]) { onMarkRead(AccountSelection.All) } else null,
                     ) {
                         SelectableRow(selected = selection == AccountSelection.All, onClick = { onSelect(AccountSelection.All) }) {
-                            Text(s[StringKey.AllAccounts], style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Text(s[StringKey.AllAccounts], style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
                             NewCountBadge(totalNew, selected = selection == AccountSelection.All)
                             Spacer(Modifier.width(8.dp))
                             Column(horizontalAlignment = Alignment.End) {
                                 grandTotal.forEach { (currency, amount) ->
-                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = panelAmountColor(balanceTone(accounts, currency), selection == AccountSelection.All))
+                                    Text(Formats.money(amount, currency), style = MaterialTheme.typography.rowAmount, color = panelAmountColor(balanceTone(accounts, currency), selection == AccountSelection.All))
                                 }
                             }
                         }
@@ -344,7 +345,6 @@ private fun NewCountBadge(count: Int, selected: Boolean) {
         Text(
             text = count.toString(),
             style = MaterialTheme.typography.caption,
-            fontWeight = FontWeight.Medium,
             color = if (selected) LocalContentColor.current else MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
         )
@@ -420,7 +420,7 @@ private fun GroupHeaderRow(
             AccountBankBadge(account)
             Spacer(Modifier.width(8.dp))
         }
-        Text(label, style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         NewCountBadge(view.newCount, selected = selected)
         Spacer(Modifier.width(8.dp))
         // One line per currency, each coloured by its own currency's loan rule
@@ -429,7 +429,6 @@ private fun GroupHeaderRow(
                 Text(
                     Formats.money(amount, currency),
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.End,
                     // Each currency's own loan rule, so a negative-only-because-of-loans total stays calm grey
                     color = panelAmountColor(balanceTone(view.accounts, currency), selected),
@@ -490,9 +489,9 @@ private fun AccountRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     s.accountName(account),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = if (account.newCount > 0) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = if (account.newCount > 0) FontWeight.Bold else null,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -505,8 +504,7 @@ private fun AccountRow(
             Spacer(Modifier.width(8.dp))
             Text(
                 Formats.money(account.balance, account.currency),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.rowAmount,
                 textAlign = TextAlign.End,
                 color = panelAmountColor(balanceTone(listOf(account), account.currency), selected),
             )
@@ -522,7 +520,7 @@ private fun AccountRow(
                 Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 2.dp) {
                     Text(
                         s.format(StringKey.LastFetched, Formats.date(lastUpdate.toLocalDate())),
-                        style = MaterialTheme.typography.caption,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.inverseOnSurface,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )

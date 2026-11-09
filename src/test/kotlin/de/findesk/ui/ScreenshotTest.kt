@@ -8,6 +8,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -1312,6 +1314,11 @@ class ScreenshotTest {
         accounts: (() -> AccountsViewModel)? = null,
         backTarget: Screen? = null,
     ) {
+        // Formats.money reads AppStrings.current.language, which the UI language provider alone does not change.
+        // Apply the shot's language to the formatter too, so German shots show German amounts, and restore it after.
+        val previousLanguage = remember { AppStrings.current.language }
+        AppStrings.set(language)
+        DisposableEffect(Unit) { onDispose { AppStrings.set(previousLanguage) } }
         CompositionLocalProvider(LocalStrings provides Translations.of(language)) {
             FinDeskTheme(darkTheme = dark) {
                 // Surface sets the content colour too: text drawn straight on the background is otherwise black in dark mode

@@ -21,7 +21,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.findesk.document.DocumentService
@@ -189,11 +188,12 @@ private fun DocumentRow(doc: DocumentItem, selected: Boolean, onClick: () -> Uni
         )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(doc.fileName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(doc.fileName, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The second line is information, not a link: accent is reserved for text that can be clicked
             Text(
                 Formats.dateTime(doc.uploadDate) + " · " + (doc.linkedTransactionLabel ?: s[StringKey.NotLinked]),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (doc.linkedTransactionLabel != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -223,7 +223,7 @@ private fun DocumentDetail(
     FinDeskCard(modifier = modifier) {
         Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(doc.fileName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(doc.fileName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = s[StringKey.Close]) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -259,10 +259,11 @@ private fun DocumentDetail(
                 )
             }
 
-            Text(s[StringKey.LinkedTransaction], style = MaterialTheme.typography.labelLarge)
+            Text(s[StringKey.LinkedTransaction], style = MaterialTheme.typography.labelMedium)
             if (doc.linkedTransactionLabel != null) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(doc.linkedTransactionLabel, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
+                    // The label itself is not clickable (Unlink is), so it stays ink rather than accent
+                    Text(doc.linkedTransactionLabel, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface)
                     AppTextButton(onClick = onUnlink) { Text(s[StringKey.Unlink]) }
                 }
             } else {
@@ -292,7 +293,7 @@ private fun DocumentDetail(
 
             Text(
                 s[StringKey.ExtractedText] + (doc.ocrConfidence?.let { s.format(StringKey.ExtractedTextConfidence, it.toInt()) } ?: ""),
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelMedium,
             )
             Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
                 Text(
@@ -310,7 +311,7 @@ private fun DocumentDetail(
 private fun LinkCandidateRow(txn: TransactionItem, badge: String?, onLink: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f)) {
-            Text(txn.displayTitle, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(txn.displayTitle, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 "${Formats.date(txn.date)} · ${Formats.money(txn.amount, txn.currency)}" + (badge?.let { " · $it" } ?: ""),
                 style = MaterialTheme.typography.bodySmall,

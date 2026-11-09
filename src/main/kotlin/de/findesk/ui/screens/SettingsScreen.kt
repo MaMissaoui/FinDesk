@@ -29,7 +29,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import de.findesk.document.TesseractOcrEngine
 import de.findesk.i18n.AppLanguage
 import de.findesk.i18n.StringKey
@@ -47,6 +46,7 @@ import de.findesk.ui.platform.revealLabel
 import de.findesk.ui.theme.CategoryColors
 import de.findesk.ui.theme.controlFill
 import de.findesk.ui.theme.inflowColor
+import de.findesk.ui.theme.navigation
 import de.findesk.ui.theme.selectedAccent
 import de.findesk.util.Formats
 import de.findesk.util.ProfileStore
@@ -133,7 +133,7 @@ fun SettingsScreen(
             ) {
                 state.profiles.forEach { p ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(p.name, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else FontWeight.Normal)
+                        Text(p.name, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f), fontWeight = if (p.slug == state.openProfile) FontWeight.SemiBold else null)
                         if (p.slug == state.openProfile) {
                             Surface(
                                 color = MaterialTheme.colorScheme.secondaryContainer,
@@ -217,7 +217,7 @@ fun SettingsScreen(
                         ) {
                             Box(Modifier.size(12.dp).background(categoryColor(c.color, c.name), CircleShape))
                             Spacer(Modifier.width(12.dp))
-                            Text(c.name, modifier = Modifier.weight(1f))
+                            Text(c.name, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
                             if (c.isTransfer) {
                                 CategoryBadge(s[StringKey.CategoryTransferLabel], "#9E9E9E")
                                 Spacer(Modifier.width(8.dp))
@@ -287,7 +287,7 @@ fun SettingsScreen(
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         r.categoryName + ruleTaxMarker(r, s),
-                                        fontWeight = FontWeight.Medium,
+                                        style = MaterialTheme.typography.labelLarge,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -450,7 +450,7 @@ fun SettingsScreen(
                 state.auditLog.forEach { e ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Text(Formats.dateTime(e.timestamp), style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(140.dp))
-                        Text(e.action, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, modifier = Modifier.width(180.dp))
+                        Text(e.action, style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(180.dp))
                         Text(e.details.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -643,7 +643,7 @@ private fun SettingsSectionRow(section: SettingsSection, selected: Boolean, labe
         Icon(section.icon, contentDescription = null, tint = iconColor, modifier = Modifier.size(24.dp))
         Text(
             label,
-            style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.navigation,
             color = labelColor,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -681,7 +681,6 @@ private fun SettingsSectionHeader(
             Text(
                 title,
                 style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f).semantics { heading() },
             )
             actions()

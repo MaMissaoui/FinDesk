@@ -31,7 +31,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,6 +44,7 @@ import de.findesk.i18n.strings
 import de.findesk.ui.theme.caption
 import de.findesk.ui.theme.chartInColor
 import de.findesk.ui.theme.chartOutColor
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.Formats
 import de.findesk.viewmodel.ChartSlice
 import de.findesk.viewmodel.MonthBar
@@ -89,8 +89,7 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
             }
             Text(
                 Formats.money(shown.fold(BigDecimal.ZERO) { a, x -> a + x.amount }, currency),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium,
             )
         }
         Spacer(Modifier.width(16.dp))
@@ -102,7 +101,7 @@ fun DonutChart(slices: List<ChartSlice>, title: String, modifier: Modifier = Mod
                     // Ellipsis and a gap, so a long name never runs into its amount in a narrow window
                     Text(sliceLabel(slice, s), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(Modifier.width(8.dp))
-                    Text(Formats.money(slice.amount, currency), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                    Text(Formats.money(slice.amount, currency), style = MaterialTheme.typography.rowAmount)
                 }
             }
         }
@@ -153,6 +152,7 @@ internal fun nearestIndex(x: Float, width: Float, count: Int): Int {
 }
 
 /** Grouped income/expense bars per month, on an axis from 0 to a round maximum. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier = Modifier, currency: String = "EUR") {
     val s = strings()
@@ -279,14 +279,19 @@ fun IncomeExpenseBars(months: List<MonthBar>, title: String, modifier: Modifier 
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 4.dp)) {
+        // A flow, not a row: in a narrow card the note moves to its own line instead of squeezing into two lines
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(top = 4.dp),
+        ) {
             Legend(chartIn, s[StringKey.ChartIncome])
             Legend(chartOut, s[StringKey.ChartExpenses])
             // No colour swatch: paleness is not a colour of its own but these two at reduced alpha
             if (months.any { it.partial }) {
                 Text(
                     s[StringKey.ChartPartialMonthNote],
-                    style = MaterialTheme.typography.caption,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -318,7 +323,7 @@ private fun Legend(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).background(color, CircleShape))
         Spacer(Modifier.width(6.dp))
-        Text(label, style = MaterialTheme.typography.caption)
+        Text(label, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -350,7 +355,7 @@ fun BalanceLineChart(
     val grid = MaterialTheme.colorScheme.outlineVariant
     val outline = MaterialTheme.colorScheme.outline
     val description = buildLineDescription(title, points, currency, s)
-    val valueStyle = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+    val valueStyle = MaterialTheme.typography.rowAmount
     val hoverStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current

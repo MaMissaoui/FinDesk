@@ -10,7 +10,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -29,7 +28,9 @@ import de.findesk.model.PaymentOrderStatus
 import de.findesk.ui.components.*
 import de.findesk.ui.navigation.NavigationArgs
 import de.findesk.ui.navigation.Screen
+import de.findesk.ui.theme.figure
 import de.findesk.ui.theme.inflowColor
+import de.findesk.ui.theme.rowAmount
 import de.findesk.util.Formats
 import de.findesk.util.Iban
 import de.findesk.viewmodel.PaymentsViewModel
@@ -277,14 +278,14 @@ fun PaymentsScreen(
                 orders?.forEach { o ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(o.order.recipientName, fontWeight = FontWeight.Medium)
+                            Text(o.order.recipientName, style = MaterialTheme.typography.labelLarge)
                             Text(
                                 scheduleText(o.schedule, s) + (o.nextDate?.let { " · " + s.format(StringKey.NextOn, Formats.date(it)) } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text(Formats.money(o.order.amount), fontWeight = FontWeight.SemiBold)
+                        Text(Formats.money(o.order.amount), style = MaterialTheme.typography.rowAmount)
                         // Editing must keep the interval, so an order FinDesk can't express (e.g. every 2 months) is not offered
                         DisabledReason(
                             when {
@@ -334,14 +335,14 @@ fun PaymentsScreen(
                 transfers?.forEach { t ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(t.order.recipientName, fontWeight = FontWeight.Medium)
+                            Text(t.order.recipientName, style = MaterialTheme.typography.labelLarge)
                             Text(
                                 Formats.date(t.date) + " · " + Formats.iban(Iban.normalize(t.order.recipientIban)),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text(Formats.money(t.order.amount), fontWeight = FontWeight.SemiBold)
+                        Text(Formats.money(t.order.amount), style = MaterialTheme.typography.rowAmount)
                         DisabledReason(if (!t.canDelete) s[StringKey.DeleteNotAllowedByBank] else null) {
                             IconButton(enabled = t.canDelete && !state.isSending, onClick = { vm.requestScheduledDelete(t) }, colors = mutedIconColors()) {
                                 Icon(
@@ -371,8 +372,8 @@ fun PaymentsScreen(
                     RowContextMenu(again) {
                         Column(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(order.recipientName ?: s.paymentAction(order.action), style = MaterialTheme.typography.bodySmall)
-                                order.amount?.let { Text(Formats.money(it, order.currency), style = MaterialTheme.typography.bodySmall) }
+                                Text(order.recipientName ?: s.paymentAction(order.action), style = MaterialTheme.typography.labelLarge)
+                                order.amount?.let { Text(Formats.money(it, order.currency), style = MaterialTheme.typography.rowAmount) }
                                 Text(
                                     s.paymentStatus(order.status),
                                     style = MaterialTheme.typography.labelSmall,
@@ -748,7 +749,7 @@ private fun scheduleText(schedule: StandingOrderSchedule, s: Strings): String {
 @Composable
 private fun labelColumnWidth(vararg labels: String): Dp {
     val measurer = rememberTextMeasurer()
-    val style = LocalTextStyle.current.copy(fontWeight = FontWeight.Medium)
+    val style = MaterialTheme.typography.labelLarge
     val widest = labels.maxOf { measurer.measure(it, style).size.width }
     return with(LocalDensity.current) { widest.toDp() } + 12.dp
 }
@@ -764,11 +765,10 @@ internal fun ReviewHeader(amount: String, recipient: String, warning: String?) {
         // The dialog's text slot is onSurfaceVariant; the figure being approved takes the full text colour
         Text(
             amount,
-            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.figure,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Text(s.format(StringKey.ReviewTo, recipient), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+        Text(s.format(StringKey.ReviewTo, recipient), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         if (warning != null) {
             Spacer(Modifier.height(6.dp))
             Surface(
@@ -798,12 +798,12 @@ private fun mutedIconColors() = IconButtonDefaults.iconButtonColors(contentColor
 @Composable
 private fun ReviewRow(label: String, value: String, labelWidth: Dp, emphasis: Boolean = false, secondary: String? = null) {
     Row {
-        Text(label, fontWeight = FontWeight.Medium, softWrap = false, modifier = Modifier.width(labelWidth))
+        Text(label, style = MaterialTheme.typography.labelLarge, softWrap = false, modifier = Modifier.width(labelWidth))
         Column {
             Text(
                 value,
-                style = if (emphasis) MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum") else LocalTextStyle.current,
-                fontWeight = if (emphasis) FontWeight.SemiBold else null,
+                // The IBAN stays larger and bold so it is checked before sending.
+                style = if (emphasis) MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum") else MaterialTheme.typography.bodyMedium,
                 color = if (emphasis) MaterialTheme.colorScheme.onSurface else androidx.compose.ui.graphics.Color.Unspecified,
             )
             secondary?.let {
@@ -817,7 +817,7 @@ private fun ReviewRow(label: String, value: String, labelWidth: Dp, emphasis: Bo
 @Composable
 private fun ReviewChangeRow(label: String, oldValue: String, newValue: String, labelWidth: Dp) {
     Row {
-        Text(label, fontWeight = FontWeight.Medium, softWrap = false, modifier = Modifier.width(labelWidth))
+        Text(label, style = MaterialTheme.typography.labelLarge, softWrap = false, modifier = Modifier.width(labelWidth))
         Text(oldValue)
         Text("  →  ", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(newValue)

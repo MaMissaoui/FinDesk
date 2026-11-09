@@ -8,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import de.findesk.i18n.StringKey
@@ -91,7 +90,7 @@ fun BankingPromptHost(interaction: UiBankingInteraction) {
             title = { Text(s[StringKey.CheckRecipient]) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(s[StringKey.BankComparedName], fontWeight = FontWeight.Medium)
+                    Text(s[StringKey.BankComparedName], style = MaterialTheme.typography.labelLarge)
                     Text(p.message)
                     Text(
                         s[StringKey.NameMismatchWarning],
