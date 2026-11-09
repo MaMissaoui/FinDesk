@@ -43,8 +43,8 @@ class FixDuplicateColoursTest {
 
         val colors = colorsById()
         assertEquals("#FF5722", colors[first], "the lowest id keeps the shared colour")
-        assertEquals("#4CAF50", colors[second], "the first unused palette colour")
-        assertEquals("#2196F3", colors[third], "the next unused palette colour")
+        assertEquals("#E76530", colors[second], "the first unused palette colour")
+        assertEquals("#4693F3", colors[third], "the next unused palette colour")
         assertEquals("#123ABC", colors[untouched], "a unique colour is never changed")
         val items = data.categoryRepo.findAllItems()
         assertEquals(items.size, items.map { it.color.uppercase() }.toSet().size, "after the fix nothing shares a colour")
@@ -100,7 +100,7 @@ class FixDuplicateColoursTest {
 
         val colors = colorsById()
         assertEquals("#ff5722", colors[first], "the lowest id keeps its colour untouched")
-        assertEquals("#4CAF50", colors[second])
+        assertEquals("#E76530", colors[second])
         assertEquals(AppStrings.format(StringKey.MessageColoursFixed, 1), vm.state.value.message)
         assertEquals(listOf("Recoloured 1 categories"), auditFixes())
         vm.close()

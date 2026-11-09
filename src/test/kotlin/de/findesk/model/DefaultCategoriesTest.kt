@@ -27,7 +27,7 @@ class DefaultCategoriesTest {
 
     @Test
     fun `the palette stays in the documented order`() {
-        assertTrue(DefaultCategories.colors.take(10).joinToString("") == "#FF5722#4CAF50#2196F3#FF9800#9C27B0#E91E63#00BCD4#795548#607D8B#CDDC39")
-        assertTrue(DefaultCategories.colors.drop(10).joinToString("") == "#3F51B5#009688#FFC107#673AB7#8BC34A#03A9F4#AFB42B#880E4F#1A237E#004D40#BF360C#33691E#F06292#A1887F")
+        assertTrue(DefaultCategories.colors.take(10).joinToString("") == "#E76530#4693F3#C38400#D56A93#867DFF#14AC77#CF4E12#2F7DDB#A77105#BD547E")
+        assertTrue(DefaultCategories.colors.drop(10).joinToString("") == "#7364EC#029465#DB5923#3B88E7#B57A03#C95F88#7C6FF8#00A06E#BE4403#2170CD#986603#AF4872#6857DE#07865C")
     }
 }
