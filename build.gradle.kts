@@ -47,7 +47,7 @@ dependencies {
     implementation("org.apache.pdfbox:pdfbox:3.0.8")
 
     // OCR (needs a native Tesseract install, e.g. `brew install tesseract tesseract-lang`)
-    implementation("net.sourceforge.tess4j:tess4j:5.20.0")
+    implementation("net.sourceforge.tess4j:tess4j:5.21.0")
 
     // macOS Keychain access for a PIN the user chooses to remember (also pulled in by tess4j; pinned here explicitly)
     implementation("net.java.dev.jna:jna:5.19.1")
